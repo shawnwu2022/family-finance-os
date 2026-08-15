@@ -1,9 +1,9 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
 
 permissions:
   contents: read
@@ -38,9 +38,8 @@ jobs:
       - name: Verify formatting
         shell: bash
         run: |
-          files=$(find cmd internal -name '*.go' -type f -print)
-          test -n "$files"
-          test -z "$(gofmt -l $files)"
+          mapfile -t gofiles < <(find cmd internal -type f -name '*.go' -print)
+          test -z "$(gofmt -l "${gofiles[@]}")"
       - name: Vet
         run: go vet ./...
       - name: Test
@@ -56,11 +55,11 @@ jobs:
       - name: Race test
         run: go test -race ./...
       - name: Build
-        run: CGO_ENABLED=0 go build ./cmd/finance-core
+        run: CGO_ENABLED=0 go build -trimpath -o /tmp/finance-core ./cmd/finance-core
 
   container:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build Finance Core image
-        run: docker build -t family-finance-core:test .
+        run: docker build -t family-finance-core:ci .

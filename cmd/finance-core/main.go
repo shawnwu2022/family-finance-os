@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,21 +14,23 @@ import (
 )
 
 type serveFunc func(addr string, handler http.Handler) error
-type checkFunc func(url string) error
+type checkFunc func(ctx context.Context, url string) error
 
 func main() {
-	if err := run(os.Args[1:], os.Getenv, serveHTTP, checkHTTP); err != nil {
-		slog.Error("finance-core failed", "error", err)
+	if err := run(os.Args[1:], os.Getenv, http.ListenAndServe, func(ctx context.Context, url string) error {
+		client := &http.Client{Timeout: 3 * time.Second}
+		return checkHealth(ctx, client, url)
+	}); err != nil {
+		slog.Error("finance-core exited", "error", err)
 		os.Exit(1)
 	}
 }
 
 func run(args []string, getenv func(string) string, serve serveFunc, check checkFunc) error {
-	if len(args) == 0 {
-		return errors.New("command is required: serve or healthcheck")
+	command := "serve"
+	if len(args) > 0 {
+		command = args[0]
 	}
-
-	command := args[0]
 
 	switch command {
 	case "serve":
@@ -46,33 +49,28 @@ func run(args []string, getenv func(string) string, serve serveFunc, check check
 			url = "http://127.0.0.1:8000/healthz"
 		}
 		if check == nil {
-			return errors.New("check function is required")
+			return errors.New("healthcheck function is required")
 		}
-		return check(url)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		return check(ctx, url)
 	default:
 		return fmt.Errorf("unknown command %q", command)
 	}
 }
 
-func serveHTTP(addr string, handler http.Handler) error {
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	return server.ListenAndServe()
-}
-
-func checkHTTP(url string) error {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(url)
+func checkHealth(ctx context.Context, client *http.Client, url string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return fmt.Errorf("healthcheck request: %w", err)
+		return fmt.Errorf("build health request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("health request: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("healthcheck returned status %d", resp.StatusCode)
+		return fmt.Errorf("health status %d", resp.StatusCode)
 	}
 	return nil
 }
