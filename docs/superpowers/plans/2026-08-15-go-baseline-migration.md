@@ -116,6 +116,6 @@
 - [x] Run all locally available static checks.
 - [x] Confirm `git diff --check` is clean.
 - [x] Confirm stale Python Core implementation files/references are removed.
-- [ ] Commit the migration on `feature/go-baseline`.
-- [ ] Publish the branch to GitHub and open one draft PR against `main`.
-- [ ] Use GitHub Actions as the authoritative target-toolchain verification for Go 1.26.6 and Docker build; fix any failures before marking the migration ready.
+- [x] Commit the migration on `feature/go-baseline`.
+- [x] Publish the branch to GitHub and open one draft PR against `main`.
+- [x] Use GitHub Actions as the authoritative target-toolchain verification for Go 1.26.6 and Docker build; run #31894989031 passed Go and container jobs on 2026-08-15.
