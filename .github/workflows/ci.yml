@@ -93,6 +93,14 @@ jobs:
           TEST_POSTGRES_USER: finance_app
           TEST_POSTGRES_PASSWORD: test-secret
         run: go test ./internal/store -run TestOpenPostgresIntegration -v
+      - name: Household integration
+        env:
+          TEST_POSTGRES_HOST: 127.0.0.1
+          TEST_POSTGRES_PORT: '5432'
+          TEST_POSTGRES_DB: finance
+          TEST_POSTGRES_USER: finance_app
+          TEST_POSTGRES_PASSWORD: test-secret
+        run: go test ./internal/household -run Integration -v
       - name: Race test
         run: go test -race ./...
       - name: Build

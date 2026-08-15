@@ -89,7 +89,7 @@ func TestServiceProfileRoundTripIntegration(t *testing.T) {
 	}
 }
 
-func TestServiceRejectsPolicyCurrencyDifferentFromHouseholdBase(t *testing.T) {
+func TestServiceRejectsPolicyCurrencyDifferentFromHouseholdBaseIntegration(t *testing.T) {
 	pool := openIntegrationPool(t)
 	service := NewService(pool)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
