@@ -1,0 +1,60 @@
+{
+  "success": true,
+  "result": {
+    "1": [
+      {
+        "id": "300",
+        "name": "工资",
+        "parentId": "0",
+        "type": 1,
+        "icon": "salary",
+        "color": "10B981",
+        "comment": "",
+        "displayOrder": 1,
+        "hidden": false,
+        "subCategories": []
+      }
+    ],
+    "2": [
+      {
+        "id": "400",
+        "name": "餐饮",
+        "parentId": "0",
+        "type": 2,
+        "icon": "food",
+        "color": "F97316",
+        "comment": "",
+        "displayOrder": 1,
+        "hidden": false,
+        "subCategories": [
+          {
+            "id": "401",
+            "name": "正餐",
+            "parentId": "400",
+            "type": 2,
+            "icon": "restaurant",
+            "color": "FB923C",
+            "comment": "",
+            "displayOrder": 1,
+            "hidden": false,
+            "subCategories": []
+          }
+        ]
+      }
+    ],
+    "3": [
+      {
+        "id": "500",
+        "name": "账户转账",
+        "parentId": "0",
+        "type": 3,
+        "icon": "transfer",
+        "color": "6366F1",
+        "comment": "",
+        "displayOrder": 1,
+        "hidden": false,
+        "subCategories": []
+      }
+    ]
+  }
+}

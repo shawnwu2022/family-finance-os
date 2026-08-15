@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "result": {
+    "items": [
+      {
+        "id": "tx-income",
+        "timeSequenceId": "1699999700000000",
+        "type": 2,
+        "categoryId": "300",
+        "time": 1699999700,
+        "utcOffset": 480,
+        "sourceAccountId": "101",
+        "sourceAccount": {
+          "id": "101",
+          "name": "招商银行",
+          "parentId": "100",
+          "category": 2,
+          "type": 1,
+          "currency": "CNY",
+          "balance": 123456,
+          "isAsset": true,
+          "isLiability": false,
+          "hidden": false,
+          "subAccounts": []
+        },
+        "destinationAccountId": "0",
+        "sourceAmount": 3000000,
+        "destinationAmount": 0,
+        "hideAmount": false,
+        "tagIds": [],
+        "tags": [],
+        "pictures": [],
+        "comment": "工资",
+        "editable": true
+      }
+    ],
+    "nextTimeSequenceId": 0,
+    "totalCount": 3
+  }
+}
