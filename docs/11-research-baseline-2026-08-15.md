@@ -63,27 +63,62 @@ Docker Official Image：
 - Docker Official Image 当前 `2.11.4-alpine`；
 - Source: https://hub.docker.com/_/caddy
 
-## Python
+## Go / Finance Core
 
-- Python 官方 Docker 在本次核验时提供 `3.13.15-slim-bookworm`；同时已有 3.14 稳定线。
-- 本项目 V1 选择 3.13 稳定线以减少生态兼容风险；这属于项目决策，不代表 3.14 不稳定。
-- Source: https://hub.docker.com/_/python
+### Go
+- Go 1.26 于 2026-02-10 发布；
+- **Go 1.26.6 于 2026-08-13 发布**，包含 `go` command、TLS、XML、template、net/http 等安全修复和 runtime/compiler bug fixes；
+- 本项目 Finance Core 以 **Go 1.26.6** 作为 2026-08-15 生产/CI 基线。
+- Source: https://go.dev/doc/devel/release
+- Source: https://go.dev/dl/
 
-## Python 主要库（规划时核验）
+### pgx
+- pgx `v5` 为当前稳定 major；项目说明支持当前受支持的 Go/PostgreSQL 版本；
+- changelog 当前稳定发布记录到 **5.10.0（2026-06-03）**，包含针对恶意/受损 PostgreSQL server 的协议和认证 hardening；
+- V1 数据访问采用 `github.com/jackc/pgx/v5`，不采用 GORM。
+- Source: https://github.com/jackc/pgx
+- Source: https://github.com/jackc/pgx/blob/master/CHANGELOG.md
 
-- FastAPI 0.140.0（2026-07-24）；Source: https://pypi.org/project/fastapi/
-- SQLAlchemy 2.0.51 stable；2.1 当时仍为 beta；Source: https://pypi.org/project/SQLAlchemy/
-- Pydantic 2.13.4 stable；Source: https://pypi.org/project/pydantic/
+### sqlc
+- 当前最新 release：**v1.31.1（2026-04-22）**；
+- 用途：从显式 PostgreSQL SQL 生成强类型 Go query code；
+- V1 生成目标使用 `pgx/v5`。
+- Source: https://github.com/sqlc-dev/sqlc/releases
+- Source: https://docs.sqlc.dev/
 
-锁文件应在实际首次开发环境中生成，并由 Dependabot/Renovate 或人工定期审核，而不是长期信任本文件中的版本。
+### goose
+- 当前 release：**v3.27.3（2026-07-22）**；
+- V1 采用 SQL migrations；不运行单独 migration service。
+- Source: https://github.com/pressly/goose/releases
 
-## Tesla P40 / 本地 AI
+### apd
+- `github.com/cockroachdb/apd/v3` 提供 arbitrary-precision decimal，当前 latest release 为 **v3.2.3（2026-03-23）**；
+- Money 本身仍采用 `int64` 最小货币单位；APR/FX/percentage 等精确十进制才使用 apd。
+- Source: https://github.com/cockroachdb/apd
 
-- NVIDIA Legacy CUDA GPU 列表中 Tesla P40 Compute Capability 6.1；
-- 因此本项目不把 P40 作为 V1 关键基础设施。
+### V1 Go 设计约束
+- HTTP 优先标准库 `net/http`；
+- logging 使用 `log/slog`；
+- 不使用大型 Web framework 或 ORM；
+- Finance Core 构建为单 binary；
+- 前端后续使用 Vue 3/TypeScript/Vite/PWA，并优先 `go:embed` 进同一个 Finance Core binary；
+- 业务核心不依赖 Python runtime。
+
+## Python / Tesla P40 / 本地 AI
+
+Python 不是 V1 Finance Core 运行时。只有进入本地隐私 AI 阶段时，才增加可选 `finance-ai-worker`：
+- PaddleOCR / PyTorch / OpenCV / Transformers / VLM；
+- PII redaction；
+- P40 batch OCR / local inference。
+
+NVIDIA Legacy CUDA GPU 列表中 Tesla P40 Compute Capability 6.1，因此 P40 不能成为核心可用性依赖。
 - Source: https://developer.nvidia.com/cuda/gpus/legacy
 
-PaddleOCR 在 2026 年仍快速演进（PP-OCRv6/PaddleOCR-VL 等），V1.2 开始前必须重新查当前安装要求并做 CPU/P40 benchmark；不要根据旧版 CUDA/Paddle 文档锁死实现。
+PaddleOCR 仍快速演进；V1.2 开始前必须重新查当前安装要求并做 CPU/P40 benchmark，不根据旧 CUDA 文档锁死实现。
+
+## Rust
+
+V1 不引入 Rust。只有未来出现可测量的 native privacy agent、WASM、crypto/system component 需求时重新评估，避免为家庭级 HTTP/SQL/业务规则系统提前承担额外语言与生态成本。
 
 ## OpenClaw
 
@@ -94,25 +129,5 @@ Source: https://docs.openclaw.ai/gateway/security
 ## 模型供应商
 
 模型名和定价变化极快，因此 Finance Core 只使用模型角色（fast/planner/reviewer/vision）和 provider adapter；每次生产切换模型前重新核验供应商官方文档与计费。不要以本文件列出的任何某个模型名称作为永久推荐。
-
-
-## 2026-08-15 模型候选补充
-
-### DeepSeek
-- 官方 API 当前模型：`deepseek-v4-flash`、`deepseek-v4-pro`；两者支持 1M context、JSON Output、Tool Calls；旧 `deepseek-chat` / `deepseek-reasoner` 已于 2026-07-24 停止使用。
-- Source: https://api-docs.deepseek.com/zh-cn/
-- Source: https://api-docs.deepseek.com/zh-cn/quick_start/pricing/
-
-### Alibaba/Qwen
-- 当前官方视觉文档建议 `qwen3.7-plus` 作为起点，场景稳定后可用 `qwen3.6-flash` 降成本；两条模型线覆盖 OCR/视觉理解与结构化输出能力。
-- Source: https://help.aliyun.com/zh/model-studio/vision-model/
-
-### Zhipu GLM
-- 官方模型概览当前列出 GLM-5.2，1M context，可作为 planner/reviewer 候选之一。
-- Source: https://docs.bigmodel.cn/cn/guide/start/model-overview
-
-### OpenAI
-- 官方 API 当前模型页列出 GPT-5.6 Sol/Terra/Luna；本项目仅将其作为可插拔 planner/reviewer 候选。
-- Source: https://platform.openai.com/overview
 
 详细角色映射与评测方法见 `docs/12-model-strategy-2026-08-15.md`。

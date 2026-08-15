@@ -45,7 +45,7 @@
 
 ## Deployment
 
-Docker Compose，Caddy 仅公网入口，PostgreSQL 18.6 volume 按官方 18+ 规则挂载 `/var/lib/postgresql`。ezBookkeeping 固定 1.6.1。Finance Core 使用 Python 3.13 stable line。
+Docker Compose，Caddy 仅公网入口，PostgreSQL 18.6 volume 按官方 18+ 规则挂载 `/var/lib/postgresql`。ezBookkeeping 固定 1.6.1。Finance Core 使用 Go 1.26.6 基线；Python 仅保留为后续可选 OCR/VLM/P40 Worker。
 
 ## Future Extension
 

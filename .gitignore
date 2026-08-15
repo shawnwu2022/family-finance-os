@@ -17,3 +17,7 @@ data/*
 build/
 dist/
 *.egg-info/
+.worktrees/
+coverage.out
+web/node_modules/
+web/dist/

@@ -35,6 +35,20 @@ flowchart TD
 
 V1 **明确不引入** Kubernetes、Redis、Kafka、MinIO、向量数据库、微服务、双机热备、独立 MCP Gateway、多 Agent、P40 关键依赖。
 
+### V1 技术栈
+
+```text
+Finance Core   Go 1.26.6 + net/http + slog
+Database       PostgreSQL 18.6 + pgx/v5 + sqlc + goose
+Finance types  int64 Money + apd/v3 Decimal
+Frontend       Vue 3 + TypeScript + Vite + PWA + ECharts
+Ledger         ezBookkeeping 1.6.1
+AI             OpenAI-compatible endpoint + typed tools
+Proxy/Deploy   Caddy + Docker Compose
+```
+
+Python 仅在后续本地 OCR/VLM/P40 Worker 中使用；Rust 不进入 V1。
+
 ## 组件职责
 
 | 组件 | V1 职责 | 是否权威数据源 |
@@ -65,11 +79,10 @@ V1 **明确不引入** Kubernetes、Redis、Kafka、MinIO、向量数据库、�
 ## 本地验证当前骨架
 
 ```bash
-cd apps/finance-core
-PYTHONPATH=src pytest -q
+go test ./...
 ```
 
-当前只实现最小 `/healthz` 骨架，业务功能按照实施计划以 TDD 逐项加入。
+当前只实现最小 Go `/healthz` 运行骨架，业务功能按照实施计划以 TDD 逐项加入。
 
 ## 部署前准备
 

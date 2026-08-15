@@ -38,10 +38,29 @@ Family Finance OS 是一个“**家庭财务事实系统 + 确定性决策引擎
 - ezBookkeeping 正式部署官方建议 MySQL 或 PostgreSQL，而不是 SQLite；对象图片可直接使用本地 filesystem，不必引入 MinIO。
 - PostgreSQL 当前 18 系列最新 minor 为 **18.6（2026-08-13）**，官方建议使用所选 major 的当前 minor；PostgreSQL 18 Docker 镜像应把卷挂载到 `/var/lib/postgresql`。
 - Caddy 官方 Docker 当前提供 `2.11.4-alpine`。
-- Python 官方 Docker 当前同时维护 3.14 与 3.13；本项目 V1 选择 **Python 3.13** 稳定线，不追最新语言特性；镜像固定到当前 3.13 maintenance tag 后定期升级 minor。
+- Go 当前稳定维护线为 1.26；**Go 1.26.6（2026-08-13）**包含安全与运行时修复，本项目 V1 Finance Core 采用 Go 1.26.6 基线。
 - NVIDIA 将 Tesla P40 列为 legacy CUDA GPU（Compute Capability 6.1）；因此 P40 只能作为未来可替换的计算 Worker，不能成为 V1 可用性的关键路径。
 
 完整来源与链接见 `docs/11-research-baseline-2026-08-15.md`。
+
+### 2.1 V1 最终技术栈
+
+```text
+Ledger          ezBookkeeping 1.6.1
+Finance Core    Go 1.26.6 / net/http / log/slog
+Database        PostgreSQL 18.6
+Data access     pgx/v5 + sqlc
+Migration       goose SQL migrations
+Money           int64 minor units
+Rate / FX       cockroachdb/apd/v3
+Frontend        Vue 3 + TypeScript + Vite + PWA + ECharts
+AI              OpenAI-compatible thin provider adapter + typed Finance Tools
+Proxy           Caddy 2.11.4
+Deployment      Docker Compose
+Optional AI     Python worker + PaddleOCR/PyTorch/P40（V1.2+）
+```
+
+V1 不使用 GORM、大型 Go Web framework、LangChain 类 Agent framework 或 Rust。Go Finance Core 保持单 binary；前端进入实现阶段后优先编译并通过 `go:embed` 合入同一 binary。
 
 ---
 
@@ -267,7 +286,7 @@ finance-core/
   audit/
 ```
 
-模块间通过 Python 明确接口通信，不通过消息队列。
+模块间通过 Go package interface / typed struct 明确通信，不通过消息队列。
 
 ### 7.1 Household
 

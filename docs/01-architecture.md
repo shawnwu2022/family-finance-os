@@ -11,7 +11,16 @@
 7. 数据正确性高于自动化程度；
 8. 每个新基础设施组件必须能回答“删掉它会失去什么当前需求”。
 
-## 2. V1 容器网络
+## 2. Finance Core 实现边界
+
+- Go 1.26.6 模块化单体；HTTP 使用 `net/http`，日志使用 `log/slog`；
+- PostgreSQL 访问采用 `pgx/v5 + sqlc`，迁移使用 goose SQL migrations；
+- 不使用 GORM 或大型 Web framework；
+- Money 使用 `int64` 最小货币单位，APR/FX/percentage 使用 `apd/v3` 精确十进制；
+- Vue/PWA 在实现阶段构建静态资源并优先 `go:embed` 到同一 Finance Core binary；
+- Python 只属于后续可选 AI Worker，Rust 不属于 V1。
+
+## 3. V1 容器网络
 
 ```mermaid
 flowchart LR
@@ -33,7 +42,7 @@ flowchart LR
 
 只有 Caddy 映射主机 80/443。`postgres`、`ezbookkeeping`、`finance-core` 不对公网直接映射端口。
 
-## 3. 读请求数据流
+## 4. 读请求数据流
 
 ```text
 用户 → Finance UI → Finance Core
@@ -51,11 +60,11 @@ flowchart LR
                  Explanation
 ```
 
-## 4. 记账数据流
+## 5. 记账数据流
 
 V1 用户直接在 ezBookkeeping PWA 中完成交易写入。Finance Core 不代理所有交易写入，避免多一层故障和维护。
 
-## 5. 未来写入数据流
+## 6. 未来写入数据流
 
 ```text
 AI → TransactionProposal
@@ -66,7 +75,7 @@ AI → TransactionProposal
    → audit record
 ```
 
-## 6. 失败降级
+## 7. 失败降级
 
 | 故障 | V1 行为 |
 |---|---|
@@ -77,7 +86,7 @@ AI → TransactionProposal
 | 本地备份机不在线 | 云主服务继续；备份任务记录失败并重试/告警 |
 | PostgreSQL 不可用 | 明确故障，不返回旧数据伪装成功 |
 
-## 7. 为什么两个 Web 入口暂时可接受
+## 8. 为什么两个 Web 入口暂时可接受
 
 V1 允许：
 - `book.example.com`：记账；

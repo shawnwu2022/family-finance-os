@@ -96,7 +96,7 @@ docker compose up -d --build
 
 ### Finance Core
 
-每次部署必须先通过测试；数据库迁移使用 Alembic，迁移脚本进入 Git。
+每次部署必须先通过测试；数据库迁移使用 goose SQL migrations，迁移脚本进入 Git。
 
 ## 8. 监控 V1
 
