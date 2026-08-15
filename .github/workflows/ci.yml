@@ -60,11 +60,13 @@ jobs:
           if-no-files-found: error
       - name: Migration up/down/up smoke
         env:
+          GOOSE_DRIVER: postgres
           GOOSE_DBSTRING: postgres://finance_app:test-secret@127.0.0.1:5432/finance?sslmode=disable
+          GOOSE_MIGRATION_DIR: db/migrations
         run: |
-          goose -dir db/migrations postgres "$GOOSE_DBSTRING" up
-          goose -dir db/migrations postgres "$GOOSE_DBSTRING" down
-          goose -dir db/migrations postgres "$GOOSE_DBSTRING" up
+          goose up
+          goose down
+          goose up
       - name: Verify sqlc generated sources are committed
         shell: bash
         run: |
