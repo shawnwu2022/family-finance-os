@@ -1,0 +1,84 @@
+{
+  "success": true,
+  "result": {
+    "items": [
+      {
+        "id": "tx-expense",
+        "timeSequenceId": "1700000000000002",
+        "type": 3,
+        "categoryId": "401",
+        "time": 1700000000,
+        "utcOffset": 480,
+        "sourceAccountId": "200",
+        "sourceAccount": {
+          "id": "200",
+          "name": "信用卡",
+          "parentId": "0",
+          "category": 3,
+          "type": 1,
+          "currency": "CNY",
+          "balance": -45678,
+          "isAsset": false,
+          "isLiability": true,
+          "hidden": false,
+          "subAccounts": []
+        },
+        "destinationAccountId": "0",
+        "sourceAmount": 12800,
+        "destinationAmount": 0,
+        "hideAmount": false,
+        "tagIds": [],
+        "tags": [],
+        "pictures": [],
+        "comment": "晚餐",
+        "editable": true
+      },
+      {
+        "id": "tx-transfer",
+        "timeSequenceId": "1700000000000001",
+        "type": 4,
+        "categoryId": "500",
+        "time": 1699999900,
+        "utcOffset": 480,
+        "sourceAccountId": "101",
+        "sourceAccount": {
+          "id": "101",
+          "name": "招商银行",
+          "parentId": "100",
+          "category": 2,
+          "type": 1,
+          "currency": "CNY",
+          "balance": 123456,
+          "isAsset": true,
+          "isLiability": false,
+          "hidden": false,
+          "subAccounts": []
+        },
+        "destinationAccountId": "200",
+        "destinationAccount": {
+          "id": "200",
+          "name": "信用卡",
+          "parentId": "0",
+          "category": 3,
+          "type": 1,
+          "currency": "CNY",
+          "balance": -45678,
+          "isAsset": false,
+          "isLiability": true,
+          "hidden": false,
+          "subAccounts": []
+        },
+        "sourceAmount": 50000,
+        "destinationAmount": 50000,
+        "hideAmount": false,
+        "tagIds": [],
+        "tags": [],
+        "pictures": [],
+        "comment": "信用卡还款",
+        "editable": true
+      }
+    ],
+    "nextTimeSequenceId": 1699999800000000,
+    "totalCount": 3
+  }
+}

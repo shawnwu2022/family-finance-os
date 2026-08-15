@@ -1,0 +1,60 @@
+{
+  "success": true,
+  "result": [
+    {
+      "id": "100",
+      "name": "银行账户",
+      "parentId": "0",
+      "category": 2,
+      "type": 2,
+      "icon": "bank",
+      "color": "3B82F6",
+      "currency": "---",
+      "balance": 0,
+      "comment": "",
+      "creditCardStatementDate": 0,
+      "displayOrder": 1,
+      "isAsset": true,
+      "isLiability": false,
+      "hidden": false,
+      "subAccounts": [
+        {
+          "id": "101",
+          "name": "招商银行",
+          "parentId": "100",
+          "category": 2,
+          "type": 1,
+          "icon": "bank-card",
+          "color": "EF4444",
+          "currency": "CNY",
+          "balance": 123456,
+          "comment": "",
+          "creditCardStatementDate": 0,
+          "displayOrder": 1,
+          "isAsset": true,
+          "isLiability": false,
+          "hidden": false,
+          "subAccounts": []
+        }
+      ]
+    },
+    {
+      "id": "200",
+      "name": "信用卡",
+      "parentId": "0",
+      "category": 3,
+      "type": 1,
+      "icon": "credit-card",
+      "color": "F59E0B",
+      "currency": "CNY",
+      "balance": -45678,
+      "comment": "",
+      "creditCardStatementDate": 15,
+      "displayOrder": 2,
+      "isAsset": false,
+      "isLiability": true,
+      "hidden": false,
+      "subAccounts": []
+    }
+  ]
+}
