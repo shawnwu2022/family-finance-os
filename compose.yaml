@@ -49,7 +49,8 @@ services:
 
   finance-core:
     build:
-      context: ./apps/finance-core
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -70,8 +71,10 @@ services:
       LLM_FAST_MODEL: ${LLM_FAST_MODEL:-}
       LLM_PLANNER_MODEL: ${LLM_PLANNER_MODEL:-}
       LLM_REVIEWER_MODEL: ${LLM_REVIEWER_MODEL:-}
+      FINANCE_LISTEN_ADDR: ${FINANCE_LISTEN_ADDR:-:8000}
+      FINANCE_HEALTHCHECK_URL: ${FINANCE_HEALTHCHECK_URL:-http://127.0.0.1:8000/healthz}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      test: ["CMD", "/finance-core", "healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 5

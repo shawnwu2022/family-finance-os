@@ -23,7 +23,7 @@ get_asset_allocation(as_of)
 generate_monthly_report(year, month)
 ```
 
-这些 Tool 首先作为内部 Python service interface；以后 REST/MCP 只是 Adapter。
+这些 Tool 首先作为 Finance Core 内部 Go typed interface；以后 REST/MCP 只是 Adapter。
 
 ## 3. Prompt 规则
 
