@@ -84,6 +84,20 @@ func (s *Service) AddIncomeSource(ctx context.Context, householdID int64, input 
 		if *input.MemberID <= 0 {
 			return IncomeSource{}, errors.New("member ID must be positive")
 		}
+		members, err := s.queries.ListHouseholdMembers(ctx, householdID)
+		if err != nil {
+			return IncomeSource{}, fmt.Errorf("list household members: %w", err)
+		}
+		belongs := false
+		for _, member := range members {
+			if member.ID == *input.MemberID {
+				belongs = true
+				break
+			}
+		}
+		if !belongs {
+			return IncomeSource{}, fmt.Errorf("member %d does not belong to household %d", *input.MemberID, householdID)
+		}
 		memberID = pgtype.Int8{Int64: *input.MemberID, Valid: true}
 	}
 	row, err := s.queries.CreateIncomeSource(ctx, storesqlc.CreateIncomeSourceParams{
