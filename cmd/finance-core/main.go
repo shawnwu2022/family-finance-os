@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/shawnwu2022/family-finance-os/internal/config"
 	"github.com/shawnwu2022/family-finance-os/internal/server"
 )
 
@@ -33,15 +34,15 @@ func run(args []string, getenv func(string) string, serve serveFunc, check check
 
 	switch command {
 	case "serve":
-		addr := getenv("FINANCE_LISTEN_ADDR")
-		if addr == "" {
-			addr = ":8000"
+		cfg, err := config.Load(getenv)
+		if err != nil {
+			return fmt.Errorf("load runtime config: %w", err)
 		}
 		if serve == nil {
 			return errors.New("serve function is required")
 		}
-		slog.Info("starting finance-core", "addr", addr)
-		return serve(addr, server.NewHandler())
+		slog.Info("starting finance-core", "addr", cfg.ListenAddr, "timezone", cfg.Timezone)
+		return serve(cfg.ListenAddr, server.NewHandler())
 	case "healthcheck":
 		url := getenv("FINANCE_HEALTHCHECK_URL")
 		if url == "" {

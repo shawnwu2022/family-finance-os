@@ -60,6 +60,7 @@ services:
     environment:
       DB_HOST: ${DB_HOST:-postgres}
       DB_PORT: ${DB_PORT:-5432}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
       DB_NAME: ${FINANCE_DB_NAME:-finance}
       DB_USER: ${FINANCE_DB_USER:-finance_app}
       DB_PASSWORD: ${FINANCE_DB_PASSWORD}
