@@ -31,6 +31,30 @@ jobs:
         with:
           go-version: '1.26.6'
           cache: true
+      - name: Install pinned SQL tools
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
+      - name: Generate sqlc
+        run: sqlc generate
+      - name: Upload sqlc generated sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlc-generated
+          path: internal/store/sqlc
+          if-no-files-found: error
+      - name: Verify sqlc generated sources are committed
+        shell: bash
+        run: |
+          git diff --exit-code -- internal/store/sqlc
+          test -z "$(git ls-files --others --exclude-standard internal/store/sqlc)"
+      - name: Migration up/down/up smoke
+        env:
+          GOOSE_DBSTRING: postgres://finance_app:test-secret@127.0.0.1:5432/finance?sslmode=disable
+        run: |
+          goose -dir db/migrations postgres "$GOOSE_DBSTRING" up
+          goose -dir db/migrations postgres "$GOOSE_DBSTRING" down
+          goose -dir db/migrations postgres "$GOOSE_DBSTRING" up
       - name: Verify module files
         run: |
           go mod tidy
