@@ -1,0 +1,9 @@
+{$EBK_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy ezbookkeeping:8080
+}
+
+{$FINANCE_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy finance-core:8000
+}
