@@ -1,9 +1,9 @@
 name: CI
 
 on:
-  pull_request:
   push:
     branches: [main]
+  pull_request:
 
 permissions:
   contents: read
@@ -11,29 +11,56 @@ permissions:
 jobs:
   go:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: finance_app
+          POSTGRES_PASSWORD: test-secret
+          POSTGRES_DB: finance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finance_app -d finance"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.6'
           cache: true
+      - name: Verify module files
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - name: Verify formatting
         shell: bash
         run: |
-          mapfile -t gofiles < <(find cmd internal -type f -name '*.go' -print)
-          test -z "$(gofmt -l "${gofiles[@]}")"
+          files=$(find cmd internal -name '*.go' -type f -print)
+          test -n "$files"
+          test -z "$(gofmt -l $files)"
       - name: Vet
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: PostgreSQL integration
+        env:
+          TEST_POSTGRES_HOST: 127.0.0.1
+          TEST_POSTGRES_PORT: '5432'
+          TEST_POSTGRES_DB: finance
+          TEST_POSTGRES_USER: finance_app
+          TEST_POSTGRES_PASSWORD: test-secret
+        run: go test ./internal/store -run TestOpenPostgresIntegration -v
       - name: Race test
         run: go test -race ./...
       - name: Build
-        run: CGO_ENABLED=0 go build -trimpath -o /tmp/finance-core ./cmd/finance-core
+        run: CGO_ENABLED=0 go build ./cmd/finance-core
 
   container:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build Finance Core image
-        run: docker build -t family-finance-core:ci .
+        run: docker build -t family-finance-core:test .
