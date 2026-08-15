@@ -32,9 +32,24 @@ jobs:
           go-version: '1.26.6'
           cache: true
       - name: Install pinned SQL tools
+        shell: bash
         run: |
-          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
-          go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+
+          curl -fsSL -o "$RUNNER_TEMP/sqlc.tar.gz" \
+            https://github.com/sqlc-dev/sqlc/releases/download/v1.31.1/sqlc_1.31.1_linux_amd64.tar.gz
+          echo "497ae4fcdfa64c5b0c311ffe4c2bd991e43991e82e5367792ed78bc2dca27354  $RUNNER_TEMP/sqlc.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/sqlc.tar.gz" -C "$RUNNER_TEMP/bin" sqlc
+
+          curl -fsSL -o "$RUNNER_TEMP/bin/goose" \
+            https://github.com/pressly/goose/releases/download/v3.27.3/goose_linux_x86_64
+          echo "ca18112e2438b3ad608af9a5938beafd01fa36a4a19a3edbe4f29226ca5c8533  $RUNNER_TEMP/bin/goose" | sha256sum -c -
+          chmod 0755 "$RUNNER_TEMP/bin/goose"
+
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/sqlc" version
+          "$RUNNER_TEMP/bin/goose" -version
       - name: Generate sqlc
         run: sqlc generate
       - name: Upload sqlc generated sources
@@ -43,11 +58,6 @@ jobs:
           name: sqlc-generated
           path: internal/store/sqlc
           if-no-files-found: error
-      - name: Verify sqlc generated sources are committed
-        shell: bash
-        run: |
-          git diff --exit-code -- internal/store/sqlc
-          test -z "$(git ls-files --others --exclude-standard internal/store/sqlc)"
       - name: Migration up/down/up smoke
         env:
           GOOSE_DBSTRING: postgres://finance_app:test-secret@127.0.0.1:5432/finance?sslmode=disable
@@ -55,6 +65,11 @@ jobs:
           goose -dir db/migrations postgres "$GOOSE_DBSTRING" up
           goose -dir db/migrations postgres "$GOOSE_DBSTRING" down
           goose -dir db/migrations postgres "$GOOSE_DBSTRING" up
+      - name: Verify sqlc generated sources are committed
+        shell: bash
+        run: |
+          git diff --exit-code -- internal/store/sqlc
+          test -z "$(git ls-files --others --exclude-standard internal/store/sqlc)"
       - name: Verify module files
         run: |
           go mod tidy
