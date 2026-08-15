@@ -89,6 +89,52 @@ func TestServiceProfileRoundTripIntegration(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsCrossHouseholdMemberReferenceIntegration(t *testing.T) {
+	pool := openIntegrationPool(t)
+	service := NewService(pool)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	first, err := service.CreateHousehold(ctx, NewHousehold{
+		Name:         "家庭甲",
+		BaseCurrency: "CNY",
+		Timezone:     "Asia/Shanghai",
+	})
+	if err != nil {
+		t.Fatalf("CreateHousehold first: %v", err)
+	}
+	member, err := service.AddMember(ctx, first.ID, NewMember{
+		Name:   "甲成员",
+		Kind:   MemberKindAdult,
+		Active: true,
+	})
+	if err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+
+	second, err := service.CreateHousehold(ctx, NewHousehold{
+		Name:         "家庭乙",
+		BaseCurrency: "CNY",
+		Timezone:     "Asia/Shanghai",
+	})
+	if err != nil {
+		t.Fatalf("CreateHousehold second: %v", err)
+	}
+
+	memberID := member.ID
+	_, err = service.AddIncomeSource(ctx, second.ID, NewIncomeSource{
+		MemberID:  &memberID,
+		Name:      "错误归属工资",
+		Amount:    money.Money{Minor: 100_000, Currency: "CNY"},
+		Cadence:   CadenceMonthly,
+		Stability: IncomeStabilityStable,
+		Active:    true,
+	})
+	if err == nil {
+		t.Fatal("AddIncomeSource accepted a member that belongs to another household")
+	}
+}
+
 func TestServiceRejectsPolicyCurrencyDifferentFromHouseholdBaseIntegration(t *testing.T) {
 	pool := openIntegrationPool(t)
 	service := NewService(pool)
