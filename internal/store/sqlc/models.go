@@ -8,6 +8,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BudgetLine struct {
+	ID                  int64              `json:"id"`
+	BudgetPlanID        int64              `json:"budget_plan_id"`
+	ExternalCategoryRef pgtype.Text        `json:"external_category_ref"`
+	SemanticGroup       pgtype.Text        `json:"semantic_group"`
+	PlannedMinor        int64              `json:"planned_minor"`
+	Kind                string             `json:"kind"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BudgetPlan struct {
+	ID          int64              `json:"id"`
+	HouseholdID int64              `json:"household_id"`
+	Period      string             `json:"period"`
+	Currency    string             `json:"currency"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ExpenseBaseline struct {
 	ID          int64              `json:"id"`
 	HouseholdID int64              `json:"household_id"`
