@@ -184,8 +184,9 @@ func validateAdviceRequest(request AdviceRequest) error {
 }
 
 func qualityEnvelope(quality analytics.DataQuality) (dataQualityEnvelope, error) {
-	var level string
+	level := "unknown"
 	switch quality.Level {
+	case 0:
 	case analytics.QualityGood:
 		level = "good"
 	case analytics.QualityPartial:
