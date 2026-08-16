@@ -85,6 +85,8 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: Debt fuzz invariant
+        run: go test ./internal/debt -run '^$' -fuzz=FuzzExtraPaymentNeverDelaysPayoff -fuzztime=3s
       - name: PostgreSQL integration
         env:
           TEST_POSTGRES_HOST: 127.0.0.1
