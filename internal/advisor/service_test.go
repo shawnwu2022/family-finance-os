@@ -85,7 +85,7 @@ func TestServiceBlocksWhenRequiredToolIsNotCalled(t *testing.T) {
 
 func TestServiceBlocksOnToolFailureWithoutExplanationCall(t *testing.T) {
 	provider := &scriptedProvider{responses: []llm.Response{{
-		ID: "resp_1",
+		ID:        "resp_1",
 		ToolCalls: []llm.ToolCall{{ID: "call_1", Name: string(ToolNameGetOverview), Arguments: json.RawMessage(`{"household_id":1}`)}},
 	}}}
 	recorder := &memoryRecorder{}
