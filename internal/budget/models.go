@@ -13,6 +13,15 @@ const (
 	BudgetKindGoal       BudgetKind = "goal"
 )
 
+func (k BudgetKind) valid() bool {
+	switch k {
+	case BudgetKindEssential, BudgetKindFlexible, BudgetKindDebt, BudgetKindSaving, BudgetKindInvestment, BudgetKindGoal:
+		return true
+	default:
+		return false
+	}
+}
+
 type BudgetPlan struct {
 	ID          int64
 	HouseholdID int64
