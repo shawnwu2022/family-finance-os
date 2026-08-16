@@ -41,12 +41,12 @@ func TestPolicyKeepsUntrustedLedgerTextOutOfInstructions(t *testing.T) {
 	}
 
 	var envelope struct {
-		Question      string `json:"question"`
-		RequireTool   bool   `json:"require_tool"`
-		DataQuality   struct {
-			Level         string `json:"level"`
-			UnknownMinor  int64  `json:"unknown_minor"`
-			Currency      string `json:"currency"`
+		Question    string `json:"question"`
+		RequireTool bool   `json:"require_tool"`
+		DataQuality struct {
+			Level        string `json:"level"`
+			UnknownMinor int64  `json:"unknown_minor"`
+			Currency     string `json:"currency"`
 		} `json:"data_quality"`
 		UntrustedData []UntrustedDatum `json:"untrusted_data"`
 	}
