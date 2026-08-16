@@ -117,6 +117,8 @@ jobs:
           TEST_POSTGRES_USER: finance_app
           TEST_POSTGRES_PASSWORD: test-secret
         run: go test ./internal/goals -run Integration -v
+      - name: Goal fuzz property
+        run: go test ./internal/goals -run '^$' -fuzz=FuzzProjectGoalMoreFundingNeverRaisesRequiredMonthly -fuzztime=3s
       - name: Race test
         run: go test -race ./...
       - name: Build
