@@ -67,17 +67,17 @@ func TestSummarizePortfolioRejectsUnsafeInputs(t *testing.T) {
 	}{
 		{
 			name: "cross currency valuation",
-			in: SummaryInput{ReportingCurrency: "CNY", AsOf: asOf, Valuations: []Valuation{{ID: "x", Class: AssetClassCash, Value: money.Money{Minor: 1, Currency: "USD"}, SourceCurrency: "USD", ValuationAsOf: asOf}}},
+			in:   SummaryInput{ReportingCurrency: "CNY", AsOf: asOf, Valuations: []Valuation{{ID: "x", Class: AssetClassCash, Value: money.Money{Minor: 1, Currency: "USD"}, SourceCurrency: "USD", ValuationAsOf: asOf}}},
 			want: money.ErrCurrencyMismatch,
 		},
 		{
 			name: "negative valuation",
-			in: SummaryInput{ReportingCurrency: "CNY", AsOf: asOf, Valuations: []Valuation{{ID: "x", Class: AssetClassCash, Value: money.Money{Minor: -1, Currency: "CNY"}, SourceCurrency: "CNY", ValuationAsOf: asOf}}},
+			in:   SummaryInput{ReportingCurrency: "CNY", AsOf: asOf, Valuations: []Valuation{{ID: "x", Class: AssetClassCash, Value: money.Money{Minor: -1, Currency: "CNY"}, SourceCurrency: "CNY", ValuationAsOf: asOf}}},
 			want: ErrNegativeValuation,
 		},
 		{
 			name: "unknown asset class",
-			in: SummaryInput{ReportingCurrency: "CNY", AsOf: asOf, Valuations: []Valuation{{ID: "x", Class: AssetClass("mystery"), Value: money.Money{Minor: 1, Currency: "CNY"}, SourceCurrency: "CNY", ValuationAsOf: asOf}}},
+			in:   SummaryInput{ReportingCurrency: "CNY", AsOf: asOf, Valuations: []Valuation{{ID: "x", Class: AssetClass("mystery"), Value: money.Money{Minor: 1, Currency: "CNY"}, SourceCurrency: "CNY", ValuationAsOf: asOf}}},
 			want: ErrInvalidAssetClass,
 		},
 	}
