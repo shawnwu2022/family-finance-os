@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -20,6 +21,10 @@ const (
 	AdviceStatusBlocked AdviceStatus = "blocked"
 	AdviceStatusError   AdviceStatus = "error"
 )
+
+type Recorder interface {
+	Record(ctx context.Context, record AdviceRecord) (int64, error)
+}
 
 type ToolExecution struct {
 	Sequence     int    `json:"sequence"`
