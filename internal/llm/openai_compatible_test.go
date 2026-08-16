@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -108,9 +109,9 @@ func TestOpenAICompatibleStreamParsesTextToolCallAndCompletion(t *testing.T) {
 	defer server.Close()
 
 	provider, err := NewOpenAICompatibleProvider(OpenAICompatibleConfig{
-		BaseURL: server.URL + "/v1",
-		APIKey:  "test-key",
-		Models:  ModelSet{Fast: "fast-model"},
+		BaseURL:    server.URL + "/v1",
+		APIKey:     "test-key",
+		Models:     ModelSet{Fast: "fast-model"},
 		HTTPClient: server.Client(),
 	})
 	if err != nil {
