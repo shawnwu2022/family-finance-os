@@ -23,18 +23,18 @@ var (
 type ToolName string
 
 const (
-	ToolNameGetOverview              ToolName = "get_overview"
-	ToolNameGetCashflow              ToolName = "get_cashflow"
-	ToolNameGetBudgetStatus          ToolName = "get_budget_status"
-	ToolNameGetDebtPlan              ToolName = "get_debt_plan"
-	ToolNameGetGoalStatus            ToolName = "get_goal_status"
-	ToolNameGetPortfolioAllocation   ToolName = "get_portfolio_allocation"
-	ToolNameSimulatePurchase         ToolName = "simulate_purchase"
-	ToolNameSimulateDebtPayment      ToolName = "simulate_debt_payment"
-	ToolNameSimulateBudgetChange     ToolName = "simulate_budget_change"
-	ToolNameSimulateSavingsChange    ToolName = "simulate_savings_change"
-	ToolNameSimulateIncomeDrop       ToolName = "simulate_income_drop"
-	ToolNameSimulateGoal             ToolName = "simulate_goal"
+	ToolNameGetOverview            ToolName = "get_overview"
+	ToolNameGetCashflow            ToolName = "get_cashflow"
+	ToolNameGetBudgetStatus        ToolName = "get_budget_status"
+	ToolNameGetDebtPlan            ToolName = "get_debt_plan"
+	ToolNameGetGoalStatus          ToolName = "get_goal_status"
+	ToolNameGetPortfolioAllocation ToolName = "get_portfolio_allocation"
+	ToolNameSimulatePurchase       ToolName = "simulate_purchase"
+	ToolNameSimulateDebtPayment    ToolName = "simulate_debt_payment"
+	ToolNameSimulateBudgetChange   ToolName = "simulate_budget_change"
+	ToolNameSimulateSavingsChange  ToolName = "simulate_savings_change"
+	ToolNameSimulateIncomeDrop     ToolName = "simulate_income_drop"
+	ToolNameSimulateGoal           ToolName = "simulate_goal"
 )
 
 var allowedToolNames = []ToolName{
