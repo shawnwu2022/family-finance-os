@@ -80,7 +80,11 @@ jobs:
         shell: bash
         run: |
           mapfile -t gofiles < <(find cmd internal -type f -name '*.go' -print)
-          test -z "$(gofmt -l "${gofiles[@]}")"
+          formatted="$(gofmt -l "${gofiles[@]}")"
+          if [ -n "$formatted" ]; then
+            printf 'gofmt required for:\n%s\n' "$formatted"
+            exit 1
+          fi
       - name: Vet
         run: go vet ./...
       - name: Test
