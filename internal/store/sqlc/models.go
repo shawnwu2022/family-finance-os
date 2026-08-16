@@ -66,6 +66,22 @@ type ExpenseBaseline struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type FinancialGoal struct {
+	ID                       int64              `json:"id"`
+	HouseholdID              int64              `json:"household_id"`
+	Name                     string             `json:"name"`
+	TargetMinor              int64              `json:"target_minor"`
+	FundedMinor              int64              `json:"funded_minor"`
+	TargetDate               pgtype.Date        `json:"target_date"`
+	Priority                 int32              `json:"priority"`
+	Flexibility              string             `json:"flexibility"`
+	MonthlyContributionMinor int64              `json:"monthly_contribution_minor"`
+	Currency                 string             `json:"currency"`
+	Active                   bool               `json:"active"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Household struct {
 	ID           int64              `json:"id"`
 	Name         string             `json:"name"`
