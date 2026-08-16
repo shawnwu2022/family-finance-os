@@ -28,6 +28,31 @@ type BudgetPlan struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Debt struct {
+	ID                         int64              `json:"id"`
+	HouseholdID                int64              `json:"household_id"`
+	Name                       string             `json:"name"`
+	DebtType                   string             `json:"debt_type"`
+	OriginalPrincipalMinor     int64              `json:"original_principal_minor"`
+	BalanceMinor               int64              `json:"balance_minor"`
+	Currency                   string             `json:"currency"`
+	Apr                        pgtype.Numeric     `json:"apr"`
+	RateType                   string             `json:"rate_type"`
+	LprSpread                  pgtype.Numeric     `json:"lpr_spread"`
+	TermRemainingMonths        int32              `json:"term_remaining_months"`
+	DueDay                     int32              `json:"due_day"`
+	RepaymentType              string             `json:"repayment_type"`
+	MinimumPaymentMinor        int64              `json:"minimum_payment_minor"`
+	ScheduledPaymentMinor      int64              `json:"scheduled_payment_minor"`
+	PrepaymentFeeRate          pgtype.Numeric     `json:"prepayment_fee_rate"`
+	PrepaymentRestrictedMonths int32              `json:"prepayment_restricted_months"`
+	Revolving                  bool               `json:"revolving"`
+	SourceAccountRef           pgtype.Text        `json:"source_account_ref"`
+	Active                     bool               `json:"active"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ExpenseBaseline struct {
 	ID          int64              `json:"id"`
 	HouseholdID int64              `json:"household_id"`
