@@ -109,6 +109,14 @@ jobs:
           TEST_POSTGRES_USER: finance_app
           TEST_POSTGRES_PASSWORD: test-secret
         run: go test ./internal/budget -run Integration -v
+      - name: Goals integration
+        env:
+          TEST_POSTGRES_HOST: 127.0.0.1
+          TEST_POSTGRES_PORT: '5432'
+          TEST_POSTGRES_DB: finance
+          TEST_POSTGRES_USER: finance_app
+          TEST_POSTGRES_PASSWORD: test-secret
+        run: go test ./internal/goals -run Integration -v
       - name: Race test
         run: go test -race ./...
       - name: Build
