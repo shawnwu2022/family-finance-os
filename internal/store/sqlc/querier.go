@@ -9,12 +9,17 @@ import (
 )
 
 type Querier interface {
+	CreateBudgetLine(ctx context.Context, arg CreateBudgetLineParams) (CreateBudgetLineRow, error)
+	CreateBudgetPlan(ctx context.Context, arg CreateBudgetPlanParams) (CreateBudgetPlanRow, error)
 	CreateExpenseBaseline(ctx context.Context, arg CreateExpenseBaselineParams) (CreateExpenseBaselineRow, error)
 	CreateHousehold(ctx context.Context, arg CreateHouseholdParams) (CreateHouseholdRow, error)
 	CreateHouseholdMember(ctx context.Context, arg CreateHouseholdMemberParams) (CreateHouseholdMemberRow, error)
 	CreateIncomeSource(ctx context.Context, arg CreateIncomeSourceParams) (CreateIncomeSourceRow, error)
+	GetBudgetPlan(ctx context.Context, id int64) (GetBudgetPlanRow, error)
+	GetBudgetPlanByHouseholdPeriod(ctx context.Context, arg GetBudgetPlanByHouseholdPeriodParams) (GetBudgetPlanByHouseholdPeriodRow, error)
 	GetHousehold(ctx context.Context, id int64) (GetHouseholdRow, error)
 	GetHouseholdPolicy(ctx context.Context, householdID int64) (GetHouseholdPolicyRow, error)
+	ListBudgetLines(ctx context.Context, budgetPlanID int64) ([]ListBudgetLinesRow, error)
 	ListExpenseBaselines(ctx context.Context, householdID int64) ([]ListExpenseBaselinesRow, error)
 	ListHouseholdMembers(ctx context.Context, householdID int64) ([]ListHouseholdMembersRow, error)
 	ListIncomeSources(ctx context.Context, householdID int64) ([]ListIncomeSourcesRow, error)

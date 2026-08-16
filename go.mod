@@ -4,7 +4,10 @@ go 1.26.0
 
 toolchain go1.26.6
 
-require github.com/jackc/pgx/v5 v5.10.0
+require (
+	github.com/cockroachdb/apd/v3 v3.2.3
+	github.com/jackc/pgx/v5 v5.10.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
