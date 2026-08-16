@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	ErrInvalidGoal                 = errors.New("invalid financial goal")
+	ErrInvalidGoal                = errors.New("invalid financial goal")
 	ErrGoalAssumptionsUnsupported = errors.New("non-zero goal planning assumptions are not supported in V1")
 )
 
