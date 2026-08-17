@@ -8,6 +8,7 @@ fail() {
 
 backup="scripts/backup.sh"
 restore="scripts/restore-drill.sh"
+preflight="scripts/preflight.sh"
 edge="scripts/check-edge-security.sh"
 
 [[ -f "$backup" ]] || fail "backup script is missing"
@@ -25,6 +26,11 @@ fi
 grep -Fq 'sha256sum -c' "$restore" || fail "restore drill must verify backup checksums"
 grep -Fq 'pg_restore' "$restore" || fail "restore drill must exercise pg_restore"
 grep -Fq 'finance_restore_drill' "$restore" || fail "restore drill must use isolated scratch databases"
+
+[[ -f "$preflight" ]] || fail "preflight script is missing"
+grep -Fq 'RESTIC_REPOSITORY' "$preflight" || fail "preflight must validate restic repository configuration"
+grep -Fq 'RESTIC_PASSWORD_FILE' "$preflight" || fail "preflight must validate restic password file"
+grep -Fq 'must live outside the repository' "$preflight" || fail "preflight must reject repository-local restic password files"
 
 [[ -f "$edge" ]] || fail "edge security script is missing"
 grep -Fq 'host port exposure' "$edge" || fail "edge security must enforce host-port exposure"
