@@ -69,7 +69,9 @@ func (r *recordingScopedAdvisor) Advise(_ context.Context, householdID int64, re
 type scopedAdvisorLedger struct{}
 
 func (scopedAdvisorLedger) ListAccounts(context.Context) ([]ledger.Account, error) { return nil, nil }
-func (scopedAdvisorLedger) ListCategories(context.Context) ([]ledger.Category, error) { return nil, nil }
+func (scopedAdvisorLedger) ListCategories(context.Context) ([]ledger.Category, error) {
+	return nil, nil
+}
 func (scopedAdvisorLedger) ListTransactions(context.Context, ledger.TransactionQuery) ([]ledger.Transaction, error) {
 	return nil, nil
 }
@@ -79,11 +81,15 @@ type scopedAdvisorPlanner struct {
 	plan    budget.BudgetPlan
 }
 
-func (p scopedAdvisorPlanner) Profile(context.Context, int64) (household.Profile, error) { return p.profile, nil }
+func (p scopedAdvisorPlanner) Profile(context.Context, int64) (household.Profile, error) {
+	return p.profile, nil
+}
 func (p scopedAdvisorPlanner) BudgetPlan(context.Context, int64, string) (budget.BudgetPlan, error) {
 	return p.plan, nil
 }
 func (scopedAdvisorPlanner) Debts(context.Context, int64) ([]DebtSnapshot, error) { return nil, nil }
-func (scopedAdvisorPlanner) Goals(context.Context, int64) ([]goals.FinancialGoal, error) { return nil, nil }
+func (scopedAdvisorPlanner) Goals(context.Context, int64) ([]goals.FinancialGoal, error) {
+	return nil, nil
+}
 
 var _ = analytics.QualityGood
