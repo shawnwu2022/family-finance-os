@@ -22,7 +22,24 @@ jobs:
           grep -Fq '{$FINANCE_AUTH_HASH}' Caddyfile
           grep -q 'FINANCE_AUTH_USER:' compose.yaml
           grep -q 'FINANCE_AUTH_HASH:' compose.yaml
-      - name: Adapt pinned Caddy configuration
+      - name: Verify Compose env literal hash handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/edge.env" <<'EOF'
+          EBK_DOMAIN=book.example.test
+          FINANCE_DOMAIN=finance.example.test
+          FINANCE_AUTH_USER=finance
+          FINANCE_AUTH_HASH='$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=test-postgres
+          FINANCE_DB_PASSWORD=test-finance
+          EBK_DB_PASSWORD=test-ebk
+          EBK_SECURITY_SECRET_KEY=test-secret-key
+          EOF
+          docker compose --env-file "$RUNNER_TEMP/edge.env" config > "$RUNNER_TEMP/compose.yml"
+          grep -Fq '$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG' "$RUNNER_TEMP/compose.yml"
+      - name: Validate pinned Caddy configuration
         env:
           EBK_DOMAIN: book.example.test
           FINANCE_DOMAIN: finance.example.test
@@ -36,4 +53,4 @@ jobs:
             -e FINANCE_AUTH_HASH \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.11.4-alpine \
-            caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
