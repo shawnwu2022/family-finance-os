@@ -84,6 +84,7 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 
 	t.Run("scenario", func(t *testing.T) {
 		body := `{"household_id":7,"kind":"purchase","input":{"amount_minor":899900,"currency":"CNY"}}`
+		body = strings.ReplaceAll(body, `\"`, `"`)
 		resp := httptest.NewRecorder()
 		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/scenarios", strings.NewReader(body)))
 		if resp.Code != http.StatusOK {
@@ -96,6 +97,7 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 
 	t.Run("advisor", func(t *testing.T) {
 		body := `{"household_id":7,"question":"现在可以买电脑吗？","require_review":true}`
+		body = strings.ReplaceAll(body, `\"`, `"`)
 		resp := httptest.NewRecorder()
 		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/advisor", strings.NewReader(body)))
 		if resp.Code != http.StatusOK {
@@ -108,6 +110,7 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 
 	t.Run("unknown field rejected", func(t *testing.T) {
 		body := `{"household_id":7,"question":"test","raw_sql":"select *"}`
+		body = strings.ReplaceAll(body, `\"`, `"`)
 		resp := httptest.NewRecorder()
 		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/advisor", strings.NewReader(body)))
 		if resp.Code != http.StatusBadRequest {
