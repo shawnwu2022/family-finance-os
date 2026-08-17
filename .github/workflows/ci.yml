@@ -177,5 +177,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Finance edge auth contract
+        run: bash scripts/check-edge-security.sh
       - name: Build Finance Core image
         run: docker build -t family-finance-core:ci .
