@@ -22,7 +22,7 @@ jobs:
           grep -Fq '{$FINANCE_AUTH_HASH}' Caddyfile
           grep -q 'FINANCE_AUTH_USER:' compose.yaml
           grep -q 'FINANCE_AUTH_HASH:' compose.yaml
-      - name: Verify Compose env literal hash handling
+      - name: Prepare edge test environment
         shell: bash
         run: |
           set -euo pipefail
@@ -37,20 +37,16 @@ jobs:
           EBK_DB_PASSWORD=test-ebk
           EBK_SECURITY_SECRET_KEY=test-secret-key
           EOF
-          docker compose --env-file "$RUNNER_TEMP/edge.env" config > "$RUNNER_TEMP/compose.yml"
-          grep -Fq '$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG' "$RUNNER_TEMP/compose.yml"
-      - name: Validate pinned Caddy configuration
-        env:
-          EBK_DOMAIN: book.example.test
-          FINANCE_DOMAIN: finance.example.test
-          FINANCE_AUTH_USER: finance
-          FINANCE_AUTH_HASH: '$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG'
+          docker compose --env-file "$RUNNER_TEMP/edge.env" config >/dev/null
+      - name: Verify Compose runtime hash value
+        shell: bash
         run: |
-          docker run --rm \
-            -e EBK_DOMAIN \
-            -e FINANCE_DOMAIN \
-            -e FINANCE_AUTH_USER \
-            -e FINANCE_AUTH_HASH \
-            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            caddy:2.11.4-alpine \
-            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          set -euo pipefail
+          expected='$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG'
+          actual="$(docker compose --env-file "$RUNNER_TEMP/edge.env" run --rm --no-deps --entrypoint env caddy | sed -n 's/^FINANCE_AUTH_HASH=//p')"
+          test "$actual" = "$expected"
+      - name: Validate pinned Caddy configuration through Compose
+        run: |
+          docker compose --env-file "$RUNNER_TEMP/edge.env" run --rm --no-deps \
+            --entrypoint caddy caddy \
+            validate --config /etc/caddy/Caddyfile --adapter caddyfile
