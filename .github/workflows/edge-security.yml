@@ -1,0 +1,39 @@
+name: Edge Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  caddy-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require Finance Core edge authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'basic_auth' Caddyfile
+          grep -Fq '{$FINANCE_AUTH_USER}' Caddyfile
+          grep -Fq '{$FINANCE_AUTH_HASH}' Caddyfile
+          grep -q 'FINANCE_AUTH_USER:' compose.yaml
+          grep -q 'FINANCE_AUTH_HASH:' compose.yaml
+      - name: Adapt pinned Caddy configuration
+        env:
+          EBK_DOMAIN: book.example.test
+          FINANCE_DOMAIN: finance.example.test
+          FINANCE_AUTH_USER: finance
+          FINANCE_AUTH_HASH: '$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG'
+        run: |
+          docker run --rm \
+            -e EBK_DOMAIN \
+            -e FINANCE_DOMAIN \
+            -e FINANCE_AUTH_USER \
+            -e FINANCE_AUTH_HASH \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.4-alpine \
+            caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
