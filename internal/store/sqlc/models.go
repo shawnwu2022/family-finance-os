@@ -8,6 +8,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdviceAudit struct {
+	ID                    int64              `json:"id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ModelRole             string             `json:"model_role"`
+	ReviewerRole          pgtype.Text        `json:"reviewer_role"`
+	DataAsOf              pgtype.Timestamptz `json:"data_as_of"`
+	PromptTemplateVersion string             `json:"prompt_template_version"`
+	RequestSha256         string             `json:"request_sha256"`
+	AdviceSha256          string             `json:"advice_sha256"`
+	QualityLevel          string             `json:"quality_level"`
+	Status                string             `json:"status"`
+}
+
+type AdviceAuditTool struct {
+	ID            int64       `json:"id"`
+	AdviceAuditID int64       `json:"advice_audit_id"`
+	Sequence      int32       `json:"sequence"`
+	ToolName      string      `json:"tool_name"`
+	InputSha256   string      `json:"input_sha256"`
+	ResultSha256  pgtype.Text `json:"result_sha256"`
+	Success       bool        `json:"success"`
+	ErrorCode     pgtype.Text `json:"error_code"`
+}
+
 type BudgetLine struct {
 	ID                  int64              `json:"id"`
 	BudgetPlanID        int64              `json:"budget_plan_id"`
