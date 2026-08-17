@@ -15,7 +15,7 @@ import (
 const maxAPIRequestBytes = 1 << 20
 
 type MoneyDTO struct {
-	Minor    int64  `json:"minor"`
+	Minor    int64  `json:"minor,string"`
 	Currency string `json:"currency"`
 }
 
