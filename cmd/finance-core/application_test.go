@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/shawnwu2022/family-finance-os/internal/config"
+	"github.com/shawnwu2022/family-finance-os/internal/report"
+	"github.com/shawnwu2022/family-finance-os/internal/scheduler"
 )
 
 func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
@@ -59,6 +61,53 @@ func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("health status=%d body=%s", resp.Code, resp.Body.String())
 	}
+}
+
+func TestNewMonthlyReportJobUsesHouseholdTimezoneAndPreviousMonth(t *testing.T) {
+	reporter := &fakeMonthlyReporter{}
+	job, err := newMonthlyReportJob(scheduler.HouseholdScope{
+		HouseholdID: 42,
+		Timezone:    "Asia/Shanghai",
+	}, reporter)
+	if err != nil {
+		t.Fatalf("newMonthlyReportJob: %v", err)
+	}
+	if job.Name != report.JobNameMonthly || job.HouseholdID != 42 || job.CatchUp != scheduler.CatchUpLatestOnly {
+		t.Fatalf("job identity = %#v", job)
+	}
+
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	trigger := time.Date(2026, time.August, 1, 3, 0, 0, 0, loc)
+	if got := job.Period(trigger); got != "2026-07" {
+		t.Fatalf("job period = %q, want 2026-07", got)
+	}
+	if err := job.Run(context.Background(), trigger); err != nil {
+		t.Fatalf("job Run: %v", err)
+	}
+	if reporter.householdID != 42 || reporter.period != "2026-07" {
+		t.Fatalf("report call = household %d period %q", reporter.householdID, reporter.period)
+	}
+}
+
+func TestNewMonthlyReportJobRejectsInvalidHouseholdTimezone(t *testing.T) {
+	_, err := newMonthlyReportJob(scheduler.HouseholdScope{HouseholdID: 42, Timezone: "Mars/Olympus"}, &fakeMonthlyReporter{})
+	if err == nil {
+		t.Fatal("newMonthlyReportJob() error = nil, want invalid timezone error")
+	}
+}
+
+type fakeMonthlyReporter struct {
+	householdID int64
+	period      string
+}
+
+func (f *fakeMonthlyReporter) MonthlyReport(_ context.Context, householdID int64, period string) (report.MonthlyReport, error) {
+	f.householdID = householdID
+	f.period = period
+	return report.MonthlyReport{Kind: report.KindMonthly, Period: period}, nil
 }
 
 func TestValidateRuntimeAIConfig(t *testing.T) {
