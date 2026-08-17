@@ -30,17 +30,16 @@ func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
 		ListenAddr: ":8000",
 		Timezone:   "Asia/Shanghai",
 		Database: config.DatabaseConfig{
-			Host: host,
-			Port: uint16(port),
-			Name: os.Getenv("TEST_POSTGRES_DB"),
-			User: os.Getenv("TEST_POSTGRES_USER"),
+			Host:     host,
+			Port:     uint16(port),
+			Name:     os.Getenv("TEST_POSTGRES_DB"),
+			User:     os.Getenv("TEST_POSTGRES_USER"),
 			Password: os.Getenv("TEST_POSTGRES_PASSWORD"),
-			SSLMode: "disable",
+			SSLMode:  "disable",
 		},
 		Ledger: config.LedgerConfig{
 			BaseURL:  "http://ezbookkeeping.invalid:8080",
-			Token:    "test-token",
-			Timezone: "Asia/Shanghai",
+			APIToken: "test-token",
 		},
 	}
 
