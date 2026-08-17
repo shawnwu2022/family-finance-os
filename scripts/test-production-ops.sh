@@ -23,6 +23,8 @@ grep -Fq 'ezbookkeeping-storage.tar.gz' "$backup" || fail "backup must archive e
 grep -Fq 'RESTIC_REPOSITORY' "$backup" || fail "backup must support a restic repository"
 grep -Fq 'RESTIC_PASSWORD_FILE' "$backup" || fail "restic automation must use a password file"
 grep -Eq 'restic[[:space:]]+backup' "$backup" || fail "backup must send the snapshot through restic"
+grep -Fq 'FINANCE_BACKUP_DIR must not be /' "$backup" || fail "backup must reject filesystem root as the retention directory"
+grep -Fq -- "-name '20??????T??????Z'" "$backup" || fail "retention must only remove script-generated timestamp directories"
 if grep -Eq '(^|[[:space:]])rsync([[:space:]]|$)' "$backup"; then
   fail "raw rsync is not an encrypted off-site backup path"
 fi
