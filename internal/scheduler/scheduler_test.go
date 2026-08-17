@@ -178,6 +178,34 @@ func TestRunContinuesAfterFailedCatchUpUntilContextCancelled(t *testing.T) {
 	}
 }
 
+func TestRunUsesPlannedTriggerForIdempotencyKey(t *testing.T) {
+	now := time.Date(2026, time.August, 1, 3, 0, 0, 0, time.UTC)
+	store := newFakeRunStore()
+	s, err := New(store, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	job := Job{
+		HouseholdID: 8,
+		Name:        "monthly_report",
+		Schedule:    fixedSchedule{next: now},
+		CatchUp:     CatchUpNone,
+		Run: func(context.Context, time.Time) error {
+			cancel()
+			return nil
+		},
+	}
+
+	if err := s.Run(ctx, job); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	key := RunKey{HouseholdID: 8, JobName: "monthly_report", ScheduledFor: now}
+	if !store.claimed[key] {
+		t.Fatalf("planned trigger key %#v was not claimed", key)
+	}
+}
+
 func TestRunReturnsOnCancelledContext(t *testing.T) {
 	loc := time.UTC
 	schedule, err := NewMonthlySchedule(loc, 3, 0)
