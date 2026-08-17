@@ -86,7 +86,6 @@ services:
     restart: unless-stopped
     depends_on:
       - ezbookkeeping
-      - finance-core
     environment:
       EBK_DOMAIN: ${EBK_DOMAIN}
       FINANCE_DOMAIN: ${FINANCE_DOMAIN}
