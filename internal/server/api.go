@@ -119,10 +119,10 @@ type ScenarioResponse struct {
 }
 
 type AdvisorRequest struct {
-	HouseholdID  int64  `json:"household_id"`
-	Question     string `json:"question"`
-	RequireTool  bool   `json:"require_tool,omitempty"`
-	RequireReview bool  `json:"require_review,omitempty"`
+	HouseholdID   int64  `json:"household_id"`
+	Question      string `json:"question"`
+	RequireTool   bool   `json:"require_tool,omitempty"`
+	RequireReview bool   `json:"require_review,omitempty"`
 }
 
 type AdvisorResponse struct {
@@ -135,10 +135,10 @@ type AdvisorResponse struct {
 }
 
 type ReportSummary struct {
-	ID       int64  `json:"id"`
-	Period   string `json:"period"`
-	Kind     string `json:"kind"`
-	Status   string `json:"status"`
+	ID        int64     `json:"id"`
+	Period    string    `json:"period"`
+	Kind      string    `json:"kind"`
+	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -164,23 +164,15 @@ type handlerConfig struct {
 
 type HandlerOption func(*handlerConfig)
 
-func WithAPI(api FinanceAPI) HandlerOption {
-	return func(cfg *handlerConfig) {
-		cfg.api = api
-	}
-}
-
+func WithAPI(api FinanceAPI) HandlerOption { return func(cfg *handlerConfig) { cfg.api = api } }
 func WithWeb(handler http.Handler) HandlerOption {
-	return func(cfg *handlerConfig) {
-		cfg.web = handler
-	}
+	return func(cfg *handlerConfig) { cfg.web = handler }
 }
 
 func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 	if api == nil {
 		return
 	}
-
 	mux.HandleFunc("GET /api/v1/overview", func(w http.ResponseWriter, r *http.Request) {
 		householdID, ok := parseHouseholdID(w, r)
 		if !ok {
@@ -189,7 +181,6 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 		response, err := api.Overview(r.Context(), householdID)
 		writeBackendResult(w, response, err)
 	})
-
 	mux.HandleFunc("GET /api/v1/cashflow", func(w http.ResponseWriter, r *http.Request) {
 		householdID, ok := parseHouseholdID(w, r)
 		if !ok {
@@ -202,7 +193,6 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 		response, err := api.Cashflow(r.Context(), householdID, period)
 		writeBackendResult(w, response, err)
 	})
-
 	mux.HandleFunc("GET /api/v1/budget", func(w http.ResponseWriter, r *http.Request) {
 		householdID, ok := parseHouseholdID(w, r)
 		if !ok {
@@ -215,7 +205,6 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 		response, err := api.Budget(r.Context(), householdID, period)
 		writeBackendResult(w, response, err)
 	})
-
 	mux.HandleFunc("GET /api/v1/debts", func(w http.ResponseWriter, r *http.Request) {
 		householdID, ok := parseHouseholdID(w, r)
 		if !ok {
@@ -224,7 +213,6 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 		response, err := api.Debts(r.Context(), householdID)
 		writeBackendResult(w, response, err)
 	})
-
 	mux.HandleFunc("GET /api/v1/goals", func(w http.ResponseWriter, r *http.Request) {
 		householdID, ok := parseHouseholdID(w, r)
 		if !ok {
@@ -233,7 +221,6 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 		response, err := api.Goals(r.Context(), householdID)
 		writeBackendResult(w, response, err)
 	})
-
 	mux.HandleFunc("POST /api/v1/scenarios", func(w http.ResponseWriter, r *http.Request) {
 		var request ScenarioRequest
 		if !decodeStrictJSON(w, r, &request) {
@@ -247,7 +234,6 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 		response, err := api.Scenario(r.Context(), request)
 		writeBackendResult(w, response, err)
 	})
-
 	mux.HandleFunc("POST /api/v1/advisor", func(w http.ResponseWriter, r *http.Request) {
 		var request AdvisorRequest
 		if !decodeStrictJSON(w, r, &request) {
@@ -261,7 +247,6 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 		response, err := api.Advisor(r.Context(), request)
 		writeBackendResult(w, response, err)
 	})
-
 	mux.HandleFunc("GET /api/v1/reports", func(w http.ResponseWriter, r *http.Request) {
 		householdID, ok := parseHouseholdID(w, r)
 		if !ok {
@@ -317,12 +302,7 @@ func writeBackendResult(w http.ResponseWriter, payload any, err error) {
 }
 
 func writeAPIError(w http.ResponseWriter, status int, code, message string) {
-	writeJSON(w, status, map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
-	})
+	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
