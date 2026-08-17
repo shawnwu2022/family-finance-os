@@ -37,7 +37,7 @@ if grep -Eq '^[[:space:]]+-[[:space:]]+finance-core[[:space:]]*$' <<<"$caddy_ser
 fi
 
 # Enforce host port exposure: only the caddy service may publish ports.
-if grep -Eq '^[[:space:]]*network_mode:[[:space:]]*["'"']?host["'"']?[[:space:]]*$' compose.yaml; then
+if grep -Eq '^[[:space:]]*network_mode:[[:space:]]*.*host.*$' compose.yaml; then
   fail "network_mode host is forbidden"
 fi
 
@@ -63,17 +63,22 @@ while IFS= read -r line; do
 done < compose.yaml
 (( caddy_ports == 1 )) || fail "caddy must publish the HTTPS edge ports"
 
+port_count=0
 while IFS= read -r port_line; do
-  port="$(sed -E 's/^[[:space:]]*-[[:space:]]*["'"']?([^"'"']+)["'"']?[[:space:]]*$/\1/' <<<"$port_line")"
+  port="${port_line#*- }"
+  port="${port#\"}"
+  port="${port%\"}"
   case "$port" in
     80:80|443:443|443:443/udp) ;;
     *) fail "caddy may publish only host ports 80 and 443, found: $port" ;;
   esac
+  port_count=$((port_count + 1))
 done < <(awk '
   /^  caddy:/ { in_caddy = 1; next }
   in_caddy && /^    ports:/ { in_ports = 1; next }
   in_ports && /^      - / { print; next }
   in_ports { exit }
 ' compose.yaml)
+(( port_count == 3 )) || fail "caddy must publish 80/tcp, 443/tcp, and 443/udp"
 
 echo "Finance edge security contract OK"
