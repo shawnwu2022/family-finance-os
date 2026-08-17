@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Family Finance OS">
+  <rect width="128" height="128" rx="28" fill="#0f172a"/>
+  <path d="M24 68 64 34l40 34v32a8 8 0 0 1-8 8H32a8 8 0 0 1-8-8Z" fill="#f8fafc"/>
+  <path d="M47 82c8-14 22-14 34 0" fill="none" stroke="#2563eb" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="47" cy="66" r="7" fill="#2563eb"/>
+  <circle cx="81" cy="66" r="7" fill="#2563eb"/>
+</svg>

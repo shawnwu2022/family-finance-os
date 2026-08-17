@@ -1,0 +1,52 @@
+name: Edge Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  caddy-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require Finance Core edge authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'basic_auth' Caddyfile
+          grep -Fq '{$FINANCE_AUTH_USER}' Caddyfile
+          grep -Fq '{$FINANCE_AUTH_HASH}' Caddyfile
+          grep -q 'FINANCE_AUTH_USER:' compose.yaml
+          grep -q 'FINANCE_AUTH_HASH:' compose.yaml
+      - name: Prepare edge test environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/edge.env" <<'EOF'
+          EBK_DOMAIN=book.example.test
+          FINANCE_DOMAIN=finance.example.test
+          FINANCE_AUTH_USER=finance
+          FINANCE_AUTH_HASH='$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=test-postgres
+          FINANCE_DB_PASSWORD=test-finance
+          EBK_DB_PASSWORD=test-ebk
+          EBK_SECURITY_SECRET_KEY=test-secret-key
+          EOF
+          docker compose --env-file "$RUNNER_TEMP/edge.env" config >/dev/null
+      - name: Verify Compose runtime hash value
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG'
+          actual="$(docker compose --env-file "$RUNNER_TEMP/edge.env" run --rm --no-deps --entrypoint env caddy | sed -n 's/^FINANCE_AUTH_HASH=//p')"
+          test "$actual" = "$expected"
+      - name: Validate pinned Caddy configuration through Compose
+        run: |
+          docker compose --env-file "$RUNNER_TEMP/edge.env" run --rm --no-deps \
+            --entrypoint caddy caddy \
+            validate --config /etc/caddy/Caddyfile --adapter caddyfile

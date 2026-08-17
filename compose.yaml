@@ -86,10 +86,11 @@ services:
     restart: unless-stopped
     depends_on:
       - ezbookkeeping
-      - finance-core
     environment:
       EBK_DOMAIN: ${EBK_DOMAIN}
       FINANCE_DOMAIN: ${FINANCE_DOMAIN}
+      FINANCE_AUTH_USER: ${FINANCE_AUTH_USER:?FINANCE_AUTH_USER is required}
+      FINANCE_AUTH_HASH: ${FINANCE_AUTH_HASH:?FINANCE_AUTH_HASH is required}
     ports:
       - "80:80"
       - "443:443"

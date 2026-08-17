@@ -125,14 +125,59 @@ jobs:
           TEST_POSTGRES_USER: finance_app
           TEST_POSTGRES_PASSWORD: test-secret
         run: go test ./internal/audit -run Integration -v
+      - name: App API integration
+        env:
+          TEST_POSTGRES_HOST: 127.0.0.1
+          TEST_POSTGRES_PORT: '5432'
+          TEST_POSTGRES_DB: finance
+          TEST_POSTGRES_USER: finance_app
+          TEST_POSTGRES_PASSWORD: test-secret
+        run: go test ./internal/appapi -run TestPostgresPlannerRoundTripIntegration -v
+      - name: Application builder integration
+        env:
+          TEST_POSTGRES_HOST: 127.0.0.1
+          TEST_POSTGRES_PORT: '5432'
+          TEST_POSTGRES_DB: finance
+          TEST_POSTGRES_USER: finance_app
+          TEST_POSTGRES_PASSWORD: test-secret
+        run: go test ./cmd/finance-core -run TestBuildApplicationHandlerWithoutLLMIntegration -v
       - name: Race test
         run: go test -race ./...
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -o /tmp/finance-core ./cmd/finance-core
 
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --ignore-scripts
+      - name: Verify PWA contract
+        run: npm run check:pwa
+      - name: Typecheck frontend
+        run: npm run typecheck
+      - name: Build frontend
+        run: npm run build
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          if-no-files-found: error
+
   container:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Finance edge auth contract
+        run: bash scripts/check-edge-security.sh
       - name: Build Finance Core image
         run: docker build -t family-finance-core:ci .

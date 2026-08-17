@@ -15,17 +15,26 @@
 
 1. `cp .env.example .env`；
 2. 填域名、PostgreSQL 管理密码、两个应用数据库独立密码及 ezBookkeeping Secret；
-3. `mkdir -p data/ezbookkeeping-storage backups`；
-4. `sudo chown -R 1000:1000 data/ezbookkeeping-storage`；
-5. `docker compose up -d postgres ezbookkeeping caddy`；
-6. 打开 ezBookkeeping，创建管理员并启用 2FA；
-7. 在 ezBookkeeping 开启 API Token 后生成专用 Token；
-8. 写入 `.env` 的 `EBK_API_TOKEN`；
-9. `docker compose up -d --build finance-core`；
-10. 验证 `https://finance.example.com/healthz`；
-11. 执行第一次备份；
-12. 在本地服务器做恢复演练。
+3. 为 Finance Core 公网入口设置 `FINANCE_AUTH_USER`，并交互式生成 Caddy bcrypt hash：
 
+   ```bash
+   docker run --rm -it caddy:2.11.4-alpine caddy hash-password --algorithm bcrypt
+   ```
+
+   把输出以**单引号**写入 `.env`，例如 `FINANCE_AUTH_HASH='$2a$...'`，不要保存明文密码；
+4. `chmod 600 .env`，然后执行 `./scripts/preflight.sh`；
+5. `mkdir -p data/ezbookkeeping-storage backups`；
+6. `sudo chown -R 1000:1000 data/ezbookkeeping-storage`；
+7. `docker compose up -d postgres ezbookkeeping caddy`；此时先保证 ezBookkeeping 可通过 HTTPS 访问。Finance 域在 finance-core 尚未启动时暂时不可用是正常的；
+8. 打开 ezBookkeeping，创建管理员并启用 2FA；
+9. 在 ezBookkeeping 开启 API Token 后生成 Finance Core 专用 Token；
+10. 写入 `.env` 的 `EBK_API_TOKEN`；
+11. `docker compose up -d --build finance-core`；
+12. 访问 `https://<FINANCE_DOMAIN>/healthz`，应先出现 Caddy Basic Auth，认证后返回健康状态；再检查 `/readyz`；
+13. 执行第一次备份；
+14. 在本地服务器做恢复演练。
+
+Caddy 不依赖 finance-core 启动，这是刻意设计的首次部署 bootstrap 边界：必须先能访问 ezBookkeeping 才能生成 `EBK_API_TOKEN`。Finance Core 仍只在内部 Docker network 上被 Caddy 反向代理，没有新增 host 端口。
 
 ### 数据库角色隔离
 
@@ -33,11 +42,13 @@ V1 仍然只运行一个 PostgreSQL 实例，但 Finance Core 与 ezBookkeeping 
 
 ## 3. Secret
 
-生成：
+通用随机 Secret 生成：
 
 ```bash
 openssl rand -base64 32
 ```
+
+Finance Core 的公网 Basic Auth 密码不要写进 `.env`；`.env` 只存 Caddy 生成的 bcrypt hash，且该值应使用单引号包裹，避免 hash 中的 `$` 被 Compose 解释。
 
 `.env`：
 

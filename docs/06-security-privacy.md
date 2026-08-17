@@ -19,15 +19,23 @@
 1. Caddy 是唯一公网入口；
 2. PostgreSQL 不绑定 host 公网端口；
 3. ezBookkeeping / Finance Core 只在 Docker network 内接受反代；
-4. ezBookkeeping 开启 2FA；
-5. `EBK_SECURITY_SECRET_KEY` 上线前生成；
-6. API Token 仅供 Finance Core 使用；
-7. `.env` 权限 600；不提交 Git；
-8. 主机防火墙只开放 22（受控来源）/80/443；
-9. SSH key-only，关闭密码登录（如运维条件允许）；
-10. 每日备份异地；
-11. 依赖和镜像按计划升级；
-12. AI 写操作默认禁用。
+4. `FINANCE_DOMAIN` 全域启用 Caddy Basic Auth，并且只通过 HTTPS 使用；密码只以 bcrypt hash (`FINANCE_AUTH_HASH`) 进入 Caddy，禁止把明文密码写进 `.env` / Caddyfile / Git；
+5. Finance Core 的 Basic Auth 是 V1 单家庭公网入口认证，不替代未来的成员级 authorization / RBAC；
+6. ezBookkeeping 开启 2FA；
+7. `EBK_SECURITY_SECRET_KEY` 上线前生成；
+8. API Token 仅供 Finance Core 使用；
+9. `.env` 权限 600；不提交 Git；
+10. 主机防火墙只开放 22（受控来源）/80/443；
+11. SSH key-only，关闭密码登录（如运维条件允许）；
+12. 每日备份异地；
+13. 依赖和镜像按计划升级；
+14. AI 写操作默认禁用。
+
+Finance Core edge hash 推荐交互式生成，避免明文密码进入 shell history：
+
+```bash
+docker run --rm -it caddy:2.11.4-alpine caddy hash-password --algorithm bcrypt
+```
 
 ## Prompt Injection
 

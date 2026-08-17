@@ -15,18 +15,26 @@ import (
 
 type serveFunc func(addr string, handler http.Handler) error
 type checkFunc func(ctx context.Context, url string) error
+type buildHandlerFunc func(ctx context.Context, cfg config.Config) (http.Handler, func(), error)
 
 func main() {
-	if err := run(os.Args[1:], os.Getenv, http.ListenAndServe, func(ctx context.Context, url string) error {
+	check := func(ctx context.Context, url string) error {
 		client := &http.Client{Timeout: 3 * time.Second}
 		return checkHealth(ctx, client, url)
-	}); err != nil {
+	}
+	if err := runWithBuilder(os.Args[1:], os.Getenv, http.ListenAndServe, check, buildApplicationHandler); err != nil {
 		slog.Error("finance-core exited", "error", err)
 		os.Exit(1)
 	}
 }
 
 func run(args []string, getenv func(string) string, serve serveFunc, check checkFunc) error {
+	return runWithBuilder(args, getenv, serve, check, func(context.Context, config.Config) (http.Handler, func(), error) {
+		return server.NewHandler(), func() {}, nil
+	})
+}
+
+func runWithBuilder(args []string, getenv func(string) string, serve serveFunc, check checkFunc, build buildHandlerFunc) error {
 	command := "serve"
 	if len(args) > 0 {
 		command = args[0]
@@ -41,8 +49,21 @@ func run(args []string, getenv func(string) string, serve serveFunc, check check
 		if serve == nil {
 			return errors.New("serve function is required")
 		}
+		if build == nil {
+			return errors.New("application builder is required")
+		}
+		handler, cleanup, err := build(context.Background(), cfg)
+		if err != nil {
+			return fmt.Errorf("build application: %w", err)
+		}
+		if handler == nil {
+			return errors.New("application builder returned a nil handler")
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
 		slog.Info("starting finance-core", "addr", cfg.ListenAddr, "timezone", cfg.Timezone)
-		return serve(cfg.ListenAddr, server.NewHandler())
+		return serve(cfg.ListenAddr, handler)
 	case "healthcheck":
 		url := getenv("FINANCE_HEALTHCHECK_URL")
 		if url == "" {
