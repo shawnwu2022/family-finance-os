@@ -131,12 +131,17 @@ jobs:
         run: CGO_ENABLED=0 go build -trimpath -o /tmp/finance-core ./cmd/finance-core
 
   web-lock:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-node@v7
         with:
           node-version: '24.19.0'
@@ -148,11 +153,18 @@ jobs:
           name: web-package-lock
           path: web/package-lock.json
           if-no-files-found: error
-      - name: Verify package lock is committed
+      - name: Commit generated package lock
         shell: bash
         run: |
-          git diff --exit-code -- package-lock.json
-          test -z "$(git ls-files --others --exclude-standard package-lock.json)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "package-lock.json already matches package.json"
+            exit 0
+          fi
+          git commit -m "chore(web): commit generated package lock"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
   container:
     runs-on: ubuntu-latest
