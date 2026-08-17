@@ -134,13 +134,13 @@ func TestFinanceAPIDoesNotLeakBackendErrors(t *testing.T) {
 
 type fakeFinanceAPI struct {
 	calls               int
-	overview             OverviewResponse
-	overviewErr          error
-	overviewHouseholdID  int64
-	scenario             ScenarioResponse
-	scenarioRequest      ScenarioRequest
-	advisor              AdvisorResponse
-	advisorRequest       AdvisorRequest
+	overview            OverviewResponse
+	overviewErr         error
+	overviewHouseholdID int64
+	scenario            ScenarioResponse
+	scenarioRequest     ScenarioRequest
+	advisor             AdvisorResponse
+	advisorRequest      AdvisorRequest
 }
 
 func (f *fakeFinanceAPI) Overview(_ context.Context, householdID int64) (OverviewResponse, error) {
