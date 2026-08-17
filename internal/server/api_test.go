@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,8 +45,12 @@ func TestFinanceAPIOverviewContract(t *testing.T) {
 	if got := resp.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
 		t.Fatalf("Content-Type=%q", got)
 	}
+	raw := resp.Body.Bytes()
+	if !bytes.Contains(raw, []byte(`"minor":"350000"`)) {
+		t.Fatalf("Money minor must be a JSON string for browser int64 safety: %s", raw)
+	}
 	var got OverviewResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if got.SafeToSpend.Minor != 350_000 || got.NetWorth.Minor != 8_800_000 || got.Quality != "good" {
@@ -84,7 +89,6 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 
 	t.Run("scenario", func(t *testing.T) {
 		body := `{"household_id":7,"kind":"purchase","input":{"amount_minor":899900,"currency":"CNY"}}`
-		body = strings.ReplaceAll(body, `\"`, `"`)
 		resp := httptest.NewRecorder()
 		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/scenarios", strings.NewReader(body)))
 		if resp.Code != http.StatusOK {
@@ -97,7 +101,6 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 
 	t.Run("advisor", func(t *testing.T) {
 		body := `{"household_id":7,"question":"现在可以买电脑吗？","require_review":true}`
-		body = strings.ReplaceAll(body, `\"`, `"`)
 		resp := httptest.NewRecorder()
 		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/advisor", strings.NewReader(body)))
 		if resp.Code != http.StatusOK {
@@ -110,7 +113,6 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 
 	t.Run("unknown field rejected", func(t *testing.T) {
 		body := `{"household_id":7,"question":"test","raw_sql":"select *"}`
-		body = strings.ReplaceAll(body, `\"`, `"`)
 		resp := httptest.NewRecorder()
 		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/advisor", strings.NewReader(body)))
 		if resp.Code != http.StatusBadRequest {
