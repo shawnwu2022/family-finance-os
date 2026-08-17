@@ -166,8 +166,16 @@ jobs:
           node-version: '24.19.0'
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Install frontend dependencies
-        run: npm ci --ignore-scripts
+      - name: Install frontend dependencies and refresh lockfile
+        run: npm install --ignore-scripts
+      - name: Upload generated frontend lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-package-lock
+          path: web/package-lock.json
+          if-no-files-found: error
+      - name: Unit test frontend
+        run: npm test
       - name: Verify PWA contract
         run: npm run check:pwa
       - name: Typecheck frontend
