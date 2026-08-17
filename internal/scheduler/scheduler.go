@@ -83,8 +83,7 @@ func (s MonthlySchedule) LatestDue(at time.Time) (time.Time, bool) {
 	local := at.In(s.location)
 	candidate := time.Date(local.Year(), local.Month(), 1, s.hour, s.minute, 0, 0, s.location)
 	if candidate.After(local) {
-		previous := candidate.AddDate(0, -1, 0)
-		return previous, true
+		return candidate.AddDate(0, -1, 0), true
 	}
 	return candidate, true
 }
@@ -120,6 +119,19 @@ type Job struct {
 	CatchUp     CatchUpPolicy
 	Period      func(time.Time) string
 	Run         func(context.Context, time.Time) error
+}
+
+type JobExecutionError struct {
+	jobName string
+	err     error
+}
+
+func (e *JobExecutionError) Error() string {
+	return fmt.Sprintf("run job %q: %v", e.jobName, e.err)
+}
+
+func (e *JobExecutionError) Unwrap() error {
+	return e.err
 }
 
 func (s *Scheduler) CatchUp(ctx context.Context, job Job) error {
@@ -167,15 +179,11 @@ func (s *Scheduler) RunDue(ctx context.Context, job Job, scheduledFor time.Time)
 	if runErr != nil {
 		outcome = RunOutcome{Status: RunFailed, ErrorCode: ErrorCodeJobFailed}
 	}
-	finishErr := s.store.Finish(ctx, key, s.now(), outcome)
-	if finishErr != nil {
-		if runErr != nil {
-			return errors.Join(runErr, fmt.Errorf("finish job run: %w", finishErr))
-		}
-		return fmt.Errorf("finish job run: %w", finishErr)
+	if err := s.store.Finish(ctx, key, s.now(), outcome); err != nil {
+		return fmt.Errorf("finish job run: %w", err)
 	}
 	if runErr != nil {
-		return fmt.Errorf("run job %q: %w", key.JobName, runErr)
+		return &JobExecutionError{jobName: key.JobName, err: runErr}
 	}
 	return nil
 }
@@ -184,7 +192,7 @@ func (s *Scheduler) Run(ctx context.Context, job Job) error {
 	if err := validateJob(job, true); err != nil {
 		return err
 	}
-	if err := s.CatchUp(ctx, job); err != nil {
+	if err := s.CatchUp(ctx, job); err != nil && !isJobExecutionError(err) {
 		return err
 	}
 	for {
@@ -207,12 +215,17 @@ func (s *Scheduler) Run(ctx context.Context, job Job) error {
 				}
 			}
 			return ctx.Err()
-		case scheduledFor := <-timer.C:
-			if err := s.RunDue(ctx, job, scheduledFor); err != nil {
+		case <-timer.C:
+			if err := s.RunDue(ctx, job, next); err != nil && !isJobExecutionError(err) {
 				return err
 			}
 		}
 	}
+}
+
+func isJobExecutionError(err error) bool {
+	var executionErr *JobExecutionError
+	return errors.As(err, &executionErr)
 }
 
 func validateJob(job Job, requireSchedule bool) error {
