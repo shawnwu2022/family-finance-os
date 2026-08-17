@@ -17,6 +17,13 @@ if grep -Eq 'REPLACE_WITH|example\.com' .env; then
   exit 1
 fi
 
+for key in FINANCE_AUTH_USER FINANCE_AUTH_HASH; do
+  if ! grep -Eq "^${key}=[^[:space:]]+" .env; then
+    echo "ERROR: ${key} must be set for the public Finance Core edge." >&2
+    exit 1
+  fi
+done
+
 docker compose config >/dev/null
 
 echo "Preflight OK"
