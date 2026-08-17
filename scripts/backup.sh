@@ -27,6 +27,9 @@ done
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_ROOT="${FINANCE_BACKUP_DIR:-$ROOT_DIR/backups}"
+mkdir -p "$BACKUP_ROOT"
+BACKUP_ROOT="$(cd "$BACKUP_ROOT" && pwd -P)"
+[[ "$BACKUP_ROOT" != "/" ]] || fail "FINANCE_BACKUP_DIR must not be /"
 DEST="$BACKUP_ROOT/$STAMP"
 STORAGE_DIR="$ROOT_DIR/data/ezbookkeeping-storage"
 mkdir -p "$DEST"
@@ -74,6 +77,13 @@ fi
 
 RETENTION="${BACKUP_RETENTION_DAYS:-14}"
 [[ "$RETENTION" =~ ^[0-9]+$ ]] || fail "BACKUP_RETENTION_DAYS must be a non-negative integer"
-find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -mtime "+$RETENTION" -print -exec rm -rf {} +
+find "$BACKUP_ROOT" \
+  -mindepth 1 \
+  -maxdepth 1 \
+  -type d \
+  -name '20??????T??????Z' \
+  -mtime "+$RETENTION" \
+  -print \
+  -exec rm -rf -- {} +
 
 echo "Backup completed: $DEST"
