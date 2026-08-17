@@ -7,7 +7,10 @@ import (
 	"github.com/shawnwu2022/family-finance-os/pkg/money"
 )
 
-const KindMonthly = "monthly"
+const (
+	KindMonthly    = "monthly"
+	JobNameMonthly = "monthly_report"
+)
 
 var (
 	ErrInvalidPeriod = errors.New("invalid report period")
