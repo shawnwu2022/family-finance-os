@@ -412,9 +412,6 @@ func (a *API) snapshot(ctx context.Context, profile household.Profile, period st
 	totalDebt := money.Money{Currency: currency}
 	debtCommitment := money.Money{Currency: currency}
 	for _, debt := range debts {
-		if !debt.Active && debt.Active != false {
-			continue
-		}
 		if debt.Balance.Currency != currency || debt.MinimumPayment.Currency != currency || debt.ScheduledPayment.Currency != currency {
 			partial = true
 			warnings = appendWarning(warnings, fmt.Sprintf("debt %d skipped: currency differs from household currency %s", debt.ID, currency))
@@ -805,13 +802,13 @@ func purchaseResultDTO(result scenario.PurchaseResult) purchaseResultResponse {
 	return purchaseResultResponse{
 		Before: purchaseMetricsDTO{
 			SafeToSpend:   moneyDTO(result.Before.SafeToSpend.Amount),
-			SavingsRate:   decimalString(result.Before.SavingsRate.Value),
+			SavingsRate:   decimalString(result.Before.SavingsRate),
 			LiquidBalance: moneyDTO(result.Before.LiquidBalance),
 			NetCashflow:   moneyDTO(result.Before.NetCashflow),
 		},
 		After: purchaseMetricsDTO{
 			SafeToSpend:   moneyDTO(result.After.SafeToSpend.Amount),
-			SavingsRate:   decimalString(result.After.SavingsRate.Value),
+			SavingsRate:   decimalString(result.After.SavingsRate),
 			LiquidBalance: moneyDTO(result.After.LiquidBalance),
 			NetCashflow:   moneyDTO(result.After.NetCashflow),
 		},
