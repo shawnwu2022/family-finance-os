@@ -38,18 +38,34 @@ export function formatMoney(value: MoneyDTO): string {
 
 export function formatPercent(ratio?: string, fractionDigits = 1): string {
   if (!ratio) return '—'
+  if (!Number.isInteger(fractionDigits) || fractionDigits < 0 || fractionDigits > 6) return '—'
+
   const normalized = ratio.trim()
   if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) return '—'
 
   const negative = normalized.startsWith('-')
   const unsigned = negative ? normalized.slice(1) : normalized
   const [whole, fraction = ''] = unsigned.split('.')
-  const digits = `${whole}${fraction}`.replace(/^0+(?=\d)/, '') || '0'
-  const decimalIndex = whole.length + 2
-  const padded = digits.padEnd(Math.max(decimalIndex + fractionDigits, digits.length), '0')
-  const integerPart = (padded.slice(0, decimalIndex) || '0').replace(/^0+(?=\d)/, '') || '0'
-  const decimalPart = fractionDigits > 0 ? padded.slice(decimalIndex, decimalIndex + fractionDigits).padEnd(fractionDigits, '0') : ''
-  return `${negative ? '-' : ''}${integerPart}${fractionDigits > 0 ? `.${decimalPart}` : ''}%`
+  const numerator = BigInt(`${whole}${fraction}`)
+  const shift = 2 + fractionDigits - fraction.length
+
+  let scaled: bigint
+  if (shift >= 0) {
+    scaled = numerator * 10n ** BigInt(shift)
+  } else {
+    const divisor = 10n ** BigInt(-shift)
+    const quotient = numerator / divisor
+    const remainder = numerator % divisor
+    scaled = remainder * 2n >= divisor ? quotient + 1n : quotient
+  }
+
+  const digits = scaled.toString().padStart(fractionDigits + 1, '0')
+  const sign = negative && scaled !== 0n ? '-' : ''
+  if (fractionDigits === 0) return `${sign}${digits}%`
+
+  const integerPart = digits.slice(0, -fractionDigits)
+  const decimalPart = digits.slice(-fractionDigits)
+  return `${sign}${integerPart}.${decimalPart}%`
 }
 
 export function chartValue(value: MoneyDTO): number {

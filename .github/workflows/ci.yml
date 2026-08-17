@@ -31,7 +31,7 @@ jobs:
         with:
           go-version: '1.26.6'
           cache: true
-      - name: Install pinned SQL tools
+      - name: Install pinned SQL and vulnerability tools
         shell: bash
         run: |
           set -euo pipefail
@@ -47,9 +47,12 @@ jobs:
           echo "ca18112e2438b3ad608af9a5938beafd01fa36a4a19a3edbe4f29226ca5c8533  $RUNNER_TEMP/bin/goose" | sha256sum -c -
           chmod 0755 "$RUNNER_TEMP/bin/goose"
 
+          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/bin/sqlc" version
           "$RUNNER_TEMP/bin/goose" -version
+          "$RUNNER_TEMP/bin/govulncheck" -version
       - name: Generate sqlc
         run: sqlc generate
       - name: Upload sqlc generated sources
@@ -67,6 +70,39 @@ jobs:
           goose up
           goose down
           goose up
+      - name: Backup restore drill
+        env:
+          POSTGRES_DOCKER_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          EBK_SOURCE_DB="ezbookkeeping_ci_${GITHUB_RUN_ID}"
+          BACKUP_DIR="$RUNNER_TEMP/restore-drill-backup"
+          ENV_FILE="$RUNNER_TEMP/restore-drill.env"
+          STORAGE_ROOT="$RUNNER_TEMP/restore-storage"
+
+          cleanup() {
+            docker exec "$POSTGRES_DOCKER_CONTAINER" dropdb -U finance_app --if-exists "$EBK_SOURCE_DB" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker exec "$POSTGRES_DOCKER_CONTAINER" createdb -U finance_app "$EBK_SOURCE_DB"
+          docker exec "$POSTGRES_DOCKER_CONTAINER" psql -U finance_app -d "$EBK_SOURCE_DB" -v ON_ERROR_STOP=1 \
+            -c 'CREATE TABLE restore_probe (id bigint PRIMARY KEY); INSERT INTO restore_probe VALUES (1);'
+
+          mkdir -p "$BACKUP_DIR" "$STORAGE_ROOT/ezbookkeeping-storage"
+          docker exec "$POSTGRES_DOCKER_CONTAINER" pg_dump -U finance_app -d finance -Fc > "$BACKUP_DIR/finance.dump"
+          docker exec "$POSTGRES_DOCKER_CONTAINER" pg_dump -U finance_app -d "$EBK_SOURCE_DB" -Fc > "$BACKUP_DIR/${EBK_SOURCE_DB}.dump"
+          printf 'restore-drill\n' > "$STORAGE_ROOT/ezbookkeeping-storage/probe.txt"
+          tar -C "$STORAGE_ROOT" -czf "$BACKUP_DIR/ezbookkeeping-storage.tar.gz" ezbookkeeping-storage
+          (
+            cd "$BACKUP_DIR"
+            sha256sum finance.dump "${EBK_SOURCE_DB}.dump" ezbookkeeping-storage.tar.gz > SHA256SUMS
+          )
+          printf 'POSTGRES_USER=finance_app\nFINANCE_DB_NAME=finance\nEBK_DB_NAME=%s\n' "$EBK_SOURCE_DB" > "$ENV_FILE"
+
+          FINANCE_ENV_FILE="$ENV_FILE" POSTGRES_DOCKER_CONTAINER="$POSTGRES_DOCKER_CONTAINER" \
+            bash scripts/restore-drill.sh "$BACKUP_DIR"
       - name: Verify sqlc generated sources are committed
         shell: bash
         run: |
@@ -85,6 +121,8 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: Vulnerability scan
+        run: govulncheck ./...
       - name: PostgreSQL integration
         env:
           TEST_POSTGRES_HOST: 127.0.0.1
@@ -168,6 +206,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install frontend dependencies
         run: npm ci --ignore-scripts
+      - name: Unit test frontend
+        run: npm test
       - name: Verify PWA contract
         run: npm run check:pwa
       - name: Typecheck frontend
@@ -185,6 +225,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify V1 production operations contract
+        run: bash scripts/test-production-ops.sh
       - name: Verify Finance edge auth contract
         run: bash scripts/check-edge-security.sh
       - name: Build Finance Core image
