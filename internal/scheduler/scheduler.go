@@ -27,11 +27,26 @@ type RunKey struct {
 	HouseholdID  int64
 	JobName      string
 	ScheduledFor time.Time
+	Period       string
 }
 
 type RunOutcome struct {
 	Status    RunStatus
 	ErrorCode string
+}
+
+type RunRecord struct {
+	ID         int64
+	Key        RunKey
+	Status     RunStatus
+	StartedAt  time.Time
+	FinishedAt time.Time
+	ErrorCode  string
+}
+
+type HouseholdScope struct {
+	HouseholdID int64
+	Timezone    string
 }
 
 type RunStore interface {
@@ -103,6 +118,7 @@ type Job struct {
 	Name        string
 	Schedule    Schedule
 	CatchUp     CatchUpPolicy
+	Period      func(time.Time) string
 	Run         func(context.Context, time.Time) error
 }
 
@@ -128,10 +144,15 @@ func (s *Scheduler) RunDue(ctx context.Context, job Job, scheduledFor time.Time)
 	if err := validateJob(job, false); err != nil {
 		return err
 	}
+	period := ""
+	if job.Period != nil {
+		period = strings.TrimSpace(job.Period(scheduledFor))
+	}
 	key := RunKey{
 		HouseholdID:  job.HouseholdID,
 		JobName:      strings.TrimSpace(job.Name),
 		ScheduledFor: scheduledFor,
+		Period:       period,
 	}
 	claimed, err := s.store.Claim(ctx, key, s.now())
 	if err != nil {
