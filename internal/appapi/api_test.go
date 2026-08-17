@@ -18,7 +18,7 @@ func TestAPIComposesDeterministicHouseholdSnapshot(t *testing.T) {
 	planner := fakePlanner{
 		profile: household.Profile{
 			Household: household.Household{ID: 42, Name: "测试家庭", BaseCurrency: "CNY", Timezone: "Asia/Shanghai"},
-			Policy: household.HouseholdPolicy{HouseholdID: 42, LiquidityFloor: money.Money{Minor: 20_000, Currency: "CNY"}},
+			Policy:    household.HouseholdPolicy{HouseholdID: 42, LiquidityFloor: money.Money{Minor: 20_000, Currency: "CNY"}},
 		},
 		plan: budget.BudgetPlan{
 			ID: 1, HouseholdID: 42, Period: "2026-08", Currency: "CNY",
@@ -67,7 +67,7 @@ func TestAPIComposesDeterministicHouseholdSnapshot(t *testing.T) {
 	if overview.SavingsRate != "0.8" {
 		t.Fatalf("savings rate=%q want 0.8", overview.SavingsRate)
 	}
-	if overview.Quality != "partial" || !containsWarning(overviewsWarnings(overview), "currency") {
+	if overview.Quality != "partial" || !containsWarning(overview.Warnings, "currency") {
 		t.Fatalf("quality/warnings=%#v", overview)
 	}
 
@@ -94,10 +94,6 @@ func TestAPIComposesDeterministicHouseholdSnapshot(t *testing.T) {
 	if len(goalStatus.Items) != 1 || goalStatus.Items[0].RequiredMonthly.Minor != 10_000 || goalStatus.Items[0].Status != "behind" {
 		t.Fatalf("goals=%#v", goalStatus)
 	}
-}
-
-func overviewsWarnings(value interface{ GetWarnings() []string }) []string {
-	return value.GetWarnings()
 }
 
 func containsWarning(values []string, part string) bool {
@@ -129,7 +125,15 @@ type fakePlanner struct {
 	goals   []goals.FinancialGoal
 }
 
-func (f fakePlanner) Profile(context.Context, int64) (household.Profile, error) { return f.profile, nil }
-func (f fakePlanner) BudgetPlan(context.Context, int64, string) (budget.BudgetPlan, error) { return f.plan, nil }
-func (f fakePlanner) Debts(context.Context, int64) ([]DebtSnapshot, error) { return append([]DebtSnapshot(nil), f.debts...), nil }
-func (f fakePlanner) Goals(context.Context, int64) ([]goals.FinancialGoal, error) { return append([]goals.FinancialGoal(nil), f.goals...), nil }
+func (f fakePlanner) Profile(context.Context, int64) (household.Profile, error) {
+	return f.profile, nil
+}
+func (f fakePlanner) BudgetPlan(context.Context, int64, string) (budget.BudgetPlan, error) {
+	return f.plan, nil
+}
+func (f fakePlanner) Debts(context.Context, int64) ([]DebtSnapshot, error) {
+	return append([]DebtSnapshot(nil), f.debts...), nil
+}
+func (f fakePlanner) Goals(context.Context, int64) ([]goals.FinancialGoal, error) {
+	return append([]goals.FinancialGoal(nil), f.goals...), nil
+}
