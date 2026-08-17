@@ -102,6 +102,40 @@ func TestPostgresRecorderRoundTripIntegration(t *testing.T) {
 	}
 }
 
+func TestPostgresRecorderRollsBackParentWhenToolInsertFailsIntegration(t *testing.T) {
+	pool := openAuditIntegrationPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	requestHash := SHA256Hex([]byte("atomic-request"))
+	record := AdviceRecord{
+		CreatedAt:             time.Date(2026, 8, 17, 3, 5, 0, 0, time.UTC),
+		ModelRole:             llm.ModelRoleFast,
+		DataAsOf:              time.Date(2026, 8, 17, 3, 4, 0, 0, time.UTC),
+		PromptTemplateVersion: "finance-advisor-v1",
+		RequestSHA256:         requestHash,
+		AdviceSHA256:          SHA256Hex([]byte("atomic-advice")),
+		QualityLevel:          "good",
+		Status:                AdviceStatusSuccess,
+		Tools: []ToolExecution{
+			NewToolExecution(0, "get_overview", []byte(`{"household_id":1}`), []byte(`{"ok":true}`), ""),
+			NewToolExecution(0, "get_cashflow", []byte(`{"household_id":1}`), []byte(`{"ok":true}`), ""),
+		},
+	}
+
+	if _, err := NewPostgresRecorder(pool).Record(ctx, record); err == nil {
+		t.Fatal("Record accepted duplicate tool sequence")
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM advice_audits WHERE request_sha256 = $1`, requestHash).Scan(&count); err != nil {
+		t.Fatalf("count rolled-back audits: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("partial parent audit remained after child failure: count=%d", count)
+	}
+}
+
 func openAuditIntegrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	host := os.Getenv("TEST_POSTGRES_HOST")
