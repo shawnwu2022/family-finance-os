@@ -148,6 +148,36 @@ func TestRunDuePersistsPeriodDerivedFromScheduledTrigger(t *testing.T) {
 	}
 }
 
+func TestRunContinuesAfterFailedCatchUpUntilContextCancelled(t *testing.T) {
+	jobErr := errors.New("monthly report generation failed")
+	now := time.Date(2026, time.August, 17, 19, 30, 0, 0, time.UTC)
+	store := newFakeRunStore()
+	s, err := New(store, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	due := now.Add(-time.Hour)
+	job := Job{
+		HouseholdID: 5,
+		Name:        "monthly_report",
+		Schedule:    fixedSchedule{due: due, next: now.Add(time.Hour)},
+		CatchUp:     CatchUpLatestOnly,
+		Run: func(context.Context, time.Time) error {
+			cancel()
+			return jobErr
+		},
+	}
+
+	if err := s.Run(ctx, job); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled after persisted job failure", err)
+	}
+	key := RunKey{HouseholdID: 5, JobName: "monthly_report", ScheduledFor: due}
+	if got := store.outcomes[key]; got.Status != RunFailed || got.ErrorCode != ErrorCodeJobFailed {
+		t.Fatalf("outcome = %#v, want failed/%q", got, ErrorCodeJobFailed)
+	}
+}
+
 func TestRunReturnsOnCancelledContext(t *testing.T) {
 	loc := time.UTC
 	schedule, err := NewMonthlySchedule(loc, 3, 0)
@@ -172,6 +202,19 @@ func TestRunReturnsOnCancelledContext(t *testing.T) {
 	if err := s.Run(ctx, job); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Run() error = %v, want context.Canceled", err)
 	}
+}
+
+type fixedSchedule struct {
+	due  time.Time
+	next time.Time
+}
+
+func (s fixedSchedule) LatestDue(time.Time) (time.Time, bool) {
+	return s.due, true
+}
+
+func (s fixedSchedule) Next(time.Time) time.Time {
+	return s.next
 }
 
 type fakeRunStore struct {
