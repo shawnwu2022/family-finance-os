@@ -185,6 +185,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify V1 production operations contract
+        run: bash scripts/test-production-ops.sh
       - name: Verify Finance edge auth contract
         run: bash scripts/check-edge-security.sh
       - name: Build Finance Core image
