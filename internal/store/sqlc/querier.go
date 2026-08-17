@@ -6,9 +6,12 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	ClaimJobRun(ctx context.Context, arg ClaimJobRunParams) (int64, error)
 	CreateAdviceAudit(ctx context.Context, arg CreateAdviceAuditParams) (AdviceAudit, error)
 	CreateAdviceAuditTool(ctx context.Context, arg CreateAdviceAuditToolParams) (AdviceAuditTool, error)
 	CreateBudgetLine(ctx context.Context, arg CreateBudgetLineParams) (CreateBudgetLineRow, error)
@@ -19,6 +22,7 @@ type Querier interface {
 	CreateHousehold(ctx context.Context, arg CreateHouseholdParams) (CreateHouseholdRow, error)
 	CreateHouseholdMember(ctx context.Context, arg CreateHouseholdMemberParams) (CreateHouseholdMemberRow, error)
 	CreateIncomeSource(ctx context.Context, arg CreateIncomeSourceParams) (CreateIncomeSourceRow, error)
+	FinishJobRun(ctx context.Context, arg FinishJobRunParams) (int64, error)
 	GetAdviceAudit(ctx context.Context, id int64) (AdviceAudit, error)
 	GetBudgetPlan(ctx context.Context, id int64) (GetBudgetPlanRow, error)
 	GetBudgetPlanByHouseholdPeriod(ctx context.Context, arg GetBudgetPlanByHouseholdPeriodParams) (GetBudgetPlanByHouseholdPeriodRow, error)
@@ -33,6 +37,9 @@ type Querier interface {
 	ListFinancialGoalsByHousehold(ctx context.Context, householdID int64) ([]ListFinancialGoalsByHouseholdRow, error)
 	ListHouseholdMembers(ctx context.Context, householdID int64) ([]ListHouseholdMembersRow, error)
 	ListIncomeSources(ctx context.Context, householdID int64) ([]ListIncomeSourcesRow, error)
+	ListJobRuns(ctx context.Context, arg ListJobRunsParams) ([]JobRun, error)
+	ListSchedulerHouseholds(ctx context.Context) ([]ListSchedulerHouseholdsRow, error)
+	RecoverInterruptedJobRuns(ctx context.Context, recoveredAt pgtype.Timestamptz) (int64, error)
 	UpdateDebtBalance(ctx context.Context, arg UpdateDebtBalanceParams) (Debt, error)
 	UpsertHouseholdPolicy(ctx context.Context, arg UpsertHouseholdPolicyParams) (UpsertHouseholdPolicyRow, error)
 }
