@@ -146,3 +146,15 @@ type IncomeSource struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
+
+type JobRun struct {
+	ID           int64              `json:"id"`
+	HouseholdID  int64              `json:"household_id"`
+	JobName      string             `json:"job_name"`
+	ScheduledFor pgtype.Timestamptz `json:"scheduled_for"`
+	Period       string             `json:"period"`
+	Status       string             `json:"status"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	FinishedAt   pgtype.Timestamptz `json:"finished_at"`
+	ErrorCode    pgtype.Text        `json:"error_code"`
+}

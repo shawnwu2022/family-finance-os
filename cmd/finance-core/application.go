@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/shawnwu2022/family-finance-os/internal/advisor"
 	"github.com/shawnwu2022/family-finance-os/internal/appapi"
@@ -13,7 +15,9 @@ import (
 	"github.com/shawnwu2022/family-finance-os/internal/config"
 	"github.com/shawnwu2022/family-finance-os/internal/ledger/ezbookkeeping"
 	"github.com/shawnwu2022/family-finance-os/internal/llm"
+	"github.com/shawnwu2022/family-finance-os/internal/report"
 	"github.com/shawnwu2022/family-finance-os/internal/requestscope"
+	"github.com/shawnwu2022/family-finance-os/internal/scheduler"
 	"github.com/shawnwu2022/family-finance-os/internal/server"
 	"github.com/shawnwu2022/family-finance-os/internal/store"
 	"github.com/shawnwu2022/family-finance-os/internal/webassets"
@@ -24,7 +28,11 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 	if err != nil {
 		return nil, nil, err
 	}
-	cleanup := func() { pool.Close() }
+	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
+	cleanup := func() {
+		cancelScheduler()
+		pool.Close()
+	}
 	fail := func(err error) (http.Handler, func(), error) {
 		cleanup()
 		return nil, nil, err
@@ -75,20 +83,89 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		financeAPI.SetAdvisor(advisorService)
 	}
 
+	runStore := scheduler.NewPostgresRunStore(pool)
+	if err := runStore.RecoverInterrupted(ctx, time.Now().UTC()); err != nil {
+		return fail(fmt.Errorf("recover interrupted scheduled jobs: %w", err))
+	}
+	reportingAPI, err := appapi.NewReportingAPI(financeAPI, runStore)
+	if err != nil {
+		return fail(fmt.Errorf("configure reporting API: %w", err))
+	}
+	reportScheduler, err := scheduler.New(runStore, nil)
+	if err != nil {
+		return fail(fmt.Errorf("configure report scheduler: %w", err))
+	}
+	scopes, err := runStore.ListHouseholds(ctx)
+	if err != nil {
+		return fail(fmt.Errorf("load scheduler households: %w", err))
+	}
+	jobs := make([]scheduler.Job, 0, len(scopes))
+	for _, scope := range scopes {
+		job, err := newMonthlyReportJob(scope, financeAPI)
+		if err != nil {
+			return fail(fmt.Errorf("configure monthly report job for household %d: %w", scope.HouseholdID, err))
+		}
+		jobs = append(jobs, job)
+	}
+
 	handler := server.NewHandler(
-		server.WithAPI(householdScopedAPI{API: financeAPI}),
+		server.WithAPI(householdScopedAPI{FinanceAPI: reportingAPI, advisor: financeAPI}),
 		server.WithWeb(webassets.Handler()),
 		server.WithReady(pool.Ping),
 	)
+	for _, job := range jobs {
+		job := job
+		go func() {
+			if err := reportScheduler.Run(schedulerCtx, job); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("monthly report scheduler stopped", "household_id", job.HouseholdID, "error", err)
+			}
+		}()
+	}
 	return handler, cleanup, nil
 }
 
 type householdScopedAPI struct {
-	*appapi.API
+	server.FinanceAPI
+	advisor *appapi.API
 }
 
 func (a householdScopedAPI) Advisor(ctx context.Context, request server.AdvisorRequest) (server.AdvisorResponse, error) {
-	return a.API.Advisor(requestscope.WithHouseholdID(ctx, request.HouseholdID), request)
+	return a.advisor.Advisor(requestscope.WithHouseholdID(ctx, request.HouseholdID), request)
+}
+
+type monthlyReporter interface {
+	MonthlyReport(ctx context.Context, householdID int64, period string) (report.MonthlyReport, error)
+}
+
+func newMonthlyReportJob(scope scheduler.HouseholdScope, reporter monthlyReporter) (scheduler.Job, error) {
+	if scope.HouseholdID <= 0 {
+		return scheduler.Job{}, errors.New("household ID must be positive")
+	}
+	if reporter == nil {
+		return scheduler.Job{}, errors.New("monthly reporter is required")
+	}
+	location, err := time.LoadLocation(strings.TrimSpace(scope.Timezone))
+	if err != nil {
+		return scheduler.Job{}, fmt.Errorf("load household timezone: %w", err)
+	}
+	schedule, err := scheduler.NewMonthlySchedule(location, 3, 0)
+	if err != nil {
+		return scheduler.Job{}, err
+	}
+	period := func(trigger time.Time) string {
+		return trigger.In(location).AddDate(0, -1, 0).Format("2006-01")
+	}
+	return scheduler.Job{
+		HouseholdID: scope.HouseholdID,
+		Name:        report.JobNameMonthly,
+		Schedule:    schedule,
+		CatchUp:     scheduler.CatchUpLatestOnly,
+		Period:      period,
+		Run: func(ctx context.Context, scheduledFor time.Time) error {
+			_, err := reporter.MonthlyReport(ctx, scope.HouseholdID, period(scheduledFor))
+			return err
+		},
+	}, nil
 }
 
 func validateRuntimeAIConfig(cfg config.LLMConfig) (bool, error) {
