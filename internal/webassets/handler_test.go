@@ -10,19 +10,19 @@ import (
 
 func TestHandlerServesSPAAndStaticAssets(t *testing.T) {
 	files := fstest.MapFS{
-		"index.html":               &fstest.MapFile{Data: []byte("<html>dashboard</html>")},
-		"assets/app-abc123.js":     &fstest.MapFile{Data: []byte("console.log('ok')")},
-		"manifest.webmanifest":     &fstest.MapFile{Data: []byte(`{"name":"Finance"}`)},
-		"sw.js":                    &fstest.MapFile{Data: []byte("self.addEventListener('fetch',()=>{})")},
+		"index.html":           &fstest.MapFile{Data: []byte("<html>dashboard</html>")},
+		"assets/app-abc123.js": &fstest.MapFile{Data: []byte("console.log('ok')")},
+		"manifest.webmanifest": &fstest.MapFile{Data: []byte(`{"name":"Finance"}`)},
+		"sw.js":                &fstest.MapFile{Data: []byte("self.addEventListener('fetch',()=>{})")},
 	}
 	handler := NewHandlerFS(files)
 
 	tests := []struct {
-		name       string
-		path       string
-		status     int
-		contains   string
-		cache      string
+		name     string
+		path     string
+		status   int
+		contains string
+		cache    string
 	}{
 		{name: "root", path: "/", status: http.StatusOK, contains: "dashboard", cache: "no-cache"},
 		{name: "spa fallback", path: "/goals/active", status: http.StatusOK, contains: "dashboard", cache: "no-cache"},
