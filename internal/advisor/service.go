@@ -186,7 +186,6 @@ func (s *Service) finishError(
 	errorCode string,
 	cause error,
 ) error {
-	result := AdviceResult{Blocked: true}
 	if err := s.recordWithAdviceHash(ctx, request, requestHash, audit.SHA256Hex([]byte(errorCode)), audit.AdviceStatusError, tools, reviewerAttempted); err != nil {
 		return fmt.Errorf("advisor failure: %v; record audit: %w", cause, err)
 	}
