@@ -52,8 +52,7 @@ func TestMonthlyReportUsesExplicitPeriodDeterministicSnapshot(t *testing.T) {
 	}
 }
 
-func TestReportsMapsPersistedMonthlyJobRuns(t *testing.T) {
-	now := time.Date(2026, time.August, 17, 3, 30, 0, 0, time.UTC)
+func TestReportingAPIMapsPersistedMonthlyJobRuns(t *testing.T) {
 	reader := &fakeReportRunReader{records: []scheduler.RunRecord{
 		{
 			ID: 11,
@@ -67,16 +66,18 @@ func TestReportsMapsPersistedMonthlyJobRuns(t *testing.T) {
 			StartedAt: time.Date(2026, time.July, 31, 19, 0, 1, 0, time.UTC),
 		},
 	}}
-	api, err := New(Dependencies{
+	core, err := New(Dependencies{
 		Ledger: fakeLedger{},
 		Planner: fakePlanner{profile: household.Profile{
 			Household: household.Household{ID: 42, BaseCurrency: "CNY", Timezone: "Asia/Shanghai"},
 		}},
-		ReportRuns: reader,
-		Now:        func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
+	}
+	api, err := NewReportingAPI(core, reader)
+	if err != nil {
+		t.Fatalf("NewReportingAPI: %v", err)
 	}
 
 	got, err := api.Reports(context.Background(), 42)
