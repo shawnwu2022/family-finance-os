@@ -9,6 +9,8 @@ import (
 )
 
 type Querier interface {
+	CreateAdviceAudit(ctx context.Context, arg CreateAdviceAuditParams) (AdviceAudit, error)
+	CreateAdviceAuditTool(ctx context.Context, arg CreateAdviceAuditToolParams) (AdviceAuditTool, error)
 	CreateBudgetLine(ctx context.Context, arg CreateBudgetLineParams) (CreateBudgetLineRow, error)
 	CreateBudgetPlan(ctx context.Context, arg CreateBudgetPlanParams) (CreateBudgetPlanRow, error)
 	CreateDebt(ctx context.Context, arg CreateDebtParams) (Debt, error)
@@ -17,12 +19,14 @@ type Querier interface {
 	CreateHousehold(ctx context.Context, arg CreateHouseholdParams) (CreateHouseholdRow, error)
 	CreateHouseholdMember(ctx context.Context, arg CreateHouseholdMemberParams) (CreateHouseholdMemberRow, error)
 	CreateIncomeSource(ctx context.Context, arg CreateIncomeSourceParams) (CreateIncomeSourceRow, error)
+	GetAdviceAudit(ctx context.Context, id int64) (AdviceAudit, error)
 	GetBudgetPlan(ctx context.Context, id int64) (GetBudgetPlanRow, error)
 	GetBudgetPlanByHouseholdPeriod(ctx context.Context, arg GetBudgetPlanByHouseholdPeriodParams) (GetBudgetPlanByHouseholdPeriodRow, error)
 	GetDebt(ctx context.Context, id int64) (Debt, error)
 	GetFinancialGoal(ctx context.Context, id int64) (GetFinancialGoalRow, error)
 	GetHousehold(ctx context.Context, id int64) (GetHouseholdRow, error)
 	GetHouseholdPolicy(ctx context.Context, householdID int64) (GetHouseholdPolicyRow, error)
+	ListAdviceAuditTools(ctx context.Context, adviceAuditID int64) ([]AdviceAuditTool, error)
 	ListBudgetLines(ctx context.Context, budgetPlanID int64) ([]ListBudgetLinesRow, error)
 	ListDebtsByHousehold(ctx context.Context, householdID int64) ([]Debt, error)
 	ListExpenseBaselines(ctx context.Context, householdID int64) ([]ListExpenseBaselinesRow, error)
