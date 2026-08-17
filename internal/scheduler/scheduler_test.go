@@ -115,6 +115,39 @@ func TestRunDuePersistsFailureWithoutRawErrorText(t *testing.T) {
 	}
 }
 
+func TestRunDuePersistsPeriodDerivedFromScheduledTrigger(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, time.August, 1, 3, 0, 1, 0, loc)
+	store := newFakeRunStore()
+	s, err := New(store, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduledFor := time.Date(2026, time.August, 1, 3, 0, 0, 0, loc)
+	job := Job{
+		HouseholdID: 9,
+		Name:        "monthly_report",
+		Period: func(trigger time.Time) string {
+			return trigger.In(loc).AddDate(0, -1, 0).Format("2006-01")
+		},
+		Run: func(context.Context, time.Time) error { return nil },
+	}
+
+	if err := s.RunDue(context.Background(), job, scheduledFor); err != nil {
+		t.Fatalf("RunDue() error = %v", err)
+	}
+	key := RunKey{HouseholdID: 9, JobName: "monthly_report", ScheduledFor: scheduledFor, Period: "2026-07"}
+	if !store.claimed[key] {
+		t.Fatalf("derived key %#v was not claimed", key)
+	}
+	if got := store.outcomes[key]; got.Status != RunSucceeded {
+		t.Fatalf("outcome = %#v, want succeeded", got)
+	}
+}
+
 func TestRunReturnsOnCancelledContext(t *testing.T) {
 	loc := time.UTC
 	schedule, err := NewMonthlySchedule(loc, 3, 0)
