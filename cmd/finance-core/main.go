@@ -18,10 +18,11 @@ type checkFunc func(ctx context.Context, url string) error
 type buildHandlerFunc func(ctx context.Context, cfg config.Config) (http.Handler, func(), error)
 
 func main() {
-	if err := run(os.Args[1:], os.Getenv, http.ListenAndServe, func(ctx context.Context, url string) error {
+	check := func(ctx context.Context, url string) error {
 		client := &http.Client{Timeout: 3 * time.Second}
 		return checkHealth(ctx, client, url)
-	}); err != nil {
+	}
+	if err := runWithBuilder(os.Args[1:], os.Getenv, http.ListenAndServe, check, buildApplicationHandler); err != nil {
 		slog.Error("finance-core exited", "error", err)
 		os.Exit(1)
 	}
