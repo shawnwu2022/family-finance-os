@@ -62,11 +62,11 @@ type AssetSnapshotStore interface {
 }
 
 type Dependencies struct {
-	Ledger     ledger.Ledger
-	Planner    Planner
-	Advisor    AdvisorRunner
-	Portfolio  AssetSnapshotStore
-	Now        func() time.Time
+	Ledger    ledger.Ledger
+	Planner   Planner
+	Advisor   AdvisorRunner
+	Portfolio AssetSnapshotStore
+	Now       func() time.Time
 }
 
 type API struct {
