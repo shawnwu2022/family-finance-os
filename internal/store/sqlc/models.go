@@ -32,6 +32,24 @@ type AdviceAuditTool struct {
 	ErrorCode     pgtype.Text `json:"error_code"`
 }
 
+type AgentToolAudit struct {
+	ID              int64              `json:"id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	PrincipalKind   string             `json:"principal_kind"`
+	HouseholdID     int64              `json:"household_id"`
+	Protocol        string             `json:"protocol"`
+	ProtocolVersion string             `json:"protocol_version"`
+	ClientName      pgtype.Text        `json:"client_name"`
+	ClientVersion   pgtype.Text        `json:"client_version"`
+	ToolName        string             `json:"tool_name"`
+	InputSha256     string             `json:"input_sha256"`
+	OutputSha256    pgtype.Text        `json:"output_sha256"`
+	DataAsOf        pgtype.Timestamptz `json:"data_as_of"`
+	Status          string             `json:"status"`
+	ErrorCode       pgtype.Text        `json:"error_code"`
+	DurationMs      pgtype.Int8        `json:"duration_ms"`
+}
+
 type BudgetLine struct {
 	ID                  int64              `json:"id"`
 	BudgetPlanID        int64              `json:"budget_plan_id"`
