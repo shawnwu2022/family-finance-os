@@ -14,6 +14,7 @@ const (
 	ToolGetDebtStatus            ToolName = "get_debt_status"
 	ToolGetGoalStatus            ToolName = "get_goal_status"
 	ToolGetSafeToSpend           ToolName = "get_safe_to_spend"
+	ToolGetSpendingAnalysis      ToolName = "get_spending_analysis"
 	ToolSimulateExtraDebtPayment ToolName = "simulate_extra_debt_payment"
 	ToolSimulateGoal             ToolName = "simulate_goal"
 	ToolSimulatePurchase         ToolName = "simulate_purchase"
@@ -24,6 +25,11 @@ type EmptyInput struct{}
 
 type PeriodInput struct {
 	Period string `json:"period"`
+}
+
+type SpendingAnalysisInput struct {
+	Period         string `json:"period"`
+	ComparePeriods int    `json:"compare_periods"`
 }
 
 type PurchaseInput struct {
@@ -56,6 +62,7 @@ type ToolDefinition struct {
 var (
 	emptyInputSchema            = json.RawMessage(`{"type":"object","additionalProperties":false}`)
 	periodInputSchema           = json.RawMessage(`{"type":"object","properties":{"period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"}},"required":["period"],"additionalProperties":false}`)
+	spendingAnalysisInputSchema = json.RawMessage(`{"type":"object","properties":{"period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"},"compare_periods":{"type":"integer","minimum":0,"maximum":12}},"required":["period","compare_periods"],"additionalProperties":false}`)
 	purchaseInputSchema         = json.RawMessage(`{"type":"object","properties":{"amount_minor":{"type":"string","pattern":"^[0-9]+$"},"currency":{"type":"string","minLength":3,"maxLength":3}},"required":["amount_minor","currency"],"additionalProperties":false}`)
 	debtExtraPaymentInputSchema = json.RawMessage(`{"type":"object","properties":{"debt_id":{"type":"integer","minimum":1},"amount_minor":{"type":"string","pattern":"^[1-9][0-9]*$"}},"required":["debt_id","amount_minor"],"additionalProperties":false}`)
 	goalSimulationInputSchema   = json.RawMessage(`{"type":"object","properties":{"goal_id":{"type":"integer","minimum":1},"monthly_contribution_minor":{"type":"string","pattern":"^[0-9]+$"}},"required":["goal_id","monthly_contribution_minor"],"additionalProperties":false}`)
@@ -97,6 +104,12 @@ var initialDefinitions = []ToolDefinition{
 		Name:        ToolGetSafeToSpend,
 		Description: "Get the current deterministic Finance Core safe-to-spend result and its components. Preserve quality and warning metadata.",
 		InputSchema: emptyInputSchema,
+		ReadOnly:    true,
+	},
+	{
+		Name:        ToolGetSpendingAnalysis,
+		Description: "Get deterministic net household spending for one YYYY-MM period and zero to twelve prior complete calendar months, aggregated by ledger category without merchant inference. Preserve quality and warning metadata.",
+		InputSchema: spendingAnalysisInputSchema,
 		ReadOnly:    true,
 	},
 	{
