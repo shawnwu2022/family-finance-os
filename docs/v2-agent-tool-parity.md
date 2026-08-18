@@ -11,22 +11,22 @@ MCP `tools/list` must not advertise a target capability until the selected relea
 
 | Approved V2 capability | Boundary status | Reason |
 |---|---|---|
-| `get_household_overview` | READY | `API.Overview` exists; initial adapter uses the current Finance Core snapshot, while historical `as_of` is deferred until the core exposes that contract |
+| `get_household_overview` | READY | `API.Overview` exists; adapter uses the current Finance Core snapshot, while historical `as_of` remains deferred until the core exposes that contract |
 | `get_cashflow` | READY | `API.Cashflow(period)` exists |
-| `get_spending_analysis` | CORE-PARITY-REQUIRED | no app-level spending-analysis operation exists |
+| `get_spending_analysis` | CORE-PARITY-REQUIRED | no app-level spending-analysis operation exists; comparison/merchant/category semantics must be designed before implementation |
 | `get_budget_status` | READY | `API.Budget(period)` exists |
-| `get_safe_to_spend` | CORE-PARITY-REQUIRED | safe-to-spend exists inside the deterministic snapshot/overview but no standalone app-level operation with the approved signature exists |
-| `get_debt_status` | READY | `API.Debts` exists; historical `as_of` is deferred until the core exposes that contract |
-| `simulate_extra_debt_payment` | CORE-PARITY-REQUIRED | debt simulation primitives exist but no scoped app-level operation/signature exists |
-| `simulate_purchase` | READY | purchase scenario exists for `amount_minor`/`currency`; `category_ref` and `date` are deferred until Finance Core consumes them with defined deterministic semantics |
-| `get_goal_status` | READY | `API.Goals` exists; historical `as_of` is deferred until the core exposes that contract |
-| `simulate_goal` | CORE-PARITY-REQUIRED | goal projection primitives exist but no scoped app-level operation/signature exists |
-| `get_asset_allocation` | CORE-PARITY-REQUIRED | portfolio summarization primitives exist but valuations are not wired into the app-level Finance Core contract |
+| `get_safe_to_spend` | READY | `API.SafeToSpend` exposes the existing deterministic snapshot result and all six components; current snapshot only, because historical `as_of` / `period_end` liquidity cannot be reconstructed truthfully from the current account-balance model |
+| `get_debt_status` | READY | `API.Debts` exists; historical `as_of` remains deferred until the core exposes that contract |
+| `simulate_extra_debt_payment` | CORE-PARITY-REQUIRED | `debt.SimulateDebt` uses an explicit extra-monthly amount, while the target tool signature does not yet specify one-time versus recurring payment semantics; the adapter must not guess |
+| `simulate_purchase` | READY | purchase scenario exists for `amount_minor`/`currency`; `category_ref` and `date` remain deferred until Finance Core consumes them with defined deterministic semantics |
+| `get_goal_status` | READY | `API.Goals` exists; historical `as_of` remains deferred until the core exposes that contract |
+| `simulate_goal` | READY | `API.SimulateGoal` copies the scoped goal, changes only the proposed monthly contribution, and delegates projection to the existing deterministic `goals.ProjectGoal` primitive |
+| `get_asset_allocation` | CORE-PARITY-REQUIRED | portfolio summarization primitives exist but position/valuation data is not wired into the app-level Finance Core contract; asset classes must not be inferred from insufficient account metadata |
 | `generate_monthly_report` | READY | `API.MonthlyReport(period)` exists; adapter maps `year`/`month` to `YYYY-MM` |
 
-## Initial Agent Adapter allowlist
+## Agent Adapter allowlist
 
-The first protocol-neutral boundary therefore contains exactly seven names:
+The verified protocol-neutral boundary currently contains exactly nine names:
 
 ```text
 generate_monthly_report
@@ -35,10 +35,12 @@ get_cashflow
 get_debt_status
 get_goal_status
 get_household_overview
+get_safe_to_spend
+simulate_goal
 simulate_purchase
 ```
 
-All seven are exercised by `TestAgentAdapterDeterministicParity`, which compares the Adapter business payload with the direct `appapi.API` result for the same household, input, clock, and deterministic fixture.
+The original seven are exercised by `TestAgentAdapterDeterministicParity`. Safe-to-spend and goal simulation are additionally exercised by `TestAgentAdapterPhaseOneDeterministicParity`. Both suites compare Adapter business payloads with direct `appapi.API` results for the same household, input, clock, and deterministic fixture.
 
 ## Release rule
 
