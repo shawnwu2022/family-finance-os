@@ -3,8 +3,6 @@ package appapi
 import (
 	"context"
 	"errors"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -58,8 +56,8 @@ func TestSpendingAnalysisAggregatesCurrentAndPriorMonthsFromOneLedgerRead(t *tes
 	if got.Current.Period != "2026-08" || got.Current.Total.Minor != 28_000 || got.Current.TransactionCount != 3 {
 		t.Fatalf("current=%#v", got.Current)
 	}
-	if want := []string{"food", "housing"}; !reflect.DeepEqual(spendingCategoryRefs(got.Current.Categories), want) {
-		t.Fatalf("current categories=%#v want %#v", spendingCategoryRefs(got.Current.Categories), want)
+	if len(got.Current.Categories) != 2 || got.Current.Categories[0].CategoryRef != "food" || got.Current.Categories[1].CategoryRef != "housing" {
+		t.Fatalf("current categories=%#v", got.Current.Categories)
 	}
 	if got.Current.Categories[0].Name != "餐饮" || got.Current.Categories[0].Amount.Minor != 8_000 || got.Current.Categories[0].TransactionCount != 2 {
 		t.Fatalf("food=%#v", got.Current.Categories[0])
@@ -74,8 +72,8 @@ func TestSpendingAnalysisAggregatesCurrentAndPriorMonthsFromOneLedgerRead(t *tes
 	if got.Comparisons[0].Total.Minor != 7_500 || got.Comparisons[0].TransactionCount != 2 {
 		t.Fatalf("july=%#v", got.Comparisons[0])
 	}
-	if want := []string{"food", "legacy"}; !reflect.DeepEqual(spendingCategoryRefs(got.Comparisons[0].Categories), want) {
-		t.Fatalf("july categories=%#v want %#v", spendingCategoryRefs(got.Comparisons[0].Categories), want)
+	if len(got.Comparisons[0].Categories) != 2 || got.Comparisons[0].Categories[0].CategoryRef != "food" || got.Comparisons[0].Categories[1].CategoryRef != "legacy" {
+		t.Fatalf("july categories=%#v", got.Comparisons[0].Categories)
 	}
 	if got.Comparisons[0].Categories[1].Name != "" {
 		t.Fatalf("missing category metadata was invented: %#v", got.Comparisons[0].Categories[1])
@@ -122,22 +120,6 @@ func TestSpendingAnalysisRejectsInvalidPeriodAndCompareCountBeforeLedgerRead(t *
 	}
 }
 
-func spendingCategoryRefs(values []struct {
-	CategoryRef      string
-	Name             string
-	Amount           struct {
-		Minor    int64
-		Currency string
-	}
-	TransactionCount int
-}) []string {
-	refs := make([]string, len(values))
-	for i, value := range values {
-		refs[i] = value.CategoryRef
-	}
-	return refs
-}
-
 type spendingLedger struct {
 	accounts     []ledger.Account
 	categories   []ledger.Category
@@ -182,13 +164,4 @@ func (p *spendingPlanner) Debts(context.Context, int64) ([]DebtSnapshot, error) 
 func (p *spendingPlanner) Goals(context.Context, int64) ([]goals.FinancialGoal, error) {
 	p.otherCalls++
 	return nil, errors.New("Goals must not be called by SpendingAnalysis")
-}
-
-func containsWarning(values []string, part string) bool {
-	for _, value := range values {
-		if strings.Contains(value, part) {
-			return true
-		}
-	}
-	return false
 }
