@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shawnwu2022/family-finance-os/internal/agentadapter"
 )
 
@@ -81,7 +82,7 @@ func TestAgentPostgresRecorderStateMachineIntegration(t *testing.T) {
 	}
 }
 
-func assertAgentAuditRunning(t *testing.T, ctx context.Context, pool queryRower, id, householdID int64, attempt agentadapter.AuditAttempt) {
+func assertAgentAuditRunning(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id, householdID int64, attempt agentadapter.AuditAttempt) {
 	t.Helper()
 	var (
 		storedHouseholdID int64
@@ -112,7 +113,7 @@ func assertAgentAuditRunning(t *testing.T, ctx context.Context, pool queryRower,
 	}
 }
 
-func assertAgentAuditSuccess(t *testing.T, ctx context.Context, pool queryRower, id int64, success agentadapter.AuditSuccess) {
+func assertAgentAuditSuccess(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id int64, success agentadapter.AuditSuccess) {
 	t.Helper()
 	var (
 		status       string
@@ -129,7 +130,7 @@ func assertAgentAuditSuccess(t *testing.T, ctx context.Context, pool queryRower,
 	}
 }
 
-func assertAgentAuditFailure(t *testing.T, ctx context.Context, pool queryRower, id int64, failure agentadapter.AuditFailure) {
+func assertAgentAuditFailure(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id int64, failure agentadapter.AuditFailure) {
 	t.Helper()
 	var (
 		status       string
@@ -146,7 +147,7 @@ func assertAgentAuditFailure(t *testing.T, ctx context.Context, pool queryRower,
 	}
 }
 
-func assertAgentAuditHasNoRawColumns(t *testing.T, ctx context.Context, pool queryRower) {
+func assertAgentAuditHasNoRawColumns(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	rows, err := pool.Query(ctx, `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='agent_tool_audits'`)
 	if err != nil {
@@ -169,20 +170,4 @@ func assertAgentAuditHasNoRawColumns(t *testing.T, ctx context.Context, pool que
 	if err := rows.Err(); err != nil {
 		t.Fatalf("column rows: %v", err)
 	}
-}
-
-type queryRower interface {
-	QueryRow(context.Context, string, ...any) rowScanner
-	Query(context.Context, string, ...any) (rowsScanner, error)
-}
-
-type rowScanner interface {
-	Scan(...any) error
-}
-
-type rowsScanner interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-	Close()
 }
