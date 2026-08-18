@@ -1,0 +1,2 @@
+Bun benchmark sample 2 trigger.
+This file exists only on the throwaway spike branch and must not be merged.
