@@ -29,6 +29,7 @@ type FinanceBackend interface {
 	Goals(context.Context, int64) (server.GoalsResponse, error)
 	SafeToSpend(context.Context, int64) (server.SafeToSpendResponse, error)
 	SpendingAnalysis(context.Context, int64, string, int) (server.SpendingAnalysisResponse, error)
+	AssetAllocation(context.Context, int64) (server.AssetAllocationResponse, error)
 	SimulateExtraDebtPayment(context.Context, int64, int64, int64) (server.DebtExtraPaymentSimulationResponse, error)
 	SimulateGoal(context.Context, int64, int64, int64) (server.GoalSimulationResponse, error)
 	Scenario(context.Context, server.ScenarioRequest) (server.ScenarioResponse, error)
@@ -89,6 +90,18 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 		asOf := value.DataAsOf
 		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
+	case ToolGetSpendingAnalysis:
+		input, err := decodeStrict[SpendingAnalysisInput](arguments)
+		if err != nil {
+			return Result{}, err
+		}
+		if !periodPattern.MatchString(input.Period) || input.ComparePeriods < 0 || input.ComparePeriods > 12 {
+			return Result{}, adapterError(CodeInvalidArgument, "period or compare_periods is invalid", nil)
+		}
+		value, backendErr := s.backend.SpendingAnalysis(ctx, principal.HouseholdID, input.Period, input.ComparePeriods)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
+
 	case ToolGetBudgetStatus:
 		input, err := decodeStrict[PeriodInput](arguments)
 		if err != nil {
@@ -101,22 +114,6 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 		asOf := value.DataAsOf
 		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
-	case ToolGetDebtStatus:
-		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
-			return Result{}, err
-		}
-		value, err := s.backend.Debts(ctx, principal.HouseholdID)
-		asOf := value.DataAsOf
-		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
-
-	case ToolGetGoalStatus:
-		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
-			return Result{}, err
-		}
-		value, err := s.backend.Goals(ctx, principal.HouseholdID)
-		asOf := value.DataAsOf
-		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
-
 	case ToolGetSafeToSpend:
 		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
 			return Result{}, err
@@ -125,17 +122,13 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 		asOf := value.DataAsOf
 		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
-	case ToolGetSpendingAnalysis:
-		input, err := decodeStrict[SpendingAnalysisInput](arguments)
-		if err != nil {
+	case ToolGetDebtStatus:
+		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
 			return Result{}, err
 		}
-		if !periodPattern.MatchString(input.Period) || input.ComparePeriods < 0 || input.ComparePeriods > 12 {
-			return Result{}, adapterError(CodeInvalidArgument, "period or compare_periods is invalid", nil)
-		}
-		value, backendErr := s.backend.SpendingAnalysis(ctx, principal.HouseholdID, input.Period, input.ComparePeriods)
+		value, err := s.backend.Debts(ctx, principal.HouseholdID)
 		asOf := value.DataAsOf
-		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
 	case ToolSimulateExtraDebtPayment:
 		input, err := decodeStrict[DebtExtraPaymentInput](arguments)
@@ -150,22 +143,6 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 			return Result{}, adapterError(CodeInvalidArgument, "amount_minor must be a positive supported integer", err)
 		}
 		value, backendErr := s.backend.SimulateExtraDebtPayment(ctx, principal.HouseholdID, input.DebtID, amountMinor)
-		asOf := value.DataAsOf
-		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
-
-	case ToolSimulateGoal:
-		input, err := decodeStrict[GoalSimulationInput](arguments)
-		if err != nil {
-			return Result{}, err
-		}
-		if input.GoalID <= 0 || !amountMinorPattern.MatchString(input.MonthlyContributionMinor) {
-			return Result{}, adapterError(CodeInvalidArgument, "goal_id and monthly_contribution_minor are invalid", nil)
-		}
-		monthlyContributionMinor, err := strconv.ParseInt(input.MonthlyContributionMinor, 10, 64)
-		if err != nil {
-			return Result{}, adapterError(CodeInvalidArgument, "monthly_contribution_minor is outside the supported range", err)
-		}
-		value, backendErr := s.backend.SimulateGoal(ctx, principal.HouseholdID, input.GoalID, monthlyContributionMinor)
 		asOf := value.DataAsOf
 		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
 
@@ -190,6 +167,38 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 			Input:       canonical,
 		})
 		return encodeBackendResult(value, backendErr, nil, "", value.Warnings)
+
+	case ToolGetGoalStatus:
+		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
+			return Result{}, err
+		}
+		value, err := s.backend.Goals(ctx, principal.HouseholdID)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
+
+	case ToolSimulateGoal:
+		input, err := decodeStrict[GoalSimulationInput](arguments)
+		if err != nil {
+			return Result{}, err
+		}
+		if input.GoalID <= 0 || !amountMinorPattern.MatchString(input.MonthlyContributionMinor) {
+			return Result{}, adapterError(CodeInvalidArgument, "goal_id and monthly_contribution_minor are invalid", nil)
+		}
+		monthlyContributionMinor, err := strconv.ParseInt(input.MonthlyContributionMinor, 10, 64)
+		if err != nil {
+			return Result{}, adapterError(CodeInvalidArgument, "monthly_contribution_minor is outside the supported range", err)
+		}
+		value, backendErr := s.backend.SimulateGoal(ctx, principal.HouseholdID, input.GoalID, monthlyContributionMinor)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
+
+	case ToolGetAssetAllocation:
+		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
+			return Result{}, err
+		}
+		value, backendErr := s.backend.AssetAllocation(ctx, principal.HouseholdID)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
 
 	case ToolGenerateMonthlyReport:
 		input, err := decodeStrict[MonthlyReportInput](arguments)
