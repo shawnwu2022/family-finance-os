@@ -1,6 +1,6 @@
 # V2.0 Agent Adapter + MCP Channel Design
 
-**Status:** Architecture approved; written specification awaiting user review  
+**Status:** Approved 2026-08-18; implementation decomposed by verified Finance Core parity  
 **Date:** 2026-08-18  
 **Target branch:** `feature/v2-agent-adapter`  
 **Base:** V1 `main` commit `05d8afcf0299c3ae0fd9f0422b13e28fe8842a28`  
@@ -126,7 +126,7 @@ No new host port is opened. PostgreSQL and ezBookkeeping remain internal to the 
 
 ## 5. Tool contract
 
-V2.0 exposes only existing read/simulation capabilities:
+The list below is the target V2 read/simulation tool contract. Implementation and MCP advertisement are gated by `docs/v2-agent-tool-parity.md`: MCP must not advertise a target tool until its row is `READY` and deterministic parity tests pass. The protocol-neutral boundary starts with the seven capabilities already verified as `READY`; this controls implementation order and does not reduce the approved target scope.
 
 ```text
 get_household_overview(as_of)
