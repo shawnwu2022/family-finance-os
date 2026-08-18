@@ -77,8 +77,8 @@ func TestNewServerRegistersExactlyAuditedReadyTools(t *testing.T) {
 	}
 
 	definitions := audited.Definitions()
-	if got, want := len(listed.Tools), len(definitions); got != want || got != 11 {
-		t.Fatalf("tool count=%d want=%d (READY=11)", got, want)
+	if got, want := len(listed.Tools), len(definitions); got != want || got != 12 {
+		t.Fatalf("tool count=%d want=%d (READY=12)", got, want)
 	}
 
 	byName := make(map[string]agentadapter.ToolDefinition, len(definitions))
@@ -217,6 +217,10 @@ func (*stubFinanceBackend) Goals(context.Context, int64) (appserver.GoalsRespons
 
 func (*stubFinanceBackend) SafeToSpend(context.Context, int64) (appserver.SafeToSpendResponse, error) {
 	return appserver.SafeToSpendResponse{}, nil
+}
+
+func (*stubFinanceBackend) AssetAllocation(context.Context, int64) (appserver.AssetAllocationResponse, error) {
+	return appserver.AssetAllocationResponse{}, nil
 }
 
 func (*stubFinanceBackend) SimulateGoal(context.Context, int64, int64, int64) (appserver.GoalSimulationResponse, error) {
