@@ -153,15 +153,15 @@ This phase intentionally does **not** require the sum of linked snapshots to equ
 
 ## 7. HTTP/Application Management Surface
 
-Expose household-scoped Finance API endpoints behind the existing authenticated Finance edge:
+Follow the existing Finance HTTP convention where household scope is supplied by the `household_id` query parameter and resource identity is in the path:
 
 ```text
-GET    /api/v1/households/{household_id}/portfolio/assets
-PUT    /api/v1/households/{household_id}/portfolio/assets/{asset_ref}
-DELETE /api/v1/households/{household_id}/portfolio/assets/{asset_ref}
+GET    /api/v1/portfolio/assets?household_id=42
+PUT    /api/v1/portfolio/assets/{asset_ref}?household_id=42
+DELETE /api/v1/portfolio/assets/{asset_ref}?household_id=42
 ```
 
-`PUT` is idempotent and replaces the current snapshot for the path `asset_ref`.
+`PUT` is idempotent and replaces the current snapshot for the path `asset_ref` within the scoped household.
 
 Request body:
 
@@ -180,9 +180,9 @@ Request body:
 
 `value_minor` is JSON-string encoded, matching existing `MoneyDTO` precision rules.
 
-The API never accepts a client-selected household inside the body. Household scope comes from the existing server route/path boundary.
+The body never contains `household_id`; handlers reuse the existing `parseHouseholdID` query-scope helper. The server passes that validated scope to the typed Finance API.
 
-Delete is idempotent from the caller perspective: deleting a missing `(household, asset_ref)` returns the existing repository-not-found mapping selected by server conventions; no cross-household existence signal is exposed.
+`DELETE` is idempotent and returns `204 No Content` whether or not the scoped asset existed. This avoids leaking cross-household existence and keeps retry behavior simple.
 
 ## 8. Agent/MCP Contract
 
