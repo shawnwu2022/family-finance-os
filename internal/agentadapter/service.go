@@ -68,7 +68,8 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 			return Result{}, err
 		}
 		value, err := s.backend.Overview(ctx, principal.HouseholdID)
-		return encodeBackendResult(value, err)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
 	case ToolGetCashflow:
 		input, err := decodeStrict[PeriodInput](arguments)
@@ -79,7 +80,8 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 			return Result{}, adapterError(CodeInvalidArgument, "period must use YYYY-MM", nil)
 		}
 		value, err := s.backend.Cashflow(ctx, principal.HouseholdID, input.Period)
-		return encodeBackendResult(value, err)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
 	case ToolGetBudgetStatus:
 		input, err := decodeStrict[PeriodInput](arguments)
@@ -90,21 +92,24 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 			return Result{}, adapterError(CodeInvalidArgument, "period must use YYYY-MM", nil)
 		}
 		value, err := s.backend.Budget(ctx, principal.HouseholdID, input.Period)
-		return encodeBackendResult(value, err)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
 	case ToolGetDebtStatus:
 		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
 			return Result{}, err
 		}
 		value, err := s.backend.Debts(ctx, principal.HouseholdID)
-		return encodeBackendResult(value, err)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
 	case ToolGetGoalStatus:
 		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
 			return Result{}, err
 		}
 		value, err := s.backend.Goals(ctx, principal.HouseholdID)
-		return encodeBackendResult(value, err)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
 
 	case ToolSimulatePurchase:
 		input, err := decodeStrict[PurchaseInput](arguments)
@@ -126,7 +131,7 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 			Kind:        "purchase",
 			Input:       canonical,
 		})
-		return encodeBackendResult(value, backendErr)
+		return encodeBackendResult(value, backendErr, nil, "", value.Warnings)
 
 	case ToolGenerateMonthlyReport:
 		input, err := decodeStrict[MonthlyReportInput](arguments)
@@ -138,7 +143,8 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 		}
 		period := fmt.Sprintf("%04d-%02d", input.Year, input.Month)
 		value, backendErr := s.backend.MonthlyReport(ctx, principal.HouseholdID, period)
-		return encodeBackendResult(value, backendErr)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
 
 	default:
 		return Result{}, adapterError(CodeToolNotFound, "requested tool is not available", nil)
@@ -169,7 +175,7 @@ func decodeStrict[T any](raw json.RawMessage) (T, error) {
 	return value, nil
 }
 
-func encodeBackendResult[T any](value T, backendErr error) (Result, error) {
+func encodeBackendResult[T any](value T, backendErr error, asOf *time.Time, quality string, warnings []string) (Result, error) {
 	if backendErr != nil {
 		return Result{}, adapterError(CodeDataUnavailable, "finance data is unavailable", backendErr)
 	}
@@ -177,7 +183,24 @@ func encodeBackendResult[T any](value T, backendErr error) (Result, error) {
 	if err != nil {
 		return Result{}, adapterError(CodeInternal, "finance result could not be encoded", err)
 	}
-	return Result{Data: data}, nil
+	return Result{
+		Data:     data,
+		AsOf:     cloneTime(asOf),
+		Quality:  quality,
+		Warnings: cloneWarnings(warnings),
+	}, nil
+}
+
+func cloneTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func cloneWarnings(values []string) []string {
+	return append([]string(nil), values...)
 }
 
 func adapterError(code ErrorCode, message string, err error) *Error {
