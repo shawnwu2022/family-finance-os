@@ -1,10 +1,12 @@
 package mcpadapter
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -65,6 +67,9 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 			writeSecurityError(w, http.StatusUnauthorized, "unauthorized", "MCP bearer token is invalid")
 			return
 		}
+		if !limitRequestBody(w, r, opts.MaxBodyBytes) {
+			return
+		}
 		next.ServeHTTP(w, r)
 	}), nil
 }
@@ -115,6 +120,29 @@ func authorizedBearer(r *http.Request, expected [sha256.Size]byte) bool {
 	}
 	presented := sha256.Sum256([]byte(parts[1]))
 	return subtle.ConstantTimeCompare(expected[:], presented[:]) == 1
+}
+
+func limitRequestBody(w http.ResponseWriter, r *http.Request, maxBytes int64) bool {
+	if r.ContentLength > maxBytes {
+		writeSecurityError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "MCP request body is too large")
+		return false
+	}
+	if r.Body == nil || r.Body == http.NoBody {
+		return true
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBytes+1))
+	if err != nil {
+		writeSecurityError(w, http.StatusBadRequest, "invalid_request", "MCP request body could not be read")
+		return false
+	}
+	if int64(len(body)) > maxBytes {
+		writeSecurityError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "MCP request body is too large")
+		return false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	return true
 }
 
 func canonicalOrigin(raw string) (string, error) {
