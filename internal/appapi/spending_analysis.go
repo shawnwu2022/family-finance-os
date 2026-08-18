@@ -53,7 +53,7 @@ func (a *API) SpendingAnalysis(ctx context.Context, householdID int64, period st
 		periods[i] = start.AddDate(0, -i, 0).Format("2006-01")
 	}
 
-	warnings := []string{}
+	var warnings []string
 	partial := false
 	for _, tx := range transactions {
 		if tx.OccurredAt.Before(earliest) || !tx.OccurredAt.Before(end) {
