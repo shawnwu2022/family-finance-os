@@ -15,7 +15,7 @@ V2 MCP security is automated-ready only when the exact candidate commit has all 
 | Gate | Required evidence |
 |---|---|
 | Stable MCP dependency | Official `github.com/modelcontextprotocol/go-sdk` exactly `v1.6.1`; pre-release versions rejected by CI |
-| Tool allowlist | MCP advertises exactly the nine `READY` tools from `docs/v2-agent-tool-parity.md`; no unverified target tool is exposed |
+| Tool allowlist | MCP advertises exactly the ten `READY` tools from `docs/v2-agent-tool-parity.md`; no unverified target tool is exposed |
 | Schema/scope isolation | Tool schemas do not expose `household_id`; server-side principal supplies one positive configured household |
 | Deterministic parity | Adapter business payloads match direct Finance Core typed API results for parity fixtures |
 | Audit fail-closed | Audit attempt must persist before tool execution; successful completion must persist before result disclosure |
@@ -31,7 +31,7 @@ V2 MCP security is automated-ready only when the exact candidate commit has all 
 | Configuration | `MCP_ENABLED=false` by default; disabled mode adds no token/scope prerequisite; enabled mode fails fast for invalid scope/origin/timeout/concurrency/rate/body settings |
 | Secret loading | Bearer comes only from `MCP_TOKEN_FILE`; missing, directory, empty, whitespace-bearing, or oversized files fail startup without echoing secret contents |
 | Household startup validation | Configured household must exist in PostgreSQL before a handler is returned |
-| Real PostgreSQL MCP integration | CI creates a household, builds the secure handler, connects with the official Streamable HTTP client, discovers nine tools, calls a scoped tool, and verifies a successful audit row |
+| Real PostgreSQL MCP integration | CI creates a household, builds the secure handler, connects with the official Streamable HTTP client, discovers ten tools, calls a scoped tool, and verifies a successful audit row |
 | Application feature gate | `/mcp` is mounted only when `MCP_ENABLED=true`; otherwise existing V1 router behavior remains unchanged |
 | Caddy Authorization separation | Exact `/mcp` bypasses Caddy Basic Auth so the application receives MCP Bearer; all other Finance UI/API routes remain under Caddy Basic Auth |
 | Edge exposure | Caddy remains the only host-port publisher; only 80/tcp, 443/tcp, and 443/udp are exposed; no MCP sidecar or extra host port |
@@ -113,7 +113,7 @@ FINANCE_ENV_FILE=/path/to/production.env \
 The script performs all of the following in one run:
 
 - `openclaw mcp doctor <server> --probe --json`;
-- `openclaw mcp probe <server> --json` and verifies the selected server points at the expected HTTPS endpoint, exposes exactly the nine release tools, and exposes no MCP resources/prompts;
+- `openclaw mcp probe <server> --json` and verifies the selected server points at the expected HTTPS endpoint, exposes exactly the ten release tools, and exposes no MCP resources/prompts;
 - direct HTTP checks for missing/invalid bearer = 401 and untrusted Origin with a valid bearer = 403;
 - one `openclaw agent exec --code-mode direct --json` turn that must call `get_household_overview`;
 - one equivalent agent turn that must call `simulate_purchase`;
