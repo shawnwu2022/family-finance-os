@@ -80,8 +80,8 @@ func TestBuildMCPHandlerIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if len(listed.Tools) != 11 {
-		t.Fatalf("tool count=%d want 11", len(listed.Tools))
+	if len(listed.Tools) != 12 {
+		t.Fatalf("tool count=%d want 12", len(listed.Tools))
 	}
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      string(agentadapter.ToolGetHouseholdOverview),
