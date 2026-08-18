@@ -44,7 +44,7 @@ jobs:
 
           curl -fsSL -o "$RUNNER_TEMP/bin/goose" \
             https://github.com/pressly/goose/releases/download/v3.27.3/goose_linux_x86_64
-          echo "ca18112e2438b3ad608af9a5938beafd01fa36a4a19a3edbe4f29226ca5c8533  $RUNNER_TEMP/bin/goose" | sha256sum -c -
+          echo "ca18112e2438b3ad6089a5938beafd01fa36a4a19a3edbe4f29226ca5c8533  $RUNNER_TEMP/bin/goose" | sha256sum -c -
           chmod 0755 "$RUNNER_TEMP/bin/goose"
 
           GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
@@ -210,6 +210,14 @@ jobs:
           TEST_POSTGRES_USER: finance_app
           TEST_POSTGRES_PASSWORD: test-secret
         run: go test ./cmd/finance-core -run TestBuildApplicationHandlerWithoutLLMIntegration -v
+      - name: MCP startup integration
+        env:
+          TEST_POSTGRES_HOST: 127.0.0.1
+          TEST_POSTGRES_PORT: '5432'
+          TEST_POSTGRES_DB: finance
+          TEST_POSTGRES_USER: finance_app
+          TEST_POSTGRES_PASSWORD: test-secret
+        run: go test ./cmd/finance-core -run MCP -v
       - name: Race test
         run: go test -race ./...
       - name: Build
