@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,8 @@ type FinanceBackend interface {
 	Budget(context.Context, int64, string) (server.BudgetResponse, error)
 	Debts(context.Context, int64) (server.DebtsResponse, error)
 	Goals(context.Context, int64) (server.GoalsResponse, error)
+	SafeToSpend(context.Context, int64) (server.SafeToSpendResponse, error)
+	SimulateGoal(context.Context, int64, int64, int64) (server.GoalSimulationResponse, error)
 	Scenario(context.Context, server.ScenarioRequest) (server.ScenarioResponse, error)
 	MonthlyReport(context.Context, int64, string) (report.MonthlyReport, error)
 }
@@ -110,6 +113,30 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 		value, err := s.backend.Goals(ctx, principal.HouseholdID)
 		asOf := value.DataAsOf
 		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
+
+	case ToolGetSafeToSpend:
+		if _, err := decodeStrict[EmptyInput](arguments); err != nil {
+			return Result{}, err
+		}
+		value, err := s.backend.SafeToSpend(ctx, principal.HouseholdID)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
+
+	case ToolSimulateGoal:
+		input, err := decodeStrict[GoalSimulationInput](arguments)
+		if err != nil {
+			return Result{}, err
+		}
+		if input.GoalID <= 0 || !amountMinorPattern.MatchString(input.MonthlyContributionMinor) {
+			return Result{}, adapterError(CodeInvalidArgument, "goal_id and monthly_contribution_minor are invalid", nil)
+		}
+		monthlyContributionMinor, err := strconv.ParseInt(input.MonthlyContributionMinor, 10, 64)
+		if err != nil {
+			return Result{}, adapterError(CodeInvalidArgument, "monthly_contribution_minor is outside the supported range", err)
+		}
+		value, backendErr := s.backend.SimulateGoal(ctx, principal.HouseholdID, input.GoalID, monthlyContributionMinor)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
 
 	case ToolSimulatePurchase:
 		input, err := decodeStrict[PurchaseInput](arguments)
