@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,9 +29,24 @@ type securityError struct {
 	Message   string `json:"message"`
 }
 
+type fixedWindowLimiter struct {
+	mu          sync.Mutex
+	windowStart time.Time
+	count       int
+	limit       int
+	now         func() time.Time
+}
+
 func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler, error) {
+	return newSecureHTTPHandlerWithClock(next, opts, time.Now)
+}
+
+func newSecureHTTPHandlerWithClock(next http.Handler, opts SecurityOptions, now func() time.Time) (http.Handler, error) {
 	if next == nil {
 		return nil, fmt.Errorf("mcpadapter: secure HTTP handler is required")
+	}
+	if now == nil {
+		return nil, fmt.Errorf("mcpadapter: security clock is required")
 	}
 	if len(opts.Token) == 0 {
 		return nil, fmt.Errorf("mcpadapter: MCP bearer token is required")
@@ -58,6 +74,7 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 	}
 
 	expected := sha256.Sum256(append([]byte(nil), opts.Token...))
+	limiter := &fixedWindowLimiter{limit: opts.RequestsPerMinute, now: now}
 	semaphore := make(chan struct{}, opts.MaxConcurrent)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !allowedRequestOrigin(r, trustedOrigins) {
@@ -67,6 +84,10 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 		if !authorizedBearer(r, expected) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeSecurityError(w, http.StatusUnauthorized, "unauthorized", "MCP bearer token is invalid")
+			return
+		}
+		if !limiter.allow() {
+			writeSecurityError(w, http.StatusTooManyRequests, "busy", "MCP request rate limit exceeded")
 			return
 		}
 
@@ -87,6 +108,21 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 		}
 		next.ServeHTTP(w, r)
 	}), nil
+}
+
+func (l *fixedWindowLimiter) allow() bool {
+	window := l.now().UTC().Truncate(time.Minute)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.windowStart.IsZero() || !l.windowStart.Equal(window) {
+		l.windowStart = window
+		l.count = 0
+	}
+	if l.count >= l.limit {
+		return false
+	}
+	l.count++
+	return true
 }
 
 func allowedRequestOrigin(r *http.Request, trusted map[string]struct{}) bool {
