@@ -12,8 +12,11 @@ import (
 
 type Querier interface {
 	ClaimJobRun(ctx context.Context, arg ClaimJobRunParams) (int64, error)
+	CompleteAgentToolAuditFailure(ctx context.Context, arg CompleteAgentToolAuditFailureParams) (int64, error)
+	CompleteAgentToolAuditSuccess(ctx context.Context, arg CompleteAgentToolAuditSuccessParams) (int64, error)
 	CreateAdviceAudit(ctx context.Context, arg CreateAdviceAuditParams) (AdviceAudit, error)
 	CreateAdviceAuditTool(ctx context.Context, arg CreateAdviceAuditToolParams) (AdviceAuditTool, error)
+	CreateAgentToolAuditAttempt(ctx context.Context, arg CreateAgentToolAuditAttemptParams) (int64, error)
 	CreateBudgetLine(ctx context.Context, arg CreateBudgetLineParams) (CreateBudgetLineRow, error)
 	CreateBudgetPlan(ctx context.Context, arg CreateBudgetPlanParams) (CreateBudgetPlanRow, error)
 	CreateDebt(ctx context.Context, arg CreateDebtParams) (Debt, error)
@@ -24,6 +27,7 @@ type Querier interface {
 	CreateIncomeSource(ctx context.Context, arg CreateIncomeSourceParams) (CreateIncomeSourceRow, error)
 	FinishJobRun(ctx context.Context, arg FinishJobRunParams) (int64, error)
 	GetAdviceAudit(ctx context.Context, id int64) (AdviceAudit, error)
+	GetAgentToolAudit(ctx context.Context, id int64) (AgentToolAudit, error)
 	GetBudgetPlan(ctx context.Context, id int64) (GetBudgetPlanRow, error)
 	GetBudgetPlanByHouseholdPeriod(ctx context.Context, arg GetBudgetPlanByHouseholdPeriodParams) (GetBudgetPlanByHouseholdPeriodRow, error)
 	GetDebt(ctx context.Context, id int64) (Debt, error)
