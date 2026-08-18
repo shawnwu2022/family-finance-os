@@ -1,4 +1,4 @@
-.PHONY: test test-race fmt fmt-check vet build config preflight up down logs backup
+.PHONY: test test-race fmt fmt-check vet build config preflight up down logs backup verify verify-contract verify-go verify-web verify-mcp-security verify-edge-security verify-container
 
 test:
 	go test ./...
@@ -36,3 +36,39 @@ logs:
 
 backup:
 	./scripts/backup.sh
+
+verify:
+	./scripts/ci/verify.sh
+
+verify-contract:
+	./scripts/ci/contract-test.sh
+
+verify-go:
+	@set -eu; \
+	project="family-finance-ci-go-$$(id -u)-$$$$"; \
+	cleanup() { docker compose -p "$$project" -f compose.ci.yaml down -v --remove-orphans >/dev/null 2>&1 || true; }; \
+	trap cleanup EXIT INT TERM; \
+	docker compose -p "$$project" -f compose.ci.yaml build go; \
+	docker compose -p "$$project" -f compose.ci.yaml up -d --wait postgres; \
+	docker compose -p "$$project" -f compose.ci.yaml run --rm go bash /src/scripts/ci/go-verify.sh
+
+verify-web:
+	@set -eu; \
+	project="family-finance-ci-web-$$(id -u)-$$$$"; \
+	cleanup() { docker compose -p "$$project" -f compose.ci.yaml down -v --remove-orphans >/dev/null 2>&1 || true; }; \
+	trap cleanup EXIT INT TERM; \
+	docker compose -p "$$project" -f compose.ci.yaml run --rm --no-deps web bash /src/scripts/ci/web-verify.sh
+
+verify-mcp-security:
+	@set -eu; \
+	project="family-finance-ci-mcp-$$(id -u)-$$$$"; \
+	cleanup() { docker compose -p "$$project" -f compose.ci.yaml down -v --remove-orphans >/dev/null 2>&1 || true; }; \
+	trap cleanup EXIT INT TERM; \
+	docker compose -p "$$project" -f compose.ci.yaml build go; \
+	docker compose -p "$$project" -f compose.ci.yaml run --rm --no-deps go bash /src/scripts/ci/mcp-security.sh
+
+verify-edge-security:
+	./scripts/ci/edge-security.sh
+
+verify-container:
+	docker build -t family-finance-os:verify .
