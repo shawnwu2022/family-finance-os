@@ -28,6 +28,7 @@ type FinanceBackend interface {
 	Debts(context.Context, int64) (server.DebtsResponse, error)
 	Goals(context.Context, int64) (server.GoalsResponse, error)
 	SafeToSpend(context.Context, int64) (server.SafeToSpendResponse, error)
+	SimulateExtraDebtPayment(context.Context, int64, int64, int64) (server.DebtExtraPaymentSimulationResponse, error)
 	SimulateGoal(context.Context, int64, int64, int64) (server.GoalSimulationResponse, error)
 	Scenario(context.Context, server.ScenarioRequest) (server.ScenarioResponse, error)
 	MonthlyReport(context.Context, int64, string) (report.MonthlyReport, error)
@@ -122,6 +123,22 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 		value, err := s.backend.SafeToSpend(ctx, principal.HouseholdID)
 		asOf := value.DataAsOf
 		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
+
+	case ToolSimulateExtraDebtPayment:
+		input, err := decodeStrict[DebtExtraPaymentInput](arguments)
+		if err != nil {
+			return Result{}, err
+		}
+		if input.DebtID <= 0 || !amountMinorPattern.MatchString(input.AmountMinor) {
+			return Result{}, adapterError(CodeInvalidArgument, "debt_id and amount_minor are invalid", nil)
+		}
+		amountMinor, err := strconv.ParseInt(input.AmountMinor, 10, 64)
+		if err != nil || amountMinor <= 0 {
+			return Result{}, adapterError(CodeInvalidArgument, "amount_minor must be a positive supported integer", err)
+		}
+		value, backendErr := s.backend.SimulateExtraDebtPayment(ctx, principal.HouseholdID, input.DebtID, amountMinor)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
 
 	case ToolSimulateGoal:
 		input, err := decodeStrict[GoalSimulationInput](arguments)
