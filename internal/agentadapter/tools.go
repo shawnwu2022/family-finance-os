@@ -8,16 +8,16 @@ import (
 type ToolName string
 
 const (
-	ToolGetHouseholdOverview      ToolName = "get_household_overview"
-	ToolGetCashflow               ToolName = "get_cashflow"
-	ToolGetBudgetStatus           ToolName = "get_budget_status"
-	ToolGetDebtStatus             ToolName = "get_debt_status"
-	ToolGetGoalStatus             ToolName = "get_goal_status"
-	ToolGetSafeToSpend            ToolName = "get_safe_to_spend"
-	ToolSimulateExtraDebtPayment  ToolName = "simulate_extra_debt_payment"
-	ToolSimulateGoal              ToolName = "simulate_goal"
-	ToolSimulatePurchase          ToolName = "simulate_purchase"
-	ToolGenerateMonthlyReport     ToolName = "generate_monthly_report"
+	ToolGetHouseholdOverview     ToolName = "get_household_overview"
+	ToolGetCashflow              ToolName = "get_cashflow"
+	ToolGetBudgetStatus          ToolName = "get_budget_status"
+	ToolGetDebtStatus            ToolName = "get_debt_status"
+	ToolGetGoalStatus            ToolName = "get_goal_status"
+	ToolGetSafeToSpend           ToolName = "get_safe_to_spend"
+	ToolSimulateExtraDebtPayment ToolName = "simulate_extra_debt_payment"
+	ToolSimulateGoal             ToolName = "simulate_goal"
+	ToolSimulatePurchase         ToolName = "simulate_purchase"
+	ToolGenerateMonthlyReport    ToolName = "generate_monthly_report"
 )
 
 type EmptyInput struct{}
