@@ -25,27 +25,27 @@ func TestNewServerRejectsInvalidConfiguration(t *testing.T) {
 		{
 			name:    "missing audited service",
 			service: nil,
-			opts: ServerOptions{Name: "family-finance-os", Version: "v2-test", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 42}},
+			opts:    ServerOptions{Name: "family-finance-os", Version: "v2-test", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 42}},
 		},
 		{
 			name:    "missing implementation name",
 			service: audited,
-			opts: ServerOptions{Version: "v2-test", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 42}},
+			opts:    ServerOptions{Version: "v2-test", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 42}},
 		},
 		{
 			name:    "missing implementation version",
 			service: audited,
-			opts: ServerOptions{Name: "family-finance-os", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 42}},
+			opts:    ServerOptions{Name: "family-finance-os", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 42}},
 		},
 		{
 			name:    "missing principal kind",
 			service: audited,
-			opts: ServerOptions{Name: "family-finance-os", Version: "v2-test", Principal: agentadapter.Principal{HouseholdID: 42}},
+			opts:    ServerOptions{Name: "family-finance-os", Version: "v2-test", Principal: agentadapter.Principal{HouseholdID: 42}},
 		},
 		{
 			name:    "invalid household scope",
 			service: audited,
-			opts: ServerOptions{Name: "family-finance-os", Version: "v2-test", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 0}},
+			opts:    ServerOptions{Name: "family-finance-os", Version: "v2-test", Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 0}},
 		},
 	}
 
