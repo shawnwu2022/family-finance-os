@@ -22,7 +22,7 @@ func TestCallDispatchesSpendingAnalysisWithPrincipalScopeAndMetadata(t *testing.
 			TransactionCount: 3,
 		},
 		Comparisons: []server.SpendingPeriodResponse{{Period: "2026-07", Total: server.MoneyDTO{Minor: 7_500, Currency: "CNY"}, TransactionCount: 2}},
-		Warnings:   []string{"source_partial"},
+		Warnings:    []string{"source_partial"},
 	}
 	backend := &spendingAnalysisBackend{fakeBackend: &fakeBackend{}, response: source}
 	service, err := New(backend)
