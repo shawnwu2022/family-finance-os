@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [spike/bun-benchmark]
+  pull_request:
 
 permissions:
   contents: read
