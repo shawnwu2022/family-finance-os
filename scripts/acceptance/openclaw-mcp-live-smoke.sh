@@ -52,6 +52,7 @@ fi
 
 expected_tools=(
   generate_monthly_report
+  get_asset_allocation
   get_budget_status
   get_cashflow
   get_debt_status
