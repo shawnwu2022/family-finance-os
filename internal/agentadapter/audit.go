@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -98,7 +99,7 @@ func (s *AuditedService) Call(ctx context.Context, principal Principal, metadata
 	if callErr != nil {
 		code := CodeInternal
 		var adapterErr *Error
-		if errorsAs(callErr, &adapterErr) {
+		if errors.As(callErr, &adapterErr) {
 			code = adapterErr.Code
 		}
 		if err := s.recorder.CompleteFailure(ctx, auditID, AuditFailure{ErrorCode: code, DurationMS: durationMS}); err != nil {
@@ -138,8 +139,4 @@ func auditInputSHA256(raw json.RawMessage) string {
 func sha256Hex(value []byte) string {
 	sum := sha256.Sum256(value)
 	return hex.EncodeToString(sum[:])
-}
-
-func errorsAs(err error, target any) bool {
-	return errors.As(err, target)
 }
