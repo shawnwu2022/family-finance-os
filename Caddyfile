@@ -4,9 +4,17 @@
 }
 
 {$FINANCE_DOMAIN} {
-    basic_auth {
-        {$FINANCE_AUTH_USER} {$FINANCE_AUTH_HASH}
-    }
     encode zstd gzip
-    reverse_proxy finance-core:8000
+
+    @mcp path /mcp
+    handle @mcp {
+        reverse_proxy finance-core:8000
+    }
+
+    handle {
+        basic_auth {
+            {$FINANCE_AUTH_USER} {$FINANCE_AUTH_HASH}
+        }
+        reverse_proxy finance-core:8000
+    }
 }
