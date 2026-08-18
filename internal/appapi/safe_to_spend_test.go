@@ -18,7 +18,7 @@ func TestSafeToSpendReturnsExistingDeterministicComponents(t *testing.T) {
 		profile: household.Profile{
 			Household: household.Household{ID: 42, Name: "测试家庭", BaseCurrency: "CNY", Timezone: "Asia/Shanghai"},
 			Policy: household.HouseholdPolicy{
-				HouseholdID:     42,
+				HouseholdID:    42,
 				LiquidityFloor: money.Money{Minor: 20_000, Currency: "CNY"},
 			},
 		},
