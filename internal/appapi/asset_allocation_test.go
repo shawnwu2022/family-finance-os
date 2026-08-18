@@ -46,7 +46,7 @@ func TestAssetAllocationUsesOnlyProvableAccountClasses(t *testing.T) {
 		t.Fatalf("items=%#v want 3 classes", got.Items)
 	}
 	wantClasses := []string{"cash", "deposit", "other"}
-	wantMinor := []string{"35000", "70000", "117000"}
+	wantMinor := []int64{35_000, 70_000, 117_000}
 	for i, item := range got.Items {
 		if item.Class != wantClasses[i] || item.Value.Minor != wantMinor[i] || item.Value.Currency != "CNY" || item.Share == "" {
 			t.Fatalf("item[%d]=%#v", i, item)
