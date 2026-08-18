@@ -1,0 +1,88 @@
+name: Bun Docker Benchmark
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: '1.3.14'
+
+jobs:
+  docker-web-build:
+    name: Docker web-build Node vs Bun
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Generate candidate Bun lockfile
+        working-directory: web
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf node_modules dist bun.lock
+          bun install --lockfile-only --ignore-scripts
+          test -s bun.lock
+          git diff --exit-code -- package.json package-lock.json
+      - name: Pre-pull builder images outside timing window
+        run: |
+          docker pull node:24.19.0-bookworm-slim
+          docker pull oven/bun:${BUN_VERSION}
+      - name: Benchmark Docker web-build stages
+        shell: bash
+        run: |
+          set -euo pipefail
+          METRICS="$RUNNER_TEMP/bun-docker.tsv"
+          : > "$METRICS"
+
+          measure() {
+            local label="$1"
+            shift
+            local start end
+            start="$(date +%s%N)"
+            "$@"
+            end="$(date +%s%N)"
+            printf '%s\t%d\n' "$label" "$(( (end - start) / 1000000 ))" >> "$METRICS"
+          }
+
+          measure node_web_build_ms docker build --no-cache --target web-build -t ffo-web-node-benchmark -f Dockerfile .
+          measure bun_web_build_ms docker build --no-cache --target web-build -t ffo-web-bun-benchmark -f Dockerfile.bun-benchmark .
+
+          mkdir -p "$RUNNER_TEMP/node-dist" "$RUNNER_TEMP/bun-dist"
+          node_container="$(docker create ffo-web-node-benchmark)"
+          bun_container="$(docker create ffo-web-bun-benchmark)"
+          trap 'docker rm -f "$node_container" "$bun_container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$node_container:/src/web/dist/." "$RUNNER_TEMP/node-dist/"
+          docker cp "$bun_container:/src/web/dist/." "$RUNNER_TEMP/bun-dist/"
+
+          (
+            cd "$RUNNER_TEMP/node-dist"
+            find . -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/node-docker-dist-manifest.sha256"
+          )
+          (
+            cd "$RUNNER_TEMP/bun-dist"
+            find . -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/bun-docker-dist-manifest.sha256"
+          )
+          cmp "$RUNNER_TEMP/node-docker-dist-manifest.sha256" "$RUNNER_TEMP/bun-docker-dist-manifest.sha256"
+          cp "$METRICS" "$RUNNER_TEMP/bun-docker-metrics.tsv"
+
+          {
+            echo '### Docker web-build stage'
+            echo '| Variant | milliseconds |'
+            echo '|---|---:|'
+            awk -F '\t' '{printf "| %s | %s |\n", $1, $2}' "$METRICS"
+            echo
+            echo 'Node and Bun Docker dist manifests are byte-for-byte equivalent.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Docker benchmark evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-docker-benchmark
+          path: |
+            ${{ runner.temp }}/bun-docker-metrics.tsv
+            ${{ runner.temp }}/node-docker-dist-manifest.sha256
+            ${{ runner.temp }}/bun-docker-dist-manifest.sha256
+          if-no-files-found: error
