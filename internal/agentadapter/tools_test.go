@@ -12,6 +12,7 @@ func TestDefinitionsExposeOnlyImplementedReadAndSimulationCapabilities(t *testin
 	got := definitions()
 	want := []ToolName{
 		ToolGenerateMonthlyReport,
+		ToolName("get_asset_allocation"),
 		ToolGetBudgetStatus,
 		ToolGetCashflow,
 		ToolGetDebtStatus,
