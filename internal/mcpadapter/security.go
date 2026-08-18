@@ -2,6 +2,7 @@ package mcpadapter
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
@@ -67,6 +68,11 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 			writeSecurityError(w, http.StatusUnauthorized, "unauthorized", "MCP bearer token is invalid")
 			return
 		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), opts.RequestTimeout)
+		defer cancel()
+		r = r.WithContext(ctx)
+
 		if !limitRequestBody(w, r, opts.MaxBodyBytes) {
 			return
 		}
