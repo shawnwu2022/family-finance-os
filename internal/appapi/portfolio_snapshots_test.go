@@ -78,8 +78,12 @@ func TestPortfolioAssetCRUDCanonicalizesScopesAndMapsDTOs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal: %v", err)
 	}
-	if !containsJSONFragment(encoded, `"value_minor":"1250000"`) {
-		t.Fatalf("encoded response=%s want string-encoded value_minor", encoded)
+	var encodedFields map[string]any
+	if err := json.Unmarshal(encoded, &encodedFields); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if encodedFields["value_minor"] != "1250000" {
+		t.Fatalf("encoded value_minor=%#v want string 1250000", encodedFields["value_minor"])
 	}
 
 	listed, err := api.ListPortfolioAssets(ctx, 42)
@@ -175,17 +179,4 @@ func (f *fakeAssetSnapshotStore) DeleteAssetSnapshot(_ context.Context, househol
 	f.lastHouseholdID = householdID
 	f.lastAssetRef = assetRef
 	return f.deleteErr
-}
-
-func containsJSONFragment(data []byte, fragment string) bool {
-	return len(data) >= len(fragment) && string(data) != "" && containsString(string(data), fragment)
-}
-
-func containsString(value, fragment string) bool {
-	for i := 0; i+len(fragment) <= len(value); i++ {
-		if value[i:i+len(fragment)] == fragment {
-			return true
-		}
-	}
-	return false
 }
