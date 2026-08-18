@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T) {
-	pool := openApplicationIntegrationPool(t)
+	pool := openApplicationPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
