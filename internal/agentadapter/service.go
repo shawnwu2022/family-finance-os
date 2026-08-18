@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -203,6 +204,9 @@ func decodeStrict[T any](raw json.RawMessage) (T, error) {
 }
 
 func encodeBackendResult[T any](value T, backendErr error, asOf *time.Time, quality string, warnings []string) (Result, error) {
+	if errors.Is(backendErr, context.DeadlineExceeded) || errors.Is(backendErr, context.Canceled) {
+		return Result{}, adapterError(CodeTimeout, "tool execution timed out", backendErr)
+	}
 	if backendErr != nil {
 		return Result{}, adapterError(CodeDataUnavailable, "finance data is unavailable", backendErr)
 	}
