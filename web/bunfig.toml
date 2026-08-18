@@ -1,0 +1,5 @@
+# Preserve Vite's environment-file precedence instead of preloading .env in Bun.
+env = false
+
+# Keep CI and local tooling free of optional runtime telemetry/crash reporting.
+telemetry = false
