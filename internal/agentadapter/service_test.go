@@ -3,7 +3,9 @@ package agentadapter
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/shawnwu2022/family-finance-os/internal/report"
 	"github.com/shawnwu2022/family-finance-os/internal/server"
@@ -130,6 +132,123 @@ func TestCallDispatchesImplementedCapabilitiesWithPrincipalHousehold(t *testing.
 	}
 	if backend.reportHouseholdID != 42 || backend.reportPeriod != "2026-07" {
 		t.Fatalf("report scope/period=%d/%q", backend.reportHouseholdID, backend.reportPeriod)
+	}
+}
+
+func TestCallPreservesOverviewMetadataAndBusinessPayload(t *testing.T) {
+	asOf := time.Date(2026, 8, 18, 1, 2, 3, 0, time.UTC)
+	source := server.OverviewResponse{
+		DataAsOf: asOf,
+		Quality:  "partial",
+		NetWorth: server.MoneyDTO{Minor: 12345, Currency: "CNY"},
+		Warnings: []string{"source_partial"},
+	}
+	backend := &fakeBackend{overview: source}
+	service, err := New(backend)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	result, err := service.Call(context.Background(), Principal{Kind: "test", HouseholdID: 42}, ToolGetHouseholdOverview, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if result.AsOf == nil || !result.AsOf.Equal(asOf) || result.Quality != "partial" {
+		t.Fatalf("metadata=%#v", result)
+	}
+	if !reflect.DeepEqual(result.Warnings, []string{"source_partial"}) {
+		t.Fatalf("warnings=%#v", result.Warnings)
+	}
+	var got server.OverviewResponse
+	if err := json.Unmarshal(result.Data, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !reflect.DeepEqual(got, source) {
+		t.Fatalf("data=%#v want %#v", got, source)
+	}
+	result.Warnings[0] = "mutated"
+	if backend.overview.Warnings[0] != "source_partial" {
+		t.Fatalf("backend warnings mutated: %#v", backend.overview.Warnings)
+	}
+	if result.AuditID != "" {
+		t.Fatalf("audit id must be empty before audit wiring")
+	}
+}
+
+func TestCallPreservesCashflowMetadataAndBusinessPayload(t *testing.T) {
+	asOf := time.Date(2026, 8, 18, 4, 5, 6, 0, time.UTC)
+	source := server.CashflowResponse{
+		DataAsOf: asOf,
+		Quality:  "stale",
+		Period:   "2026-08",
+		Income:   server.MoneyDTO{Minor: 20000, Currency: "CNY"},
+		Warnings: []string{"ledger_stale"},
+	}
+	backend := &fakeBackend{cashflow: source}
+	service, _ := New(backend)
+	result, err := service.Call(context.Background(), Principal{Kind: "test", HouseholdID: 42}, ToolGetCashflow, json.RawMessage(`{"period":"2026-08"}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if result.AsOf == nil || !result.AsOf.Equal(asOf) || result.Quality != "stale" || !reflect.DeepEqual(result.Warnings, source.Warnings) {
+		t.Fatalf("metadata=%#v", result)
+	}
+	var got server.CashflowResponse
+	if err := json.Unmarshal(result.Data, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !reflect.DeepEqual(got, source) {
+		t.Fatalf("data=%#v want %#v", got, source)
+	}
+}
+
+func TestCallPreservesScenarioWarningsWithoutFabricatingFreshness(t *testing.T) {
+	source := server.ScenarioResponse{
+		Kind:     "purchase",
+		Result:   json.RawMessage(`{"decision":"defer"}`),
+		Warnings: []string{"liquidity_floor"},
+	}
+	backend := &fakeBackend{scenario: source}
+	service, _ := New(backend)
+	result, err := service.Call(context.Background(), Principal{Kind: "test", HouseholdID: 42}, ToolSimulatePurchase, json.RawMessage(`{"amount_minor":"10000","currency":"CNY"}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if result.AsOf != nil || result.Quality != "" || !reflect.DeepEqual(result.Warnings, source.Warnings) {
+		t.Fatalf("metadata=%#v", result)
+	}
+	var got server.ScenarioResponse
+	if err := json.Unmarshal(result.Data, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !reflect.DeepEqual(got, source) {
+		t.Fatalf("data=%#v want %#v", got, source)
+	}
+}
+
+func TestCallPreservesMonthlyReportMetadataAndBusinessPayload(t *testing.T) {
+	asOf := time.Date(2026, 7, 31, 23, 59, 59, 0, time.UTC)
+	source := report.MonthlyReport{
+		Kind:     report.KindMonthly,
+		Period:   "2026-07",
+		DataAsOf: asOf,
+		Quality:  "partial",
+		Warnings: []string{"month_partial"},
+	}
+	backend := &fakeBackend{monthly: source}
+	service, _ := New(backend)
+	result, err := service.Call(context.Background(), Principal{Kind: "test", HouseholdID: 42}, ToolGenerateMonthlyReport, json.RawMessage(`{"year":2026,"month":7}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if result.AsOf == nil || !result.AsOf.Equal(asOf) || result.Quality != "partial" || !reflect.DeepEqual(result.Warnings, source.Warnings) {
+		t.Fatalf("metadata=%#v", result)
+	}
+	var got report.MonthlyReport
+	if err := json.Unmarshal(result.Data, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !reflect.DeepEqual(got, source) {
+		t.Fatalf("data=%#v want %#v", got, source)
 	}
 }
 
