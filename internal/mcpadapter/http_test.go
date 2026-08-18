@@ -56,8 +56,8 @@ func TestHTTPHandlerSupportsStreamableMCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools over HTTP: %v", err)
 	}
-	if len(listed.Tools) != 10 {
-		t.Fatalf("tool count=%d want 10", len(listed.Tools))
+	if len(listed.Tools) != 11 {
+		t.Fatalf("tool count=%d want 11", len(listed.Tools))
 	}
 
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
