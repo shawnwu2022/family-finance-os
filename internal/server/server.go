@@ -23,6 +23,9 @@ func NewHandler(options ...HandlerOption) http.Handler {
 		})
 	})
 	registerFinanceAPI(mux, cfg.api)
+	if cfg.mcp != nil {
+		mux.Handle("/mcp", cfg.mcp)
+	}
 	if cfg.web != nil {
 		mux.Handle("/", cfg.web)
 	}
