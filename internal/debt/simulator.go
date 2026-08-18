@@ -16,7 +16,15 @@ var debtContext = func() *apd.Context {
 }()
 
 func SimulateDebt(debt DebtContract, extraMonthly money.Money) (DebtSimulation, error) {
-	currency, err := validateDebtForSimulation(debt, extraMonthly)
+	return simulateDebt(debt, extraMonthly, 0)
+}
+
+func SimulateOneTimeExtraPayment(debt DebtContract, extraPayment money.Money) (DebtSimulation, error) {
+	return simulateDebt(debt, extraPayment, debt.PrepaymentRestrictedMonths+1)
+}
+
+func simulateDebt(debt DebtContract, extra money.Money, oneTimeMonth int) (DebtSimulation, error) {
+	currency, err := validateDebtForSimulation(debt, extra)
 	if err != nil {
 		return DebtSimulation{}, err
 	}
@@ -58,7 +66,11 @@ func SimulateDebt(debt DebtContract, extraMonthly money.Money) (DebtSimulation, 
 	}
 
 	for month := 1; month <= limit && balance.Minor > 0; month++ {
-		payment, err := simulateMonth(debt, month, balance, monthlyRate, fixedScheduledMinor, equalPrincipalMinor, extraMonthly)
+		monthExtra := extra
+		if oneTimeMonth > 0 && month != oneTimeMonth {
+			monthExtra = money.Money{Currency: currency}
+		}
+		payment, err := simulateMonth(debt, month, balance, monthlyRate, fixedScheduledMinor, equalPrincipalMinor, monthExtra)
 		if err != nil {
 			return DebtSimulation{}, err
 		}
