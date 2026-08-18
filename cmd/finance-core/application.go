@@ -108,11 +108,19 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		jobs = append(jobs, job)
 	}
 
-	handler := server.NewHandler(
+	handlerOptions := []server.HandlerOption{
 		server.WithAPI(householdScopedAPI{FinanceAPI: reportingAPI, advisor: financeAPI}),
 		server.WithWeb(webassets.Handler()),
 		server.WithReady(pool.Ping),
-	)
+	}
+	if cfg.MCP.Enabled {
+		mcpHandler, err := buildMCPHandler(ctx, cfg.MCP, pool, financeAPI)
+		if err != nil {
+			return fail(fmt.Errorf("configure MCP handler: %w", err))
+		}
+		handlerOptions = append(handlerOptions, server.WithMCP(mcpHandler))
+	}
+	handler := server.NewHandler(handlerOptions...)
 	for _, job := range jobs {
 		job := job
 		go func() {
