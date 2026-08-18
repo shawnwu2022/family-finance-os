@@ -67,7 +67,7 @@ func TestSimulateGoalUsesExistingProjectionWithoutMutatingStoredGoal(t *testing.
 	if result.ProjectedFunded.Minor != 220_000 || result.GapAtTarget.Minor != 0 || result.CapacityShortfall.Minor != 0 {
 		t.Fatalf("projection=%#v", result)
 	}
-	if result.Status != goals.GoalStatusOnTrack {
+	if result.Status != string(goals.GoalStatusOnTrack) {
 		t.Fatalf("status=%q want %q", result.Status, goals.GoalStatusOnTrack)
 	}
 	if planner.goals[0].MonthlyContribution.Minor != original.MonthlyContribution.Minor {
