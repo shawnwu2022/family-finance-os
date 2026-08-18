@@ -32,7 +32,7 @@ jobs:
           fi
       - name: MCP HTTP security contract
         run: go test ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler' -v
-      - name: Agent timeout taxonomy
-        run: go test ./internal/agentadapter -run TestEncodeBackendResultMaps -v
+      - name: Agent timeout and audit finalization
+        run: go test ./internal/agentadapter -run 'TestEncodeBackendResultMaps|TestAuditedCallPreservesTimeoutWhenRequestCancelsBeforeFailureAuditCompletion' -v
       - name: MCP security race contract
         run: go test -race ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler' -v
