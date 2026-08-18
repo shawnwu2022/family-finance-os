@@ -13,6 +13,8 @@ const (
 	ToolGetBudgetStatus       ToolName = "get_budget_status"
 	ToolGetDebtStatus         ToolName = "get_debt_status"
 	ToolGetGoalStatus         ToolName = "get_goal_status"
+	ToolGetSafeToSpend        ToolName = "get_safe_to_spend"
+	ToolSimulateGoal          ToolName = "simulate_goal"
 	ToolSimulatePurchase      ToolName = "simulate_purchase"
 	ToolGenerateMonthlyReport ToolName = "generate_monthly_report"
 )
@@ -28,6 +30,11 @@ type PurchaseInput struct {
 	Currency    string `json:"currency"`
 }
 
+type GoalSimulationInput struct {
+	GoalID                   int64  `json:"goal_id"`
+	MonthlyContributionMinor string `json:"monthly_contribution_minor"`
+}
+
 type MonthlyReportInput struct {
 	Year  int `json:"year"`
 	Month int `json:"month"`
@@ -41,10 +48,11 @@ type ToolDefinition struct {
 }
 
 var (
-	emptyInputSchema         = json.RawMessage(`{"type":"object","additionalProperties":false}`)
-	periodInputSchema        = json.RawMessage(`{"type":"object","properties":{"period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"}},"required":["period"],"additionalProperties":false}`)
-	purchaseInputSchema      = json.RawMessage(`{"type":"object","properties":{"amount_minor":{"type":"string","pattern":"^[0-9]+$"},"currency":{"type":"string","minLength":3,"maxLength":3}},"required":["amount_minor","currency"],"additionalProperties":false}`)
-	monthlyReportInputSchema = json.RawMessage(`{"type":"object","properties":{"year":{"type":"integer","minimum":1970,"maximum":9999},"month":{"type":"integer","minimum":1,"maximum":12}},"required":["year","month"],"additionalProperties":false}`)
+	emptyInputSchema          = json.RawMessage(`{"type":"object","additionalProperties":false}`)
+	periodInputSchema         = json.RawMessage(`{"type":"object","properties":{"period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"}},"required":["period"],"additionalProperties":false}`)
+	purchaseInputSchema       = json.RawMessage(`{"type":"object","properties":{"amount_minor":{"type":"string","pattern":"^[0-9]+$"},"currency":{"type":"string","minLength":3,"maxLength":3}},"required":["amount_minor","currency"],"additionalProperties":false}`)
+	goalSimulationInputSchema = json.RawMessage(`{"type":"object","properties":{"goal_id":{"type":"integer","minimum":1},"monthly_contribution_minor":{"type":"string","pattern":"^[0-9]+$"}},"required":["goal_id","monthly_contribution_minor"],"additionalProperties":false}`)
+	monthlyReportInputSchema  = json.RawMessage(`{"type":"object","properties":{"year":{"type":"integer","minimum":1970,"maximum":9999},"month":{"type":"integer","minimum":1,"maximum":12}},"required":["year","month"],"additionalProperties":false}`)
 )
 
 var initialDefinitions = []ToolDefinition{
@@ -76,6 +84,18 @@ var initialDefinitions = []ToolDefinition{
 		Name:        ToolGetGoalStatus,
 		Description: "Get deterministic Finance Core household goal status. Preserve quality and warning metadata.",
 		InputSchema: emptyInputSchema,
+		ReadOnly:    true,
+	},
+	{
+		Name:        ToolGetSafeToSpend,
+		Description: "Get the current deterministic Finance Core safe-to-spend result and its components. Preserve quality and warning metadata.",
+		InputSchema: emptyInputSchema,
+		ReadOnly:    true,
+	},
+	{
+		Name:        ToolSimulateGoal,
+		Description: "Simulate a monthly contribution for an existing household goal using deterministic Finance Core projection rules without persisting changes. Preserve quality and warning metadata.",
+		InputSchema: goalSimulationInputSchema,
 		ReadOnly:    true,
 	},
 	{
