@@ -1,9 +1,9 @@
 # V2.0 Agent Adapter + MCP Channel Design
 
-**Status:** Approved architecture, implementation design baseline  
+**Status:** Architecture approved; written specification awaiting user review  
 **Date:** 2026-08-18  
 **Target branch:** `feature/v2-agent-adapter`  
-**Base:** V1 `main` at the production-acceptance candidate line  
+**Base:** V1 `main` commit `05d8afcf0299c3ae0fd9f0422b13e28fe8842a28`  
 
 ## 1. Purpose
 
@@ -218,6 +218,7 @@ MCP_HOUSEHOLD_ID=1
 MCP_ALLOWED_ORIGINS=https://trusted-agent.example
 MCP_REQUEST_TIMEOUT=15s
 MCP_MAX_CONCURRENT=4
+MCP_REQUESTS_PER_MINUTE=60
 MCP_MAX_BODY_BYTES=262144
 ```
 
@@ -246,17 +247,17 @@ The MCP endpoint is `/mcp` under the Finance Core HTTPS origin.
 Mandatory controls:
 
 1. TLS terminates at Caddy; plain external HTTP is redirected/rejected according to existing edge policy.
-2. Validate `Origin` when present according to the selected MCP transport behavior; reject unapproved origins with 403.
+2. Validate `Origin` when present according to the selected MCP transport behavior; reject unapproved origins with 403. Authenticated non-browser clients may omit `Origin` when the selected MCP transport permits it.
 3. Validate bearer authentication before tool dispatch.
 4. Enforce `Content-Type` and MCP protocol headers using the official SDK where applicable.
 5. Enforce a request body size limit before JSON decoding.
 6. Enforce per-request context timeout.
-7. Enforce a small in-process concurrency limit; no Redis/distributed limiter is introduced.
+7. Enforce an in-process per-principal request-rate limit and concurrency limit. V2.0 has one principal, so no distributed limiter is required.
 8. Reject malformed/mismatched MCP routing headers and body fields through SDK/spec validation.
 9. Do not enable legacy HTTP+SSE solely for compatibility unless a real required client cannot use Streamable HTTP and an explicit follow-up decision approves it.
 10. Do not expose MCP on a separate host port.
 
-A simple in-process rate/concurrency guard is sufficient for household scale. It must fail closed under overload and return a controlled, non-secret-bearing error.
+The rate limiter is process-local and intentionally resets on Finance Core restart. For the household deployment this is an abuse/backpressure control, not a billing/security ledger. It must fail closed under overload and return a controlled, non-secret-bearing error.
 
 ## 9. Error model
 
@@ -269,6 +270,7 @@ invalid_argument
 tool_not_found
 data_unavailable
 data_partial
+audit_unavailable
 timeout
 busy
 internal
@@ -286,7 +288,7 @@ Mapping rules:
 
 Every `tools/call` is auditable independently of AI Advisor conversations.
 
-Preferred persisted audit record:
+Persisted audit record:
 
 ```text
 agent_tool_audit
@@ -308,7 +310,18 @@ agent_tool_audit
 
 Do not persist bearer credentials or full raw tool payloads in the audit table.
 
-Hashing must use a canonicalized representation so the same logical input/output can be compared reproducibly. Audit storage failure should not silently convert a failed financial operation into success; exact fail-open/fail-closed behavior will be defined per audit stage in implementation tests, with security/audit integrity preferred over availability for external agent calls.
+Hashing uses a canonicalized representation so the same logical input/output can be compared reproducibly.
+
+Audit behavior is **fail closed** for external agent calls:
+
+1. Before dispatch, create the audit-attempt record containing principal, scope, tool name, canonical input hash, protocol metadata, and start time.
+2. If the attempt record cannot be persisted, do not execute the Finance Core tool; return `audit_unavailable`.
+3. Execute the read/simulation tool only after the attempt record exists.
+4. Before disclosing a successful tool result, persist completion status, output hash, data `as_of`, and duration.
+5. If completion persistence fails, do not disclose the business result; return `audit_unavailable`. Read/simulation operations have no external write side effect to roll back.
+6. For a tool failure, best-effort persist the stable error code and duration. If that update also fails, return `audit_unavailable` rather than leaking the internal error.
+
+This makes every externally disclosed successful tool result traceable to a completed audit record.
 
 ## 11. OpenClaw integration
 
@@ -344,7 +357,7 @@ When enabled, startup fails fast if:
 - token file is missing/unreadable/empty;
 - household scope is invalid or cannot be resolved;
 - allowed-origin syntax is invalid;
-- timeout/concurrency/body-size values are invalid;
+- timeout/concurrency/rate/body-size values are invalid;
 - MCP adapter registration contains duplicate/unknown tool definitions.
 
 The application must never start an externally reachable, unauthenticated MCP endpoint because configuration was incomplete.
@@ -360,7 +373,9 @@ Each tool mapping has tests proving:
 - arguments map to the existing typed API exactly;
 - business results pass through without financial recomputation;
 - `stale`/`partial`/warning metadata is preserved;
-- adapter error codes are stable.
+- adapter error codes are stable;
+- audit-attempt failure prevents tool execution;
+- audit-completion failure prevents result disclosure.
 
 ### 13.2 MCP protocol tests
 
@@ -375,7 +390,7 @@ Using the official Go SDK test client/transport where possible:
 - invalid/missing bearer fails;
 - invalid Origin fails;
 - mismatched protocol routing metadata fails on versions where required;
-- body-size limit, timeout, cancellation, and concurrency behavior;
+- body-size limit, request-rate limit, timeout, cancellation, and concurrency behavior;
 - no secret-bearing fields in responses/log fixtures.
 
 Tests must be version-aware: legacy lifecycle behavior through `2025-11-25` must not be incorrectly asserted against the stateless `2026-07-28` protocol.
@@ -423,7 +438,7 @@ Recommended sequence:
 2. Audit persistence.
 3. MCP SDK dependency gate/spike.
 4. MCP tool registration and protocol tests.
-5. Auth/origin/timeout/concurrency guardrails.
+5. Auth/origin/timeout/rate/concurrency guardrails.
 6. Application/Caddy wiring without new exposed ports.
 7. CI gates.
 8. Staging OpenClaw live probe + calls.
@@ -456,9 +471,9 @@ V2.0 is complete only when all are true:
 2. MCP is an edge adapter inside the existing application, with no extra service/database.
 3. Approved read/simulation tools are exposed and no write tool is reachable.
 4. Household scope is server-side and cross-household selection is impossible by tool arguments.
-5. Bearer authentication, Origin validation, body limits, timeouts, and concurrency limits are tested.
+5. Bearer authentication, Origin validation, body limits, request-rate limits, timeouts, and concurrency limits are tested.
 6. MCP tool results match existing Finance Core business results exactly for parity fixtures.
-7. Tool calls produce sanitized audit records.
+7. Every externally disclosed successful tool result has a completed sanitized audit record.
 8. Existing V1 CI/security/backup tests remain green.
 9. The production merge uses a stable official MCP Go SDK; no pre-release SDK is shipped.
 10. A real OpenClaw Streamable HTTP probe and representative tool calls pass with sanitized evidence.
@@ -471,3 +486,11 @@ V2.0 is complete only when all are true:
 **Rejected:** independent MCP sidecar, OpenClaw-specific finance plugin, direct database access, pre-release SDK in production, and early OAuth/RBAC complexity.
 
 This preserves the project rule: keep the deterministic core small and stable; add replaceable integration complexity only at the edge.
+
+## 19. Research references checked for this design
+
+The 2026-08-18 protocol/dependency decisions were checked against primary project documentation:
+
+- Model Context Protocol `2026-07-28` specification release notes and transport changes;
+- official `modelcontextprotocol/go-sdk` release/compatibility documentation;
+- OpenClaw MCP CLI and gateway configuration documentation for remote Streamable HTTP servers and live probing.
