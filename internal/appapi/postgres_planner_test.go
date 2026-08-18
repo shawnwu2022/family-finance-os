@@ -54,7 +54,7 @@ func TestPostgresPlannerRoundTripIntegration(t *testing.T) {
 			minimum_payment_minor, scheduled_payment_minor, prepayment_fee_rate,
 			prepayment_restricted_months, revolving, active
 		) VALUES
-			($1, 'active card', 'credit_card', 300000, 200000, 'CNY', 0.18, 'fixed', 0, 20, 'revolving', 20000, 25000, 0, 0, TRUE, TRUE),
+			($1, 'active card', 'credit_card', 300000, 200000, 'CNY', 0.18, 'fixed', 0, 20, 'revolving', 20000, 25000, 0.015, 2, TRUE, TRUE),
 			($1, 'closed card', 'credit_card', 100000, 0, 'CNY', 0.20, 'fixed', 0, 5, 'revolving', 10000, 0, 0, 0, TRUE, FALSE)
 	`, householdID); err != nil {
 		t.Fatalf("insert debts: %v", err)
@@ -92,6 +92,9 @@ func TestPostgresPlannerRoundTripIntegration(t *testing.T) {
 	}
 	if len(debts) != 1 || debts[0].Name != "active card" || debts[0].APR != "0.18" || debts[0].ScheduledPayment.Minor != 25000 {
 		t.Fatalf("debts=%#v", debts)
+	}
+	if debts[0].OriginalPrincipal.Minor != 300000 || debts[0].RateType != "fixed" || debts[0].PrepaymentFeeRate != "0.015" || debts[0].PrepaymentRestrictedMonths != 2 || !debts[0].Revolving {
+		t.Fatalf("debt simulation fields=%#v", debts[0])
 	}
 
 	goalList, err := planner.Goals(ctx, householdID)
