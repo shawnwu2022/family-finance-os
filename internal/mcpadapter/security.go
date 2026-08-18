@@ -44,14 +44,22 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 	if opts.MaxBodyBytes <= 0 {
 		return nil, fmt.Errorf("mcpadapter: MCP request body limit must be positive")
 	}
+
+	trustedOrigins := make(map[string]struct{}, len(opts.AllowedOrigins))
 	for _, origin := range opts.AllowedOrigins {
-		if _, err := canonicalOrigin(origin); err != nil {
+		canonical, err := canonicalOrigin(origin)
+		if err != nil {
 			return nil, fmt.Errorf("mcpadapter: invalid trusted origin: %w", err)
 		}
+		trustedOrigins[canonical] = struct{}{}
 	}
 
 	expected := sha256.Sum256(append([]byte(nil), opts.Token...))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !allowedRequestOrigin(r, trustedOrigins) {
+			writeSecurityError(w, http.StatusForbidden, "forbidden", "MCP request origin is not allowed")
+			return
+		}
 		if !authorizedBearer(r, expected) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeSecurityError(w, http.StatusUnauthorized, "unauthorized", "MCP bearer token is invalid")
@@ -59,6 +67,41 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 		}
 		next.ServeHTTP(w, r)
 	}), nil
+}
+
+func allowedRequestOrigin(r *http.Request, trusted map[string]struct{}) bool {
+	raw := strings.TrimSpace(r.Header.Get("Origin"))
+	if raw == "" {
+		return true
+	}
+	origin, err := canonicalOrigin(raw)
+	if err != nil {
+		return false
+	}
+	if _, ok := trusted[origin]; ok {
+		return true
+	}
+	requestOrigin, err := canonicalRequestOrigin(r)
+	return err == nil && origin == requestOrigin
+}
+
+func canonicalRequestOrigin(r *http.Request) (string, error) {
+	scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("request scheme must be http or https")
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" {
+		return "", fmt.Errorf("request host is required")
+	}
+	return strings.ToLower(scheme) + "://" + strings.ToLower(host), nil
 }
 
 func authorizedBearer(r *http.Request, expected [sha256.Size]byte) bool {
@@ -89,7 +132,7 @@ func canonicalOrigin(raw string) (string, error) {
 	if parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return "", fmt.Errorf("origin must contain only scheme and authority")
 	}
-	return parsed.Scheme + "://" + parsed.Host, nil
+	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host), nil
 }
 
 func writeSecurityError(w http.ResponseWriter, status int, code, message string) {
