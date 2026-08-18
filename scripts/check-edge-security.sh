@@ -8,21 +8,89 @@ fail() {
 
 finance_block="$({
   awk '
-    /^\{\$FINANCE_DOMAIN\} \{/ { in_finance = 1 }
-    in_finance { print }
-    in_finance && /^}$/ { exit }
+    /^\{\$FINANCE_DOMAIN\} \{/ {
+      in_finance = 1
+      depth = 0
+    }
+    in_finance {
+      print
+      opens = gsub(/\{/, "{")
+      closes = gsub(/\}/, "}")
+      depth += opens - closes
+      if (depth == 0) {
+        exit
+      }
+    }
   ' Caddyfile
 } || true)"
 
 [[ -n "$finance_block" ]] || fail "FINANCE_DOMAIN site block is missing"
-grep -Eq '^[[:space:]]*basic_auth([[:space:]]|$)' <<<"$finance_block" || fail "FINANCE_DOMAIN must enforce basic_auth"
+grep -Eq '^[[:space:]]*@mcp[[:space:]]+path[[:space:]]+/mcp[[:space:]]*$' <<<"$finance_block" || fail "FINANCE_DOMAIN must define exact @mcp path /mcp matcher"
+grep -Eq '^[[:space:]]*handle[[:space:]]+@mcp[[:space:]]*\{' <<<"$finance_block" || fail "FINANCE_DOMAIN must route @mcp through a dedicated handle block"
+grep -Eq '^[[:space:]]*handle[[:space:]]*\{' <<<"$finance_block" || fail "FINANCE_DOMAIN must keep a fallback handle for authenticated Finance UI/API"
+grep -Eq '^[[:space:]]*basic_auth([[:space:]]|$)' <<<"$finance_block" || fail "FINANCE_DOMAIN fallback must enforce basic_auth"
 grep -Fq '{$FINANCE_AUTH_USER}' <<<"$finance_block" || fail "FINANCE_DOMAIN auth username must come from FINANCE_AUTH_USER"
 grep -Fq '{$FINANCE_AUTH_HASH}' <<<"$finance_block" || fail "FINANCE_DOMAIN auth hash must come from FINANCE_AUTH_HASH"
+
+mcp_block="$({
+  awk '
+    /^[[:space:]]*handle[[:space:]]+@mcp[[:space:]]*\{/ {
+      in_mcp = 1
+      depth = 0
+    }
+    in_mcp {
+      print
+      opens = gsub(/\{/, "{")
+      closes = gsub(/\}/, "}")
+      depth += opens - closes
+      if (depth == 0) {
+        exit
+      }
+    }
+  ' Caddyfile
+} || true)"
+[[ -n "$mcp_block" ]] || fail "MCP edge handle block is missing"
+grep -Fq 'reverse_proxy finance-core:8000' <<<"$mcp_block" || fail "MCP edge handle must reverse_proxy finance-core:8000"
+if grep -Eq '^[[:space:]]*basic_auth([[:space:]]|$)' <<<"$mcp_block"; then
+  fail "MCP edge handle must not consume Authorization with Caddy basic_auth"
+fi
+
+fallback_block="$({
+  awk '
+    /^[[:space:]]*handle[[:space:]]*\{/ {
+      in_fallback = 1
+      depth = 0
+    }
+    in_fallback {
+      print
+      opens = gsub(/\{/, "{")
+      closes = gsub(/\}/, "}")
+      depth += opens - closes
+      if (depth == 0) {
+        exit
+      }
+    }
+  ' Caddyfile
+} || true)"
+[[ -n "$fallback_block" ]] || fail "Finance fallback handle block is missing"
+grep -Eq '^[[:space:]]*basic_auth([[:space:]]|$)' <<<"$fallback_block" || fail "Finance fallback handle must enforce basic_auth"
+grep -Fq 'reverse_proxy finance-core:8000' <<<"$fallback_block" || fail "Finance fallback handle must reverse_proxy finance-core:8000"
 
 grep -Fq 'FINANCE_AUTH_USER: ${FINANCE_AUTH_USER:?' compose.yaml || fail "Compose must require FINANCE_AUTH_USER"
 grep -Fq 'FINANCE_AUTH_HASH: ${FINANCE_AUTH_HASH:?' compose.yaml || fail "Compose must require FINANCE_AUTH_HASH"
 grep -Fq 'FINANCE_AUTH_USER=' .env.example || fail ".env.example must document FINANCE_AUTH_USER"
 grep -Fq 'FINANCE_AUTH_HASH=' .env.example || fail ".env.example must document FINANCE_AUTH_HASH"
+
+for key in MCP_ENABLED MCP_TOKEN_FILE MCP_HOUSEHOLD_ID MCP_ALLOWED_ORIGINS MCP_REQUEST_TIMEOUT MCP_MAX_CONCURRENT MCP_REQUESTS_PER_MINUTE MCP_MAX_BODY_BYTES; do
+  grep -Fq "${key}:" compose.yaml || fail "finance-core Compose environment must pass ${key}"
+  grep -Fq "${key}=" .env.example || fail ".env.example must document ${key}"
+done
+grep -Fq './secrets:/run/secrets:ro' compose.yaml || fail "finance-core must mount the MCP secret directory read-only"
+grep -Fq 'secrets/*' .gitignore || fail ".gitignore must ignore secret files"
+grep -Fq '!secrets/.gitkeep' .gitignore || fail ".gitignore must retain only secrets/.gitkeep"
+if grep -Eq '^[[:space:]]*MCP_TOKEN:' compose.yaml || grep -Eq '^MCP_TOKEN=' .env.example; then
+  fail "literal MCP bearer token environment variables are forbidden"
+fi
 
 caddy_service="$({
   awk '
