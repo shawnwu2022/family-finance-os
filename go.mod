@@ -7,6 +7,7 @@ toolchain go1.26.6
 require (
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 )
 
 require (
