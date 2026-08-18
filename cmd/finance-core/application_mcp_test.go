@@ -1,0 +1,78 @@
+package main
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/shawnwu2022/family-finance-os/internal/config"
+	storesqlc "github.com/shawnwu2022/family-finance-os/internal/store/sqlc"
+)
+
+func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T) {
+	pool := openApplicationIntegrationPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	household, err := storesqlc.New(pool).CreateHousehold(ctx, storesqlc.CreateHouseholdParams{
+		Name:         "application-mcp-test",
+		BaseCurrency: "CNY",
+		Timezone:     "Asia/Shanghai",
+	})
+	if err != nil {
+		t.Fatalf("CreateHousehold: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM agent_tool_audits WHERE household_id = $1`, household.ID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM households WHERE id = $1`, household.ID)
+	})
+
+	tokenPath := filepath.Join(t.TempDir(), "mcp-token")
+	if err := os.WriteFile(tokenPath, []byte("application-mcp-token"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := baseConfig(pool)
+	cfg.MCP = config.MCPConfig{
+		Enabled:           true,
+		TokenFile:         tokenPath,
+		HouseholdID:       household.ID,
+		RequestTimeout:    2 * time.Second,
+		MaxConcurrent:     4,
+		RequestsPerMinute: 60,
+		MaxBodyBytes:      262144,
+	}
+	handler, err := buildApplicationHandler(ctx, cfg, pool)
+	if err != nil {
+		t.Fatalf("buildApplicationHandler: %v", err)
+	}
+
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+	client := mcp.NewClient(&mcp.Implementation{Name: "application-mcp-client", Version: "1.0.0"}, &mcp.ClientOptions{
+		Capabilities: &mcp.ClientCapabilities{},
+	})
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+		Endpoint: httpServer.URL + "/mcp",
+		HTTPClient: &http.Client{Transport: bearerRoundTripper{
+			token: "application-mcp-token",
+			base:  http.DefaultTransport,
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("connect enabled MCP endpoint: %v", err)
+	}
+	defer session.Close()
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if len(listed.Tools) != 9 {
+		t.Fatalf("tool count=%d want 9", len(listed.Tools))
+	}
+}
