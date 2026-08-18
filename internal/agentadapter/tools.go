@@ -41,9 +41,9 @@ type ToolDefinition struct {
 }
 
 var (
-	emptyInputSchema = json.RawMessage(`{"type":"object","additionalProperties":false}`)
-	periodInputSchema = json.RawMessage(`{"type":"object","properties":{"period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"}},"required":["period"],"additionalProperties":false}`)
-	purchaseInputSchema = json.RawMessage(`{"type":"object","properties":{"amount_minor":{"type":"string","pattern":"^[0-9]+$"},"currency":{"type":"string","minLength":3,"maxLength":3}},"required":["amount_minor","currency"],"additionalProperties":false}`)
+	emptyInputSchema         = json.RawMessage(`{"type":"object","additionalProperties":false}`)
+	periodInputSchema        = json.RawMessage(`{"type":"object","properties":{"period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"}},"required":["period"],"additionalProperties":false}`)
+	purchaseInputSchema      = json.RawMessage(`{"type":"object","properties":{"amount_minor":{"type":"string","pattern":"^[0-9]+$"},"currency":{"type":"string","minLength":3,"maxLength":3}},"required":["amount_minor","currency"],"additionalProperties":false}`)
 	monthlyReportInputSchema = json.RawMessage(`{"type":"object","properties":{"year":{"type":"integer","minimum":1970,"maximum":9999},"month":{"type":"integer","minimum":1,"maximum":12}},"required":["year","month"],"additionalProperties":false}`)
 )
 
