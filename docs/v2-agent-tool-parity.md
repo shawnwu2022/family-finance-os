@@ -17,7 +17,7 @@ MCP `tools/list` must not advertise a target capability until the selected relea
 | `get_budget_status` | READY | `API.Budget(period)` exists |
 | `get_safe_to_spend` | READY | `API.SafeToSpend` exposes the existing deterministic snapshot result and all six components; current snapshot only, because historical `as_of` / `period_end` liquidity cannot be reconstructed truthfully from the current account-balance model |
 | `get_debt_status` | READY | `API.Debts` exists; historical `as_of` remains deferred until the core exposes that contract |
-| `simulate_extra_debt_payment` | CORE-PARITY-REQUIRED | `debt.SimulateDebt` uses an explicit extra-monthly amount, while the target tool signature does not yet specify one-time versus recurring payment semantics; the adapter must not guess |
+| `simulate_extra_debt_payment` | READY | `API.SimulateExtraDebtPayment` loads the full scoped `debt.DebtContract`, compares the baseline with a one-time extra-principal scenario delegated to deterministic debt primitives, applies the proposal at the first contractually eligible month, keeps the existing scheduled-payment rule, preserves prepayment restrictions/fees/caps, and persists no changes |
 | `simulate_purchase` | READY | purchase scenario exists for `amount_minor`/`currency`; `category_ref` and `date` remain deferred until Finance Core consumes them with defined deterministic semantics |
 | `get_goal_status` | READY | `API.Goals` exists; historical `as_of` remains deferred until the core exposes that contract |
 | `simulate_goal` | READY | `API.SimulateGoal` copies the scoped goal, changes only the proposed monthly contribution, and delegates projection to the existing deterministic `goals.ProjectGoal` primitive |
@@ -26,7 +26,7 @@ MCP `tools/list` must not advertise a target capability until the selected relea
 
 ## Agent Adapter allowlist
 
-The verified protocol-neutral boundary currently contains exactly nine names:
+The verified protocol-neutral boundary currently contains exactly ten names:
 
 ```text
 generate_monthly_report
@@ -36,11 +36,12 @@ get_debt_status
 get_goal_status
 get_household_overview
 get_safe_to_spend
+simulate_extra_debt_payment
 simulate_goal
 simulate_purchase
 ```
 
-The original seven are exercised by `TestAgentAdapterDeterministicParity`. Safe-to-spend and goal simulation are additionally exercised by `TestAgentAdapterPhaseOneDeterministicParity`. Both suites compare Adapter business payloads with direct `appapi.API` results for the same household, input, clock, and deterministic fixture.
+The original seven are exercised by `TestAgentAdapterDeterministicParity`. Safe-to-spend and goal simulation are additionally exercised by `TestAgentAdapterPhaseOneDeterministicParity`. Extra debt payment is exercised by `TestAgentAdapterExtraDebtPaymentParity`, which compares the direct `API.SimulateExtraDebtPayment` result with the Agent Adapter result for the same scoped debt contract, proposal, clock, and deterministic fixture. The parity suites compare Adapter business payloads with direct `appapi.API` results rather than duplicating financial calculations in the adapter.
 
 ## Release rule
 
