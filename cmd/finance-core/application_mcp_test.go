@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 )
 
 func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T) {
-	pool := openApplicationPool(t)
+	pool := openMCPIntegrationPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -37,7 +38,7 @@ func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	cfg := baseConfig(pool)
+	cfg := applicationMCPTestConfig(t)
 	cfg.MCP = config.MCPConfig{
 		Enabled:           true,
 		TokenFile:         tokenPath,
@@ -47,10 +48,14 @@ func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T
 		RequestsPerMinute: 60,
 		MaxBodyBytes:      262144,
 	}
-	handler, err := buildApplicationHandler(ctx, cfg, pool)
+	handler, cleanup, err := buildApplicationHandler(ctx, cfg)
 	if err != nil {
 		t.Fatalf("buildApplicationHandler: %v", err)
 	}
+	if cleanup == nil {
+		t.Fatal("cleanup is nil")
+	}
+	defer cleanup()
 
 	httpServer := httptest.NewServer(handler)
 	defer httpServer.Close()
@@ -74,5 +79,33 @@ func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T
 	}
 	if len(listed.Tools) != 9 {
 		t.Fatalf("tool count=%d want 9", len(listed.Tools))
+	}
+}
+
+func applicationMCPTestConfig(t *testing.T) config.Config {
+	t.Helper()
+	portRaw := os.Getenv("TEST_POSTGRES_PORT")
+	if portRaw == "" {
+		portRaw = "5432"
+	}
+	port, err := strconv.ParseUint(portRaw, 10, 16)
+	if err != nil {
+		t.Fatalf("parse TEST_POSTGRES_PORT: %v", err)
+	}
+	return config.Config{
+		ListenAddr: ":8000",
+		Timezone:   "Asia/Shanghai",
+		Database: config.DatabaseConfig{
+			Host:     os.Getenv("TEST_POSTGRES_HOST"),
+			Port:     uint16(port),
+			Name:     os.Getenv("TEST_POSTGRES_DB"),
+			User:     os.Getenv("TEST_POSTGRES_USER"),
+			Password: os.Getenv("TEST_POSTGRES_PASSWORD"),
+			SSLMode:  "disable",
+		},
+		Ledger: config.LedgerConfig{
+			BaseURL:  "http://ezbookkeeping.invalid:8080",
+			APIToken: "test-token",
+		},
 	}
 }
