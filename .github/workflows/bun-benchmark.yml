@@ -1,0 +1,230 @@
+name: Bun Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [spike/bun-benchmark]
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24.19.0'
+  BUN_VERSION: '1.3.14'
+
+jobs:
+  node-npm:
+    name: Node + npm baseline
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Record versions
+        run: |
+          node --version
+          npm --version
+      - name: Benchmark current frontend path
+        shell: bash
+        run: |
+          set -euo pipefail
+          METRICS="$RUNNER_TEMP/node-npm.tsv"
+          : > "$METRICS"
+
+          measure() {
+            local label="$1"
+            shift
+            local start end
+            start="$(date +%s%N)"
+            "$@"
+            end="$(date +%s%N)"
+            printf '%s\t%d\n' "$label" "$(( (end - start) / 1000000 ))" >> "$METRICS"
+          }
+
+          rm -rf node_modules dist
+          measure install_ms npm ci --ignore-scripts
+          measure test_ms npm test
+          measure pwa_ms npm run check:pwa
+          measure typecheck_ms npm run typecheck
+          measure build_ms npm run build
+
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  dist/#  #' > "$RUNNER_TEMP/node-dist-manifest.sha256"
+          cp "$METRICS" "$RUNNER_TEMP/node-npm-metrics.tsv"
+
+          {
+            echo '### Node 24.19.0 + npm'
+            echo '| Step | milliseconds |'
+            echo '|---|---:|'
+            awk -F '\t' '{printf "| %s | %s |\n", $1, $2}' "$METRICS"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload baseline evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-benchmark-node-baseline
+          path: |
+            ${{ runner.temp }}/node-npm-metrics.tsv
+            ${{ runner.temp }}/node-dist-manifest.sha256
+          if-no-files-found: error
+
+  bun-package-manager:
+    name: Bun package manager + Node runtime
+    needs: node-npm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Record versions
+        run: |
+          node --version
+          npm --version
+          bun --version
+          bun --revision
+      - name: Generate candidate Bun lockfile from package-lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf node_modules dist bun.lock
+          bun install --lockfile-only --ignore-scripts
+          test -s bun.lock
+          cp bun.lock "$RUNNER_TEMP/bun.lock"
+          git diff --exit-code -- package.json package-lock.json
+      - name: Benchmark Bun package manager with current Node scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          METRICS="$RUNNER_TEMP/bun-pm.tsv"
+          : > "$METRICS"
+
+          measure() {
+            local label="$1"
+            shift
+            local start end
+            start="$(date +%s%N)"
+            "$@"
+            end="$(date +%s%N)"
+            printf '%s\t%d\n' "$label" "$(( (end - start) / 1000000 ))" >> "$METRICS"
+          }
+
+          rm -rf node_modules dist
+          measure install_ms bun install --frozen-lockfile --ignore-scripts
+          measure test_ms npm test
+          measure pwa_ms npm run check:pwa
+          measure typecheck_ms npm run typecheck
+          measure build_ms npm run build
+
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  dist/#  #' > "$RUNNER_TEMP/bun-pm-dist-manifest.sha256"
+          cp "$METRICS" "$RUNNER_TEMP/bun-pm-metrics.tsv"
+
+          {
+            echo '### Bun package manager + Node runtime'
+            echo '| Step | milliseconds |'
+            echo '|---|---:|'
+            awk -F '\t' '{printf "| %s | %s |\n", $1, $2}' "$METRICS"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Download Node baseline manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: bun-benchmark-node-baseline
+          path: ${{ runner.temp }}/node-baseline
+      - name: Verify build output is byte-for-byte equivalent
+        shell: bash
+        run: cmp "$RUNNER_TEMP/node-baseline/node-dist-manifest.sha256" "$RUNNER_TEMP/bun-pm-dist-manifest.sha256"
+      - name: Upload Bun package-manager evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-benchmark-package-manager
+          path: |
+            ${{ runner.temp }}/bun.lock
+            ${{ runner.temp }}/bun-pm-metrics.tsv
+            ${{ runner.temp }}/bun-pm-dist-manifest.sha256
+          if-no-files-found: error
+
+  bun-runtime:
+    name: Full Bun runtime
+    needs: [node-npm, bun-package-manager]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Download candidate Bun lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: bun-benchmark-package-manager
+          path: ${{ runner.temp }}/bun-candidate
+      - name: Install candidate lockfile
+        run: cp "$RUNNER_TEMP/bun-candidate/bun.lock" bun.lock
+      - name: Record Bun version
+        run: |
+          bun --version
+          bun --revision
+      - name: Benchmark Bun runtime path
+        shell: bash
+        run: |
+          set -euo pipefail
+          METRICS="$RUNNER_TEMP/bun-runtime.tsv"
+          : > "$METRICS"
+
+          measure() {
+            local label="$1"
+            shift
+            local start end
+            start="$(date +%s%N)"
+            "$@"
+            end="$(date +%s%N)"
+            printf '%s\t%d\n' "$label" "$(( (end - start) / 1000000 ))" >> "$METRICS"
+          }
+
+          rm -rf node_modules dist
+          measure install_ms bun install --frozen-lockfile --ignore-scripts
+          measure test_ms bun test
+          measure pwa_ms bun run check:pwa
+          measure typecheck_ms bun run typecheck
+          measure build_ms bun run build
+
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  dist/#  #' > "$RUNNER_TEMP/bun-runtime-dist-manifest.sha256"
+          cp "$METRICS" "$RUNNER_TEMP/bun-runtime-metrics.tsv"
+
+          {
+            echo '### Full Bun runtime'
+            echo '| Step | milliseconds |'
+            echo '|---|---:|'
+            awk -F '\t' '{printf "| %s | %s |\n", $1, $2}' "$METRICS"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Download Node baseline manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: bun-benchmark-node-baseline
+          path: ${{ runner.temp }}/node-baseline
+      - name: Verify build output is byte-for-byte equivalent
+        shell: bash
+        run: cmp "$RUNNER_TEMP/node-baseline/node-dist-manifest.sha256" "$RUNNER_TEMP/bun-runtime-dist-manifest.sha256"
+      - name: Check repository remains unchanged except candidate bun.lock
+        shell: bash
+        run: |
+          git diff --exit-code -- package.json package-lock.json
+          test -z "$(git status --short --untracked-files=no)"
+      - name: Upload Bun runtime evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-benchmark-runtime
+          path: |
+            ${{ runner.temp }}/bun-runtime-metrics.tsv
+            ${{ runner.temp }}/bun-runtime-dist-manifest.sha256
+          if-no-files-found: error
