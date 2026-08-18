@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const auditFinalizeTimeout = 2 * time.Second
+
 type CallMetadata struct {
 	Protocol        string
 	ProtocolVersion string
@@ -103,19 +105,22 @@ func (s *AuditedService) Call(ctx context.Context, principal Principal, metadata
 		durationMS = 0
 	}
 
+	auditCtx, cancelAudit := context.WithTimeout(context.WithoutCancel(ctx), auditFinalizeTimeout)
+	defer cancelAudit()
+
 	if callErr != nil {
 		code := CodeInternal
 		var adapterErr *Error
 		if errors.As(callErr, &adapterErr) {
 			code = adapterErr.Code
 		}
-		if err := s.recorder.CompleteFailure(ctx, auditID, AuditFailure{ErrorCode: code, DurationMS: durationMS}); err != nil {
+		if err := s.recorder.CompleteFailure(auditCtx, auditID, AuditFailure{ErrorCode: code, DurationMS: durationMS}); err != nil {
 			return Result{}, adapterError(CodeAuditUnavailable, "agent tool audit is unavailable", err)
 		}
 		return Result{}, callErr
 	}
 
-	if err := s.recorder.CompleteSuccess(ctx, auditID, AuditSuccess{
+	if err := s.recorder.CompleteSuccess(auditCtx, auditID, AuditSuccess{
 		OutputSHA256: sha256Hex(result.Data),
 		DataAsOf:     cloneTime(result.AsOf),
 		DurationMS:   durationMS,
