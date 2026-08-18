@@ -18,6 +18,7 @@ func TestDefinitionsExposeOnlyImplementedReadAndSimulationCapabilities(t *testin
 		ToolGetGoalStatus,
 		ToolGetHouseholdOverview,
 		ToolGetSafeToSpend,
+		ToolSimulateExtraDebtPayment,
 		ToolSimulateGoal,
 		ToolSimulatePurchase,
 	}
