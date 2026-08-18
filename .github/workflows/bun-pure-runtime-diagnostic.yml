@@ -1,0 +1,43 @@
+name: Bun Pure Runtime Diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: '1.3.14'
+
+jobs:
+  pure-bun-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Prepare Bun dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf node_modules bun.lock
+          bun install --lockfile-only --ignore-scripts
+          bun install --frozen-lockfile --ignore-scripts
+      - name: Show runtime resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'system node: '
+          node --version
+          printf 'plain bun run resolves node to: '
+          bun which node
+          printf 'forced bun run resolves node to: '
+          bun --bun which node
+          printf 'vue-tsc shebang: '
+          head -n 1 node_modules/vue-tsc/bin/vue-tsc.js
+      - name: Force vue-tsc onto Bun runtime
+        run: bun run --bun typecheck
