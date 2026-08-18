@@ -172,6 +172,55 @@ func TestSecureHTTPHandlerOriginPolicy(t *testing.T) {
 	}
 }
 
+func TestSecureHTTPHandlerRejectsOversizedBodyBeforeDispatch(t *testing.T) {
+	calls := 0
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNoContent)
+	})
+	opts := testSecurityOptions()
+	opts.MaxBodyBytes = 8
+	handler, err := NewSecureHTTPHandler(next, opts)
+	if err != nil {
+		t.Fatalf("NewSecureHTTPHandler: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		body interface{ Read([]byte) (int, error) }
+	}{
+		{name: "known content length", body: strings.NewReader("123456789")},
+		{name: "unknown content length", body: &unknownLengthReader{reader: strings.NewReader("123456789")}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			before := calls
+			request := httptest.NewRequest(http.MethodPost, "https://finance.example/mcp", tc.body)
+			request.Header.Set("Authorization", "Bearer correct-horse-battery-staple")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("status=%d want 413 body=%q", response.Code, response.Body.String())
+			}
+			if calls != before {
+				t.Fatalf("next invoked for oversized body")
+			}
+			if strings.Contains(response.Body.String(), "123456789") {
+				t.Fatalf("request body leaked in response: %q", response.Body.String())
+			}
+			assertSecurityErrorCode(t, response, "payload_too_large")
+		})
+	}
+}
+
+type unknownLengthReader struct {
+	reader *strings.Reader
+}
+
+func (r *unknownLengthReader) Read(p []byte) (int, error) {
+	return r.reader.Read(p)
+}
+
 func authenticatedSecurityRequest(method, origin string) *http.Request {
 	request := httptest.NewRequest(method, "https://finance.example/mcp", nil)
 	request.Header.Set("Authorization", "Bearer correct-horse-battery-staple")
