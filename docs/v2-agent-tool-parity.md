@@ -21,15 +21,16 @@ MCP `tools/list` must not advertise a target capability until the selected relea
 | `simulate_purchase` | READY | purchase scenario exists for `amount_minor`/`currency`; `category_ref` and `date` remain deferred until Finance Core consumes them with defined deterministic semantics |
 | `get_goal_status` | READY | `API.Goals` exists; historical `as_of` remains deferred until the core exposes that contract |
 | `simulate_goal` | READY | `API.SimulateGoal` copies the scoped goal, changes only the proposed monthly contribution, and delegates projection to the existing deterministic `goals.ProjectGoal` primitive |
-| `get_asset_allocation` | CORE-PARITY-REQUIRED | portfolio summarization primitives exist but position/valuation data is not wired into the app-level Finance Core contract; asset classes must not be inferred from insufficient account metadata |
+| `get_asset_allocation` | READY | `API.AssetAllocation` derives the current household allocation only from provable account-level asset balances, delegates totals/shares to `portfolio.Summarize`, maps cash/checking/virtual to `cash` and savings/CD to `deposit`, reports coarse investment/receivable/unknown assets as `other` with partial-quality warnings instead of inventing position classes, excludes liabilities/hidden/container accounts, and omits cross-currency balances when Finance Core has no explicit FX valuation |
 | `generate_monthly_report` | READY | `API.MonthlyReport(period)` exists; adapter maps `year`/`month` to `YYYY-MM` |
 
 ## Agent Adapter allowlist
 
-The verified protocol-neutral boundary currently contains exactly eleven names:
+The verified protocol-neutral boundary contains exactly twelve names:
 
 ```text
 generate_monthly_report
+get_asset_allocation
 get_budget_status
 get_cashflow
 get_debt_status
@@ -42,8 +43,8 @@ simulate_goal
 simulate_purchase
 ```
 
-The original seven are exercised by `TestAgentAdapterDeterministicParity`. Safe-to-spend and goal simulation are additionally exercised by `TestAgentAdapterPhaseOneDeterministicParity`. Extra debt payment is exercised by `TestAgentAdapterExtraDebtPaymentParity`. Spending analysis is exercised by `TestAgentAdapterSpendingAnalysisDeterministicParity`. These parity suites compare direct `appapi.API` results with Agent Adapter business payloads for the same scoped household, inputs, clock, and deterministic fixtures rather than duplicating financial calculations in the adapter.
+The original seven are exercised by `TestAgentAdapterDeterministicParity`. Safe-to-spend and goal simulation are additionally exercised by `TestAgentAdapterPhaseOneDeterministicParity`. Extra debt payment is exercised by `TestAgentAdapterExtraDebtPaymentParity`. Spending analysis is exercised by `TestAgentAdapterSpendingAnalysisDeterministicParity`. Asset allocation is exercised by `TestAgentAdapterAssetAllocationDeterministicParity`, while the adapter boundary test additionally proves server-injected household scope, strict empty input, metadata preservation, and exact typed business-payload passthrough. These parity suites compare direct `appapi.API` results with Agent Adapter business payloads for the same scoped household, inputs, clock, and deterministic fixtures rather than duplicating financial calculations in the adapter.
 
 ## Release rule
 
-The approved 12-tool list remains the V2 target contract; this matrix controls implementation order rather than reducing scope. Before MCP transport can claim V2.0 tool-contract completion, every capability selected for that release must be `READY`, registered from the Agent Adapter allowlist, and covered by parity, authorization, audit, and protocol tests.
+The approved 12-tool list is now fully represented by `READY` rows. MCP transport may claim automated V2.0 tool-contract completion only on an exact candidate commit where all twelve names are registered from this Agent Adapter allowlist and parity, authorization, audit, protocol, CI, Edge Security, and MCP Security gates are green. Real OpenClaw/deployed-endpoint acceptance remains a separate production-release gate.
