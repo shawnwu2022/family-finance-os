@@ -58,6 +58,7 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 	}
 
 	expected := sha256.Sum256(append([]byte(nil), opts.Token...))
+	semaphore := make(chan struct{}, opts.MaxConcurrent)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !allowedRequestOrigin(r, trustedOrigins) {
 			writeSecurityError(w, http.StatusForbidden, "forbidden", "MCP request origin is not allowed")
@@ -66,6 +67,14 @@ func NewSecureHTTPHandler(next http.Handler, opts SecurityOptions) (http.Handler
 		if !authorizedBearer(r, expected) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeSecurityError(w, http.StatusUnauthorized, "unauthorized", "MCP bearer token is invalid")
+			return
+		}
+
+		select {
+		case semaphore <- struct{}{}:
+			defer func() { <-semaphore }()
+		default:
+			writeSecurityError(w, http.StatusServiceUnavailable, "busy", "MCP endpoint is busy")
 			return
 		}
 
