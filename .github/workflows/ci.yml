@@ -112,6 +112,19 @@ jobs:
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
+      - name: Verify stable MCP SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mcp_version="$(go list -m -f '{{.Version}}' github.com/modelcontextprotocol/go-sdk)"
+          if [[ "$mcp_version" != "v1.6.1" ]]; then
+            echo "expected stable MCP Go SDK v1.6.1, got $mcp_version" >&2
+            exit 1
+          fi
+          if [[ "$mcp_version" == *-* ]]; then
+            echo "pre-release MCP SDK versions are forbidden in the production dependency graph: $mcp_version" >&2
+            exit 1
+          fi
       - name: Verify formatting
         shell: bash
         run: |
@@ -121,6 +134,8 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: MCP adapter contract
+        run: go test ./internal/mcpadapter -v
       - name: Vulnerability scan
         run: govulncheck ./...
       - name: PostgreSQL integration
