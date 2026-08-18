@@ -28,6 +28,7 @@ type FinanceBackend interface {
 	Debts(context.Context, int64) (server.DebtsResponse, error)
 	Goals(context.Context, int64) (server.GoalsResponse, error)
 	SafeToSpend(context.Context, int64) (server.SafeToSpendResponse, error)
+	SpendingAnalysis(context.Context, int64, string, int) (server.SpendingAnalysisResponse, error)
 	SimulateExtraDebtPayment(context.Context, int64, int64, int64) (server.DebtExtraPaymentSimulationResponse, error)
 	SimulateGoal(context.Context, int64, int64, int64) (server.GoalSimulationResponse, error)
 	Scenario(context.Context, server.ScenarioRequest) (server.ScenarioResponse, error)
@@ -123,6 +124,18 @@ func (s *Service) Call(ctx context.Context, principal Principal, name ToolName, 
 		value, err := s.backend.SafeToSpend(ctx, principal.HouseholdID)
 		asOf := value.DataAsOf
 		return encodeBackendResult(value, err, &asOf, value.Quality, value.Warnings)
+
+	case ToolGetSpendingAnalysis:
+		input, err := decodeStrict[SpendingAnalysisInput](arguments)
+		if err != nil {
+			return Result{}, err
+		}
+		if !periodPattern.MatchString(input.Period) || input.ComparePeriods < 0 || input.ComparePeriods > 12 {
+			return Result{}, adapterError(CodeInvalidArgument, "period or compare_periods is invalid", nil)
+		}
+		value, backendErr := s.backend.SpendingAnalysis(ctx, principal.HouseholdID, input.Period, input.ComparePeriods)
+		asOf := value.DataAsOf
+		return encodeBackendResult(value, backendErr, &asOf, value.Quality, value.Warnings)
 
 	case ToolSimulateExtraDebtPayment:
 		input, err := decodeStrict[DebtExtraPaymentInput](arguments)
