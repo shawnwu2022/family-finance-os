@@ -77,8 +77,8 @@ func TestNewServerRegistersExactlyAuditedReadyTools(t *testing.T) {
 	}
 
 	definitions := audited.Definitions()
-	if got, want := len(listed.Tools), len(definitions); got != want || got != 10 {
-		t.Fatalf("tool count=%d want=%d (READY=10)", got, want)
+	if got, want := len(listed.Tools), len(definitions); got != want || got != 11 {
+		t.Fatalf("tool count=%d want=%d (READY=11)", got, want)
 	}
 
 	byName := make(map[string]agentadapter.ToolDefinition, len(definitions))
