@@ -27,16 +27,14 @@ jobs:
           rm -rf node_modules bun.lock
           bun install --lockfile-only --ignore-scripts
           bun install --frozen-lockfile --ignore-scripts
-      - name: Show runtime resolution
+      - name: Show Node-shebang evidence
         shell: bash
         run: |
           set -euo pipefail
-          printf 'system node: '
+          printf 'system node path: '
+          command -v node
+          printf 'system node version: '
           node --version
-          printf 'plain bun run resolves node to: '
-          bun which node
-          printf 'forced bun run resolves node to: '
-          bun --bun which node
           printf 'vue-tsc shebang: '
           head -n 1 node_modules/vue-tsc/bin/vue-tsc.js
       - name: Force vue-tsc onto Bun runtime
