@@ -3,6 +3,7 @@ package mcpadapter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -65,11 +66,60 @@ func NewServer(service *agentadapter.AuditedService, opts ServerOptions) (*mcp.S
 				IdempotentHint:  true,
 				OpenWorldHint:   boolPointer(false),
 			},
-		}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return toolErrorResult(agentadapter.CodeInternal, "tool call unavailable"), nil
-		})
+		}, toolHandler(service, opts.Principal, definition.Name))
 	}
 	return server, nil
+}
+
+func toolHandler(service *agentadapter.AuditedService, principal agentadapter.Principal, name agentadapter.ToolName) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if req == nil || req.Params == nil || req.Session == nil {
+			return toolErrorResult(agentadapter.CodeInternal, "MCP request metadata unavailable"), nil
+		}
+		initialize := req.Session.InitializeParams()
+		if initialize == nil || strings.TrimSpace(initialize.ProtocolVersion) == "" {
+			return toolErrorResult(agentadapter.CodeInternal, "MCP session metadata unavailable"), nil
+		}
+
+		metadata := agentadapter.CallMetadata{
+			Protocol:        "mcp",
+			ProtocolVersion: initialize.ProtocolVersion,
+		}
+		if initialize.ClientInfo != nil {
+			metadata.ClientName = initialize.ClientInfo.Name
+			metadata.ClientVersion = initialize.ClientInfo.Version
+		}
+
+		result, err := service.Call(ctx, principal, metadata, name, req.Params.Arguments)
+		if err != nil {
+			code := agentadapter.CodeInternal
+			message := "tool call failed"
+			var adapterErr *agentadapter.Error
+			if errors.As(err, &adapterErr) {
+				code = adapterErr.Code
+				if strings.TrimSpace(adapterErr.Message) != "" {
+					message = adapterErr.Message
+				}
+			}
+			return toolErrorResult(code, message), nil
+		}
+		return toolSuccessResult(result), nil
+	}
+}
+
+func toolSuccessResult(result agentadapter.Result) *mcp.CallToolResult {
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return toolErrorResult(agentadapter.CodeInternal, "tool result unavailable")
+	}
+	var structured map[string]any
+	if err := json.Unmarshal(payload, &structured); err != nil {
+		return toolErrorResult(agentadapter.CodeInternal, "tool result unavailable")
+	}
+	return &mcp.CallToolResult{
+		Content:           []mcp.Content{&mcp.TextContent{Text: string(payload)}},
+		StructuredContent: structured,
+	}
 }
 
 func validateObjectSchema(schema json.RawMessage) error {
