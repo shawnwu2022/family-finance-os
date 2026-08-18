@@ -35,7 +35,7 @@ func TestSimulateGoalUsesExistingProjectionWithoutMutatingStoredGoal(t *testing.
 				LiquidityFloor: money.Money{Minor: 20_000, Currency: "CNY"},
 			},
 		},
-		plan: budget.BudgetPlan{ID: 1, HouseholdID: 42, Period: "2026-08", Currency: "CNY"},
+		plan:  budget.BudgetPlan{ID: 1, HouseholdID: 42, Period: "2026-08", Currency: "CNY"},
 		goals: []goals.FinancialGoal{original},
 	}
 	book := fakeLedger{
