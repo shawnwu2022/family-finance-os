@@ -102,6 +102,85 @@ func TestSecureHTTPHandlerDoesNotAcceptQueryTokenOrLeakWrongBearer(t *testing.T)
 	}
 }
 
+func TestSecureHTTPHandlerOriginPolicy(t *testing.T) {
+	calls := 0
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler, err := NewSecureHTTPHandler(next, testSecurityOptions())
+	if err != nil {
+		t.Fatalf("NewSecureHTTPHandler: %v", err)
+	}
+
+	allowed := []struct {
+		name   string
+		method string
+		origin string
+		host   string
+		proto  string
+	}{
+		{name: "non-browser no origin", method: http.MethodPost},
+		{name: "same origin post", method: http.MethodPost, origin: "https://finance.example", host: "finance.example", proto: "https"},
+		{name: "same origin get", method: http.MethodGet, origin: "https://finance.example", host: "finance.example", proto: "https"},
+		{name: "trusted cross origin", method: http.MethodPost, origin: "https://trusted.example", host: "finance.example", proto: "https"},
+	}
+	for _, tc := range allowed {
+		t.Run(tc.name, func(t *testing.T) {
+			request := authenticatedSecurityRequest(tc.method, tc.origin)
+			if tc.host != "" {
+				request.Host = tc.host
+			}
+			if tc.proto != "" {
+				request.Header.Set("X-Forwarded-Proto", tc.proto)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusNoContent {
+				t.Fatalf("status=%d want 204 body=%q", response.Code, response.Body.String())
+			}
+		})
+	}
+
+	rejected := []struct {
+		name   string
+		method string
+		origin string
+	}{
+		{name: "null post", method: http.MethodPost, origin: "null"},
+		{name: "malformed post", method: http.MethodPost, origin: "://bad"},
+		{name: "untrusted post", method: http.MethodPost, origin: "https://evil.example"},
+		{name: "untrusted get", method: http.MethodGet, origin: "https://evil.example"},
+		{name: "wrong scheme", method: http.MethodPost, origin: "http://finance.example"},
+	}
+	for _, tc := range rejected {
+		t.Run(tc.name, func(t *testing.T) {
+			before := calls
+			request := authenticatedSecurityRequest(tc.method, tc.origin)
+			request.Host = "finance.example"
+			request.Header.Set("X-Forwarded-Proto", "https")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("status=%d want 403 body=%q", response.Code, response.Body.String())
+			}
+			if calls != before {
+				t.Fatalf("next invoked for rejected origin %q", tc.origin)
+			}
+			assertSecurityErrorCode(t, response, "forbidden")
+		})
+	}
+}
+
+func authenticatedSecurityRequest(method, origin string) *http.Request {
+	request := httptest.NewRequest(method, "https://finance.example/mcp", nil)
+	request.Header.Set("Authorization", "Bearer correct-horse-battery-staple")
+	if origin != "" {
+		request.Header.Set("Origin", origin)
+	}
+	return request
+}
+
 func assertUnauthorized(t *testing.T, handler http.Handler, method string, authorization []string) {
 	t.Helper()
 	request := httptest.NewRequest(method, "https://finance.example/mcp", nil)
@@ -116,6 +195,11 @@ func assertUnauthorized(t *testing.T, handler http.Handler, method string, autho
 	if got := response.Header().Get("WWW-Authenticate"); got != "Bearer" {
 		t.Fatalf("WWW-Authenticate=%q want Bearer", got)
 	}
+	assertSecurityErrorCode(t, response, "unauthorized")
+}
+
+func assertSecurityErrorCode(t *testing.T, response *httptest.ResponseRecorder, want string) {
+	t.Helper()
 	var payload struct {
 		ErrorCode string `json:"error_code"`
 		Message   string `json:"message"`
@@ -123,8 +207,8 @@ func assertUnauthorized(t *testing.T, handler http.Handler, method string, autho
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode error response: %v body=%q", err, response.Body.String())
 	}
-	if payload.ErrorCode != "unauthorized" || strings.TrimSpace(payload.Message) == "" {
-		t.Fatalf("payload=%#v", payload)
+	if payload.ErrorCode != want || strings.TrimSpace(payload.Message) == "" {
+		t.Fatalf("payload=%#v want error_code=%q", payload, want)
 	}
 }
 
