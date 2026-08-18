@@ -77,8 +77,8 @@ func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if len(listed.Tools) != 9 {
-		t.Fatalf("tool count=%d want 9", len(listed.Tools))
+	if len(listed.Tools) != 10 {
+		t.Fatalf("tool count=%d want 10", len(listed.Tools))
 	}
 }
 
