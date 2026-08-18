@@ -17,10 +17,10 @@ type SpendingPeriodResponse struct {
 }
 
 type SpendingAnalysisResponse struct {
-	DataAsOf   time.Time                `json:"data_as_of"`
-	Quality    string                   `json:"quality"`
-	Currency   string                   `json:"currency"`
-	Current    SpendingPeriodResponse   `json:"current"`
+	DataAsOf    time.Time                `json:"data_as_of"`
+	Quality     string                   `json:"quality"`
+	Currency    string                   `json:"currency"`
+	Current     SpendingPeriodResponse   `json:"current"`
 	Comparisons []SpendingPeriodResponse `json:"comparisons"`
-	Warnings   []string                 `json:"warnings,omitempty"`
+	Warnings    []string                 `json:"warnings,omitempty"`
 }
