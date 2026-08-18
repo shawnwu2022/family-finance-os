@@ -176,3 +176,19 @@ type JobRun struct {
 	FinishedAt   pgtype.Timestamptz `json:"finished_at"`
 	ErrorCode    pgtype.Text        `json:"error_code"`
 }
+
+type PortfolioAssetSnapshot struct {
+	HouseholdID      int64              `json:"household_id"`
+	AssetRef         string             `json:"asset_ref"`
+	Name             string             `json:"name"`
+	AssetClass       string             `json:"asset_class"`
+	ValueMinor       int64              `json:"value_minor"`
+	Currency         string             `json:"currency"`
+	SourceCurrency   string             `json:"source_currency"`
+	ValuationAsOf    pgtype.Timestamptz `json:"valuation_as_of"`
+	FxAsOf           pgtype.Timestamptz `json:"fx_as_of"`
+	SourceAccountRef pgtype.Text        `json:"source_account_ref"`
+	SourceKind       string             `json:"source_kind"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
