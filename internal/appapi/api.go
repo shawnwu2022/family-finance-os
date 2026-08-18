@@ -17,15 +17,17 @@ import (
 	"github.com/shawnwu2022/family-finance-os/internal/household"
 	"github.com/shawnwu2022/family-finance-os/internal/ledger"
 	"github.com/shawnwu2022/family-finance-os/internal/llm"
+	"github.com/shawnwu2022/family-finance-os/internal/portfolio"
 	"github.com/shawnwu2022/family-finance-os/internal/scenario"
 	"github.com/shawnwu2022/family-finance-os/internal/server"
 	"github.com/shawnwu2022/family-finance-os/pkg/money"
 )
 
 var (
-	ErrInvalidDependencies = errors.New("invalid app API dependencies")
-	ErrAdvisorUnavailable  = errors.New("finance advisor is not configured")
-	ErrUnsupportedScenario = errors.New("scenario is not exposed by the V1 HTTP API")
+	ErrInvalidDependencies  = errors.New("invalid app API dependencies")
+	ErrAdvisorUnavailable   = errors.New("finance advisor is not configured")
+	ErrPortfolioUnavailable = errors.New("portfolio asset snapshot store is not configured")
+	ErrUnsupportedScenario  = errors.New("scenario is not exposed by the V1 HTTP API")
 )
 
 type DebtSnapshot struct {
@@ -53,18 +55,26 @@ type AdvisorRunner interface {
 	Advise(ctx context.Context, request advisor.AdviceRequest) (advisor.AdviceResult, error)
 }
 
+type AssetSnapshotStore interface {
+	ListAssetSnapshots(context.Context, int64) ([]portfolio.AssetSnapshot, error)
+	UpsertAssetSnapshot(context.Context, int64, portfolio.AssetSnapshot) (portfolio.AssetSnapshot, error)
+	DeleteAssetSnapshot(context.Context, int64, string) error
+}
+
 type Dependencies struct {
-	Ledger  ledger.Ledger
-	Planner Planner
-	Advisor AdvisorRunner
-	Now     func() time.Time
+	Ledger     ledger.Ledger
+	Planner    Planner
+	Advisor    AdvisorRunner
+	Portfolio  AssetSnapshotStore
+	Now        func() time.Time
 }
 
 type API struct {
-	ledger  ledger.Ledger
-	planner Planner
-	advisor AdvisorRunner
-	now     func() time.Time
+	ledger         ledger.Ledger
+	planner        Planner
+	advisor        AdvisorRunner
+	assetSnapshots AssetSnapshotStore
+	now            func() time.Time
 }
 
 func New(deps Dependencies) (*API, error) {
@@ -74,7 +84,13 @@ func New(deps Dependencies) (*API, error) {
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
-	return &API{ledger: deps.Ledger, planner: deps.Planner, advisor: deps.Advisor, now: deps.Now}, nil
+	return &API{
+		ledger:         deps.Ledger,
+		planner:        deps.Planner,
+		advisor:        deps.Advisor,
+		assetSnapshots: deps.Portfolio,
+		now:            deps.Now,
+	}, nil
 }
 
 func (a *API) SetAdvisor(runner AdvisorRunner) {
