@@ -69,6 +69,13 @@ func NewAudited(service *Service, recorder AuditRecorder, now func() time.Time) 
 	return &AuditedService{service: service, recorder: recorder, now: now}, nil
 }
 
+func (s *AuditedService) Definitions() []ToolDefinition {
+	if s == nil || s.service == nil {
+		return nil
+	}
+	return s.service.Definitions()
+}
+
 func (s *AuditedService) Call(ctx context.Context, principal Principal, metadata CallMetadata, name ToolName, arguments json.RawMessage) (Result, error) {
 	if strings.TrimSpace(metadata.Protocol) == "" || strings.TrimSpace(metadata.ProtocolVersion) == "" {
 		return Result{}, adapterError(CodeInvalidArgument, "audit protocol metadata is required", nil)
