@@ -105,12 +105,12 @@ type phaseOneBackend struct {
 	safe server.SafeToSpendResponse
 	goal server.GoalSimulationResponse
 
-	safeCalls          int
-	safeHouseholdID    int64
-	goalCalls          int
-	goalHouseholdID    int64
-	goalID             int64
-	goalContribution   int64
+	safeCalls        int
+	safeHouseholdID  int64
+	goalCalls        int
+	goalHouseholdID  int64
+	goalID           int64
+	goalContribution int64
 }
 
 func (b *phaseOneBackend) SafeToSpend(_ context.Context, householdID int64) (server.SafeToSpendResponse, error) {
