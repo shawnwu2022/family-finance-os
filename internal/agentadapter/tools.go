@@ -8,17 +8,18 @@ import (
 type ToolName string
 
 const (
-	ToolGetHouseholdOverview     ToolName = "get_household_overview"
-	ToolGetCashflow              ToolName = "get_cashflow"
+	ToolGenerateMonthlyReport    ToolName = "generate_monthly_report"
+	ToolGetAssetAllocation       ToolName = "get_asset_allocation"
 	ToolGetBudgetStatus          ToolName = "get_budget_status"
+	ToolGetCashflow              ToolName = "get_cashflow"
 	ToolGetDebtStatus            ToolName = "get_debt_status"
 	ToolGetGoalStatus            ToolName = "get_goal_status"
+	ToolGetHouseholdOverview     ToolName = "get_household_overview"
 	ToolGetSafeToSpend           ToolName = "get_safe_to_spend"
 	ToolGetSpendingAnalysis      ToolName = "get_spending_analysis"
 	ToolSimulateExtraDebtPayment ToolName = "simulate_extra_debt_payment"
 	ToolSimulateGoal             ToolName = "simulate_goal"
 	ToolSimulatePurchase         ToolName = "simulate_purchase"
-	ToolGenerateMonthlyReport    ToolName = "generate_monthly_report"
 )
 
 type EmptyInput struct{}
@@ -83,21 +84,15 @@ var initialDefinitions = []ToolDefinition{
 		ReadOnly:    true,
 	},
 	{
+		Name:        ToolGetSpendingAnalysis,
+		Description: "Get deterministic net household spending for one YYYY-MM period and zero to twelve prior complete calendar months, aggregated by ledger category without merchant inference. Preserve quality and warning metadata.",
+		InputSchema: spendingAnalysisInputSchema,
+		ReadOnly:    true,
+	},
+	{
 		Name:        ToolGetBudgetStatus,
 		Description: "Get deterministic Finance Core budget status for one YYYY-MM period. Preserve quality and warning metadata.",
 		InputSchema: periodInputSchema,
-		ReadOnly:    true,
-	},
-	{
-		Name:        ToolGetDebtStatus,
-		Description: "Get current deterministic Finance Core household debt status. Preserve quality and warning metadata.",
-		InputSchema: emptyInputSchema,
-		ReadOnly:    true,
-	},
-	{
-		Name:        ToolGetGoalStatus,
-		Description: "Get deterministic Finance Core household goal status. Preserve quality and warning metadata.",
-		InputSchema: emptyInputSchema,
 		ReadOnly:    true,
 	},
 	{
@@ -107,9 +102,9 @@ var initialDefinitions = []ToolDefinition{
 		ReadOnly:    true,
 	},
 	{
-		Name:        ToolGetSpendingAnalysis,
-		Description: "Get deterministic net household spending for one YYYY-MM period and zero to twelve prior complete calendar months, aggregated by ledger category without merchant inference. Preserve quality and warning metadata.",
-		InputSchema: spendingAnalysisInputSchema,
+		Name:        ToolGetDebtStatus,
+		Description: "Get current deterministic Finance Core household debt status. Preserve quality and warning metadata.",
+		InputSchema: emptyInputSchema,
 		ReadOnly:    true,
 	},
 	{
@@ -119,15 +114,27 @@ var initialDefinitions = []ToolDefinition{
 		ReadOnly:    true,
 	},
 	{
+		Name:        ToolSimulatePurchase,
+		Description: "Simulate a proposed purchase using deterministic Finance Core rules without persisting changes. Preserve warning metadata.",
+		InputSchema: purchaseInputSchema,
+		ReadOnly:    true,
+	},
+	{
+		Name:        ToolGetGoalStatus,
+		Description: "Get deterministic Finance Core household goal status. Preserve quality and warning metadata.",
+		InputSchema: emptyInputSchema,
+		ReadOnly:    true,
+	},
+	{
 		Name:        ToolSimulateGoal,
 		Description: "Simulate a monthly contribution for an existing household goal using deterministic Finance Core projection rules without persisting changes. Preserve quality and warning metadata.",
 		InputSchema: goalSimulationInputSchema,
 		ReadOnly:    true,
 	},
 	{
-		Name:        ToolSimulatePurchase,
-		Description: "Simulate a proposed purchase using deterministic Finance Core rules without persisting changes. Preserve warning metadata.",
-		InputSchema: purchaseInputSchema,
+		Name:        ToolGetAssetAllocation,
+		Description: "Get deterministic household asset allocation from provable account-level balances. Cash and deposit classes are mapped directly; coarse investment, receivable, or unknown accounts are reported as other with partial-quality warnings rather than inferred as positions. Cross-currency balances are excluded when no Finance Core FX valuation exists.",
+		InputSchema: emptyInputSchema,
 		ReadOnly:    true,
 	},
 	{
