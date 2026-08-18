@@ -17,6 +17,8 @@ func TestDefinitionsExposeOnlyImplementedReadAndSimulationCapabilities(t *testin
 		ToolGetDebtStatus,
 		ToolGetGoalStatus,
 		ToolGetHouseholdOverview,
+		ToolGetSafeToSpend,
+		ToolSimulateGoal,
 		ToolSimulatePurchase,
 	}
 	if names := gotNames(got); !reflect.DeepEqual(names, want) {
