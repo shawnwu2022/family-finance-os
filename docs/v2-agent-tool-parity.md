@@ -13,7 +13,7 @@ MCP `tools/list` must not advertise a target capability until the selected relea
 |---|---|---|
 | `get_household_overview` | READY | `API.Overview` exists; adapter uses the current Finance Core snapshot, while historical `as_of` remains deferred until the core exposes that contract |
 | `get_cashflow` | READY | `API.Cashflow(period)` exists |
-| `get_spending_analysis` | CORE-PARITY-REQUIRED | no app-level spending-analysis operation exists; comparison/merchant/category semantics must be designed before implementation |
+| `get_spending_analysis` | READY | `API.SpendingAnalysis(period, compare_periods)` performs deterministic net-spending aggregation for the selected household-local calendar month plus `0..12` prior complete months; only normalized expense/refund events are counted, transfer/credit-card repayment/income/balance-adjustment events are excluded, refunds may make net spending negative, category names come only from ledger metadata, and cross-currency/unknown/missing-category cases are explicitly partial rather than inferred |
 | `get_budget_status` | READY | `API.Budget(period)` exists |
 | `get_safe_to_spend` | READY | `API.SafeToSpend` exposes the existing deterministic snapshot result and all six components; current snapshot only, because historical `as_of` / `period_end` liquidity cannot be reconstructed truthfully from the current account-balance model |
 | `get_debt_status` | READY | `API.Debts` exists; historical `as_of` remains deferred until the core exposes that contract |
@@ -26,7 +26,7 @@ MCP `tools/list` must not advertise a target capability until the selected relea
 
 ## Agent Adapter allowlist
 
-The verified protocol-neutral boundary currently contains exactly ten names:
+The verified protocol-neutral boundary currently contains exactly eleven names:
 
 ```text
 generate_monthly_report
@@ -36,12 +36,13 @@ get_debt_status
 get_goal_status
 get_household_overview
 get_safe_to_spend
+get_spending_analysis
 simulate_extra_debt_payment
 simulate_goal
 simulate_purchase
 ```
 
-The original seven are exercised by `TestAgentAdapterDeterministicParity`. Safe-to-spend and goal simulation are additionally exercised by `TestAgentAdapterPhaseOneDeterministicParity`. Extra debt payment is exercised by `TestAgentAdapterExtraDebtPaymentParity`, which compares the direct `API.SimulateExtraDebtPayment` result with the Agent Adapter result for the same scoped debt contract, proposal, clock, and deterministic fixture. The parity suites compare Adapter business payloads with direct `appapi.API` results rather than duplicating financial calculations in the adapter.
+The original seven are exercised by `TestAgentAdapterDeterministicParity`. Safe-to-spend and goal simulation are additionally exercised by `TestAgentAdapterPhaseOneDeterministicParity`. Extra debt payment is exercised by `TestAgentAdapterExtraDebtPaymentParity`. Spending analysis is exercised by `TestAgentAdapterSpendingAnalysisDeterministicParity`. These parity suites compare direct `appapi.API` results with Agent Adapter business payloads for the same scoped household, inputs, clock, and deterministic fixtures rather than duplicating financial calculations in the adapter.
 
 ## Release rule
 
