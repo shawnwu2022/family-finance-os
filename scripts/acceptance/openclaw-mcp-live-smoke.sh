@@ -58,6 +58,7 @@ expected_tools=(
   get_goal_status
   get_household_overview
   get_safe_to_spend
+  get_spending_analysis
   simulate_extra_debt_payment
   simulate_goal
   simulate_purchase
