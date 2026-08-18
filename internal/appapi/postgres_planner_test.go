@@ -93,8 +93,15 @@ func TestPostgresPlannerRoundTripIntegration(t *testing.T) {
 	if len(debts) != 1 || debts[0].Name != "active card" || debts[0].APR != "0.18" || debts[0].ScheduledPayment.Minor != 25000 {
 		t.Fatalf("debts=%#v", debts)
 	}
-	if debts[0].OriginalPrincipal.Minor != 300000 || debts[0].RateType != "fixed" || debts[0].PrepaymentFeeRate != "0.015" || debts[0].PrepaymentRestrictedMonths != 2 || !debts[0].Revolving {
-		t.Fatalf("debt simulation fields=%#v", debts[0])
+	contract, err := planner.DebtContract(ctx, householdID, debts[0].ID)
+	if err != nil {
+		t.Fatalf("DebtContract: %v", err)
+	}
+	if contract.ID != debts[0].ID || contract.OriginalPrincipal.Minor != 300000 || contract.Balance.Minor != 200000 || contract.Balance.Currency != "CNY" {
+		t.Fatalf("contract identity/balance=%#v", contract)
+	}
+	if contract.APR == nil || contract.APR.String() != "0.18" || string(contract.RateType) != "fixed" || contract.PrepaymentFeeRate == nil || contract.PrepaymentFeeRate.String() != "0.015" || contract.PrepaymentRestrictedMonths != 2 || !contract.Revolving {
+		t.Fatalf("contract simulation fields=%#v", contract)
 	}
 
 	goalList, err := planner.Goals(ctx, householdID)
