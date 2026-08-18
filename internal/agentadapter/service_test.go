@@ -162,32 +162,50 @@ type fakeBackend struct {
 	reportPeriod        string
 }
 
-func (f *fakeBackend) Overview(context.Context, int64) (server.OverviewResponse, error) {
-	panic("use pointer receiver helper")
+func (f *fakeBackend) Overview(_ context.Context, householdID int64) (server.OverviewResponse, error) {
+	f.overviewCalls++
+	f.overviewHouseholdID = householdID
+	return f.overview, f.err
 }
 
-func (f *fakeBackend) Cashflow(context.Context, int64, string) (server.CashflowResponse, error) {
-	panic("use pointer receiver helper")
+func (f *fakeBackend) Cashflow(_ context.Context, householdID int64, period string) (server.CashflowResponse, error) {
+	f.cashflowCalls++
+	f.cashflowHouseholdID = householdID
+	f.cashflowPeriod = period
+	return f.cashflow, f.err
 }
 
-func (f *fakeBackend) Budget(context.Context, int64, string) (server.BudgetResponse, error) {
-	panic("use pointer receiver helper")
+func (f *fakeBackend) Budget(_ context.Context, householdID int64, period string) (server.BudgetResponse, error) {
+	f.budgetCalls++
+	f.budgetHouseholdID = householdID
+	f.budgetPeriod = period
+	return f.budget, f.err
 }
 
-func (f *fakeBackend) Debts(context.Context, int64) (server.DebtsResponse, error) {
-	panic("use pointer receiver helper")
+func (f *fakeBackend) Debts(_ context.Context, householdID int64) (server.DebtsResponse, error) {
+	f.debtsCalls++
+	f.debtsHouseholdID = householdID
+	return f.debts, f.err
 }
 
-func (f *fakeBackend) Goals(context.Context, int64) (server.GoalsResponse, error) {
-	panic("use pointer receiver helper")
+func (f *fakeBackend) Goals(_ context.Context, householdID int64) (server.GoalsResponse, error) {
+	f.goalsCalls++
+	f.goalsHouseholdID = householdID
+	return f.goals, f.err
 }
 
-func (f *fakeBackend) Scenario(context.Context, server.ScenarioRequest) (server.ScenarioResponse, error) {
-	panic("use pointer receiver helper")
+func (f *fakeBackend) Scenario(_ context.Context, request server.ScenarioRequest) (server.ScenarioResponse, error) {
+	f.scenarioCalls++
+	f.scenarioRequest = request
+	f.scenarioRequest.Input = cloneRaw(request.Input)
+	return f.scenario, f.err
 }
 
-func (f *fakeBackend) MonthlyReport(context.Context, int64, string) (report.MonthlyReport, error) {
-	panic("use pointer receiver helper")
+func (f *fakeBackend) MonthlyReport(_ context.Context, householdID int64, period string) (report.MonthlyReport, error) {
+	f.reportCalls++
+	f.reportHouseholdID = householdID
+	f.reportPeriod = period
+	return f.monthly, f.err
 }
 
 func (f *fakeBackend) totalCalls() int {
