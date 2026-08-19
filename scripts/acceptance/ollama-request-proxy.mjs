@@ -6,6 +6,7 @@ import http from "node:http";
 const listenAddress = process.env.OLLAMA_PROXY_LISTEN ?? "127.0.0.1:11435";
 const upstreamBase = new URL(process.env.OLLAMA_PROXY_UPSTREAM ?? "http://127.0.0.1:11434");
 const diagFile = process.env.OLLAMA_PROXY_DIAG_FILE;
+const shadowStripSystem = process.env.OLLAMA_PROXY_SHADOW_STRIP_SYSTEM === "1";
 const workflowDiagFile = process.env.GITHUB_ACTIONS === "true"
   ? "/tmp/family-finance-ollama-boundary-safe.jsonl"
   : undefined;
@@ -97,6 +98,83 @@ function requestSummary(requestId, path, body) {
     optionKeys: Object.keys(body.options ?? {}).sort(),
     options,
   };
+}
+
+function collectStructuredToolCalls(text) {
+  let count = 0;
+  const names = [];
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const candidates = lines.length > 1 ? lines : [text.trim()];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    let value;
+    try {
+      value = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    const calls = Array.isArray(value?.message?.tool_calls) ? value.message.tool_calls : [];
+    for (const call of calls) {
+      count += 1;
+      const name = call?.function?.name;
+      if (typeof name === "string") names.push(name);
+    }
+  }
+  return { count, names };
+}
+
+async function runNoSystemShadow(requestId, path, body) {
+  if (!shadowStripSystem || path !== "/api/chat" || !body || typeof body !== "object" || Array.isArray(body)) {
+    return;
+  }
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  if (!messages.some((entry) => entry?.role === "system")) {
+    return;
+  }
+
+  const shadowBody = {
+    ...body,
+    messages: messages.filter((entry) => entry?.role !== "system"),
+  };
+  const shadowUrl = new URL(path, upstreamBase);
+  let status = null;
+  let shadowNoSystemToolCallCount = 0;
+  let shadowNoSystemToolNames = [];
+
+  try {
+    const response = await fetch(shadowUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(shadowBody),
+    });
+    status = response.status;
+    const bodyText = await response.text();
+    const observed = collectStructuredToolCalls(bodyText);
+    shadowNoSystemToolCallCount = observed.count;
+    shadowNoSystemToolNames = observed.names;
+  } catch (error) {
+    emit({
+      requestId,
+      direction: "shadow-no-system",
+      path,
+      status,
+      shadowNoSystemAttempts: 1,
+      shadowNoSystemToolCallCount,
+      shadowNoSystemToolNames,
+      errorName: error?.name ?? "Error",
+    });
+    return;
+  }
+
+  emit({
+    requestId,
+    direction: "shadow-no-system",
+    path,
+    status,
+    shadowNoSystemAttempts: 1,
+    shadowNoSystemToolCallCount,
+    shadowNoSystemToolNames,
+  });
 }
 
 function createResponseObserver(requestId, path, status) {
@@ -198,8 +276,10 @@ const server = http.createServer((clientReq, clientRes) => {
         parsedBody = undefined;
       }
     }
-    const summary = requestSummary(requestId, path.split("?", 1)[0], parsedBody);
+    const normalizedPath = path.split("?", 1)[0];
+    const summary = requestSummary(requestId, normalizedPath, parsedBody);
     if (summary) emit(summary);
+    void runNoSystemShadow(requestId, normalizedPath, parsedBody);
 
     const upstreamHeaders = { ...clientReq.headers };
     delete upstreamHeaders.host;
@@ -218,7 +298,7 @@ const server = http.createServer((clientReq, clientRes) => {
         const responseHeaders = { ...upstreamRes.headers };
         delete responseHeaders.connection;
         clientRes.writeHead(upstreamRes.statusCode ?? 502, responseHeaders);
-        const observer = createResponseObserver(requestId, path.split("?", 1)[0], upstreamRes.statusCode ?? 502);
+        const observer = createResponseObserver(requestId, normalizedPath, upstreamRes.statusCode ?? 502);
 
         upstreamRes.on("data", (chunk) => {
           observer.observe(chunk);
@@ -226,7 +306,7 @@ const server = http.createServer((clientReq, clientRes) => {
         });
         upstreamRes.on("end", () => {
           clientRes.end();
-          if (path.split("?", 1)[0] === "/api/chat") emit(observer.finish());
+          if (normalizedPath === "/api/chat") emit(observer.finish());
         });
       },
     );
@@ -236,7 +316,7 @@ const server = http.createServer((clientReq, clientRes) => {
         clientRes.writeHead(502, { "content-type": "text/plain" });
       }
       clientRes.end("upstream request failed");
-      emit({ requestId, direction: "proxy-error", path: path.split("?", 1)[0], errorName: error?.name ?? "Error" });
+      emit({ requestId, direction: "proxy-error", path: normalizedPath, errorName: error?.name ?? "Error" });
     });
 
     if (bodyBuffer.length > 0) upstreamReq.write(bodyBuffer);
