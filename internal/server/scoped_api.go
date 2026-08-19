@@ -51,3 +51,27 @@ func (s scopedFinanceAPI) Advisor(ctx context.Context, request AdvisorRequest) (
 func (s scopedFinanceAPI) Reports(ctx context.Context, householdID int64) (ReportsResponse, error) {
 	return s.next.Reports(ctx, householdID)
 }
+
+func (s scopedFinanceAPI) ListPortfolioAssets(ctx context.Context, householdID int64) (PortfolioAssetsResponse, error) {
+	api, ok := s.next.(PortfolioFinanceAPI)
+	if !ok {
+		return PortfolioAssetsResponse{}, errPortfolioFinanceAPIUnavailable
+	}
+	return api.ListPortfolioAssets(ctx, householdID)
+}
+
+func (s scopedFinanceAPI) UpsertPortfolioAsset(ctx context.Context, householdID int64, assetRef string, request PortfolioAssetUpsertRequest) (PortfolioAssetResponse, error) {
+	api, ok := s.next.(PortfolioFinanceAPI)
+	if !ok {
+		return PortfolioAssetResponse{}, errPortfolioFinanceAPIUnavailable
+	}
+	return api.UpsertPortfolioAsset(ctx, householdID, assetRef, request)
+}
+
+func (s scopedFinanceAPI) DeletePortfolioAsset(ctx context.Context, householdID int64, assetRef string) error {
+	api, ok := s.next.(PortfolioFinanceAPI)
+	if !ok {
+		return errPortfolioFinanceAPIUnavailable
+	}
+	return api.DeletePortfolioAsset(ctx, householdID, assetRef)
+}
