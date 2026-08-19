@@ -28,7 +28,6 @@ grep -Fq 'agent_tool_audits' "$provisioner" || fail "provisioner must verify per
 grep -Fq 'bash scripts/acceptance/openclaw-ephemeral-release-acceptance.sh' "$workflow" || fail "release workflow must delegate to the repository provisioner"
 
 # The pinned stable OpenClaw v2026.7.1-2 CLI exposes `openclaw agent --local`.
-# Do not silently drift to newer unreleased `agent exec` / code-mode interfaces.
 grep -Fq 'openclaw agent --local' "$live_smoke" || fail "live smoke must use the pinned stable OpenClaw local agent CLI"
 grep -Fq -- '--agent main' "$live_smoke" || fail "live smoke must select the stable main agent explicitly"
 grep -Fq -- '--message "$prompt"' "$live_smoke" || fail "live smoke must pass the acceptance prompt through --message"
@@ -38,6 +37,14 @@ fi
 if grep -Fq -- '--code-mode direct' "$live_smoke"; then
   fail "pinned OpenClaw v2026.7.1-2 does not expose --code-mode direct"
 fi
+
+# Agent validation must execute in the parent shell. A failing parser inside command
+# substitution can otherwise be masked by a later successful sha256 command.
+if grep -Fq 'read_digest="$(run_agent_check' "$live_smoke" || grep -Fq 'simulation_digest="$(run_agent_check' "$live_smoke"; then
+  fail "agent marker validation must not run inside command substitution"
+fi
+grep -Fq 'run_agent_check read FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest"' "$live_smoke" || fail "read agent validation must write its digest only after validation succeeds"
+grep -Fq 'run_agent_check simulation FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest"' "$live_smoke" || fail "simulation agent validation must write its digest only after validation succeeds"
 
 # Task 2: production-shaped bootstrap must be explicit and fail closed.
 grep -Fq 'docker compose' "$provisioner" || fail "provisioner must run the real Docker Compose stack"
@@ -73,6 +80,8 @@ grep -Eq '^[[:space:]]*bash[[:space:]]+"\$live_smoke"[[:space:]]*$' "$provisione
 grep -Eq '^[[:space:]]*read_audit_count="\$\(query_audit_count get_household_overview\)"' "$provisioner" || fail "provisioner must verify the read-tool audit row"
 grep -Eq '^[[:space:]]*simulation_audit_count="\$\(query_audit_count simulate_purchase\)"' "$provisioner" || fail "provisioner must verify the simulation-tool audit row"
 grep -Fq "status = 'success'" "$provisioner" || fail "provisioner must require successful audit completion"
+grep -Fq 'docker exec -i -e PGPASSWORD=' "$provisioner" || fail "audit verification must feed SQL through psql stdin for variable expansion"
+grep -Fq "<<'SQL'" "$provisioner" || fail "audit verification must use psql stdin rather than an unexpanded -c query"
 grep -Fq 'openclaw_release_acceptance=PASS' "$provisioner" || fail "provisioner must emit the final sanitized PASS marker"
 
 if grep -Eq 'actions/setup-go|go test|github.com/modelcontextprotocol/go-sdk' "$workflow"; then
