@@ -6,6 +6,9 @@ import http from "node:http";
 const listenAddress = process.env.OLLAMA_PROXY_LISTEN ?? "127.0.0.1:11435";
 const upstreamBase = new URL(process.env.OLLAMA_PROXY_UPSTREAM ?? "http://127.0.0.1:11434");
 const diagFile = process.env.OLLAMA_PROXY_DIAG_FILE;
+const workflowDiagFile = process.env.GITHUB_ACTIONS === "true"
+  ? "/tmp/family-finance-ollama-boundary-safe.jsonl"
+  : undefined;
 const maxRequestBytes = 8 * 1024 * 1024;
 
 if (!diagFile) {
@@ -23,6 +26,7 @@ if (!Number.isInteger(listenPort) || listenPort <= 0 || listenPort > 65535) {
 }
 
 const diagFd = openSync(diagFile, "a", 0o600);
+const workflowDiagFd = workflowDiagFile ? openSync(workflowDiagFile, "a", 0o600) : undefined;
 let sequence = 0;
 
 function sha256Json(value) {
@@ -157,6 +161,9 @@ function createResponseObserver(requestId, path, status) {
 function emit(summary) {
   const line = JSON.stringify(summary);
   appendFileSync(diagFd, `${line}\n`, "utf8");
+  if (workflowDiagFd !== undefined) {
+    appendFileSync(workflowDiagFd, `${line}\n`, "utf8");
+  }
   console.log(`ollama_boundary_diag ${line}`);
 }
 
@@ -238,10 +245,13 @@ const server = http.createServer((clientReq, clientRes) => {
 });
 
 server.on("close", () => {
-  try {
-    closeSync(diagFd);
-  } catch {
-    // Best-effort cleanup only.
+  for (const fd of [diagFd, workflowDiagFd]) {
+    if (fd === undefined) continue;
+    try {
+      closeSync(fd);
+    } catch {
+      // Best-effort cleanup only.
+    }
   }
 });
 

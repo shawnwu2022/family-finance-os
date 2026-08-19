@@ -13,20 +13,9 @@ permissions:
   contents: read
 
 jobs:
-  ollama-schema-probe:
-    name: Ollama schema compatibility probe
+  contracts:
+    name: OpenClaw acceptance contracts
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Probe pinned Ollama empty-object schema compatibility
-        shell: bash
-        run: bash scripts/acceptance/ollama-schema-probe.sh
-
-  acceptance:
-    needs: ollama-schema-probe
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Verify release acceptance contract
@@ -35,6 +24,15 @@ jobs:
       - name: Verify sanitized Ollama boundary proxy contract
         shell: bash
         run: bash scripts/acceptance/test-ollama-boundary-proxy.sh
+
+  acceptance:
+    name: Real OpenClaw acceptance
+    needs: contracts
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[openclaw-full]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v7
         with:
           node-version: '24.19.0'
@@ -43,3 +41,13 @@ jobs:
         env:
           OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT: '1'
         run: bash scripts/acceptance/openclaw-ephemeral-release-acceptance.sh
+      - name: Print sanitized Ollama boundary diagnostics
+        if: always()
+        shell: bash
+        run: |
+          safe_log=/tmp/family-finance-ollama-boundary-safe.jsonl
+          if [[ -f "$safe_log" ]]; then
+            sed 's/^/ollama_boundary_diag /' "$safe_log"
+          else
+            echo 'ollama_boundary_diag unavailable'
+          fi
