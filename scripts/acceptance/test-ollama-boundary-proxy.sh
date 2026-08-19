@@ -26,6 +26,12 @@ grep -Fq 'toolSchemaSha256' "$proxy" || fail "proxy must hash tool schemas rathe
 grep -Fq 'responseToolCallCount' "$proxy" || fail "proxy must record whether raw Ollama responses contain tool calls"
 grep -Fq 'responseToolNames' "$proxy" || fail "proxy must record raw Ollama tool names"
 
+grep -Fq 'shadowNoSystemToolCallCount' "$proxy" || fail "proxy must compare the same request without system messages"
+grep -Fq 'shadowNoSystemToolNames' "$proxy" || fail "proxy must record shadow tool names only"
+grep -Fq 'shadowNoSystemAttempts' "$proxy" || fail "proxy must record the number of no-system shadow attempts"
+grep -Fq 'OLLAMA_PROXY_SHADOW_STRIP_SYSTEM' "$proxy" || fail "no-system shadow probing must be explicitly opt-in"
+grep -Fq 'OLLAMA_PROXY_SHADOW_STRIP_SYSTEM=1' "$provisioner" || fail "release diagnostic must explicitly enable the no-system shadow probe"
+
 if grep -Eq 'messageContent[^C]|systemPrompt[^C]|assistantText|toolOutput|Authorization|Bearer|FINANCE_MCP_OPENCLAW_TOKEN' "$proxy"; then
   fail "proxy source must not define raw prompt/result/credential diagnostic fields"
 fi
