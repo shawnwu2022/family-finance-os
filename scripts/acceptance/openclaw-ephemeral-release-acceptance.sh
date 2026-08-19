@@ -349,6 +349,7 @@ chmod 0600 "$ollama_proxy_diag"
 OLLAMA_PROXY_UPSTREAM=http://127.0.0.1:11434 \
 OLLAMA_PROXY_LISTEN=127.0.0.1:11435 \
 OLLAMA_PROXY_DIAG_FILE="$ollama_proxy_diag" \
+OLLAMA_PROXY_SHADOW_STRIP_SYSTEM=1 \
   node "$ROOT_DIR/scripts/acceptance/ollama-request-proxy.mjs" \
   >"$workdir/ollama-proxy.stdout" 2>"$workdir/ollama-proxy.stderr" &
 ollama_proxy_pid=$!
