@@ -71,6 +71,6 @@ go test ./cmd/finance-core -run TestBuildApplicationHandlerWithoutLLMIntegration
 go test ./cmd/finance-core -run MCP -v
 
 go test -race ./...
-CGO_ENABLED=0 go build -trimpath -o /tmp/finance-core ./cmd/finance-core
+CGO_ENABLED=0 go build -buildvcs=false -trimpath -o /tmp/finance-core ./cmd/finance-core
 
 echo "Go verification OK"
