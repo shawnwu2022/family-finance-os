@@ -44,13 +44,7 @@ verify-contract:
 	bash scripts/ci/contract-test.sh
 
 verify-go:
-	@set -eu; \
-	project="family-finance-ci-go-$$(id -u)-$$$$"; \
-	cleanup() { docker compose -p "$$project" -f compose.ci.yaml down -v --remove-orphans >/dev/null 2>&1 || true; }; \
-	trap cleanup EXIT INT TERM; \
-	docker compose -p "$$project" -f compose.ci.yaml build go; \
-	docker compose -p "$$project" -f compose.ci.yaml up -d --wait postgres; \
-	docker compose -p "$$project" -f compose.ci.yaml run --rm go bash /src/scripts/ci/go-verify.sh
+	bash scripts/ci/go-stack-verify.sh
 
 verify-web:
 	@set -eu; \
@@ -71,4 +65,4 @@ verify-edge-security:
 	bash scripts/ci/edge-security.sh
 
 verify-container:
-	docker build -t family-finance-os:verify .
+	bash scripts/ci/container-verify.sh
