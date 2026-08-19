@@ -50,15 +50,12 @@ for workflow in .github/workflows/ci.yml .github/workflows/mcp-security.yml .git
   grep -Eq '^[[:space:]]*workflow_dispatch:' "$workflow" || fail "$workflow must support manual workflow_dispatch"
 done
 
-for phase in \
-  'scripts/ci/contract-test.sh' \
-  'scripts/ci/go-stack-verify.sh' \
-  'scripts/ci/mcp-security.sh' \
-  'scripts/ci/web-verify.sh' \
-  'scripts/ci/edge-security.sh' \
-  'scripts/ci/container-verify.sh'; do
-  grep -Fq "$phase" scripts/ci/verify.sh || fail "top-level verifier does not include phase: $phase"
+for target in verify-go verify-mcp-security verify-web verify-edge-security verify-container; do
+  grep -Fq "make ${target}" scripts/ci/verify.sh || fail "top-level verifier must delegate to make ${target}"
 done
+if grep -Eq 'bash scripts/ci/(go-stack-verify|mcp-security|web-verify|edge-security|container-verify)\.sh' scripts/ci/verify.sh; then
+  fail "top-level verifier must not bypass canonical Make targets"
+fi
 
 grep -Fq 'goose -dir /src/db/migrations' scripts/ci/go-stack-verify.sh || fail "Go stack verifier must run migrations before integration tests"
 grep -Fq 'scripts/ci/restore-verify.sh' scripts/ci/go-stack-verify.sh || fail "Go stack verifier must include the backup/restore drill"
