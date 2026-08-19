@@ -1,0 +1,13 @@
+services:
+  finance-core:
+    environment:
+      MCP_ENABLED: "true"
+      MCP_TOKEN_FILE: /run/acceptance-secrets/finance-mcp-token
+      MCP_HOUSEHOLD_ID: ${MCP_HOUSEHOLD_ID:?MCP_HOUSEHOLD_ID is required}
+      MCP_ALLOWED_ORIGINS: https://${FINANCE_DOMAIN:?FINANCE_DOMAIN is required}
+    volumes:
+      - ${FINANCE_ACCEPTANCE_SECRETS_DIR:?FINANCE_ACCEPTANCE_SECRETS_DIR is required}:/run/acceptance-secrets:ro
+
+  caddy:
+    volumes:
+      - ./Caddyfile.acceptance:/etc/caddy/Caddyfile:ro
