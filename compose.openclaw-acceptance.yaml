@@ -1,4 +1,8 @@
 services:
+  ezbookkeeping:
+    volumes:
+      - acceptance_ebk_storage:/ezbookkeeping/storage
+
   finance-core:
     environment:
       MCP_ENABLED: "true"
@@ -11,3 +15,6 @@ services:
   caddy:
     volumes:
       - ./Caddyfile.acceptance:/etc/caddy/Caddyfile:ro
+
+volumes:
+  acceptance_ebk_storage:
