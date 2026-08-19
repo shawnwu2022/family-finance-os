@@ -145,17 +145,17 @@ func TestPortfolioAssetsHTTPDoesNotLeakBackendErrors(t *testing.T) {
 
 type portfolioHTTPFake struct {
 	fakeFinanceAPI
-	listResponse   PortfolioAssetsResponse
-	listErr        error
-	upsertResponse PortfolioAssetResponse
-	upsertErr      error
-	deleteErr      error
-	listCalls      int
-	upsertCalls    int
-	deleteCalls    int
+	listResponse    PortfolioAssetsResponse
+	listErr         error
+	upsertResponse  PortfolioAssetResponse
+	upsertErr       error
+	deleteErr       error
+	listCalls       int
+	upsertCalls     int
+	deleteCalls     int
 	lastHouseholdID int64
-	lastAssetRef   string
-	lastRequest    PortfolioAssetUpsertRequest
+	lastAssetRef    string
+	lastRequest     PortfolioAssetUpsertRequest
 }
 
 func (f *portfolioHTTPFake) ListPortfolioAssets(_ context.Context, householdID int64) (PortfolioAssetsResponse, error) {
