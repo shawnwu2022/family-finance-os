@@ -83,12 +83,17 @@ grep -Fq 'npm install --global "openclaw@${openclaw_version}"' "$provisioner" ||
 grep -Fq 'ollama_image="ollama/ollama:0.32.5"' "$provisioner" || fail "provisioner must pin the Ollama runtime image"
 grep -Fq 'ollama_model="qwen3.5:4b"' "$provisioner" || fail "provisioner must pin the tool-capable local acceptance model"
 
-# The model must first prove native Ollama function-call capability. This is a
-# preflight only: the real release gate remains the OpenClaw-managed MCP turns.
-grep -Fq 'ollama_native_tool_probe()' "$provisioner" || fail "provisioner must define the native Ollama tool-call preflight"
-grep -Fq 'finance_acceptance_tool_probe' "$provisioner" || fail "native Ollama preflight must use a dedicated deterministic tool"
+# Before paying the cost of full OpenClaw turns, prove that the pinned model handles
+# the exact read tool surface used by acceptance on both native Ollama response modes.
+# OpenClaw's pinned native adapter uses streaming /api/chat, while the non-stream probe
+# is a control that separates model/schema behavior from streaming compatibility.
+grep -Fq 'ollama_native_finance_tool_probe()' "$provisioner" || fail "provisioner must define the exact Finance Ollama tool-call preflight"
+grep -Fq 'finance__get_household_overview' "$provisioner" || fail "native Ollama preflight must use the exact namespaced Finance read tool"
+grep -Fq 'Get the current deterministic Finance Core household overview. Preserve quality and warning metadata.' "$provisioner" || fail "native Ollama preflight must use the real Finance read-tool description"
+grep -Fq '"additionalProperties":false' "$provisioner" || fail "native Ollama preflight must use the real empty-object Finance read schema"
 grep -Fq 'message.tool_calls' "$provisioner" || fail "native Ollama preflight must validate message.tool_calls"
-grep -Fq 'ollama_native_tool_call=PASS' "$provisioner" || fail "native Ollama tool-call preflight must emit a sanitized PASS marker"
+grep -Fq 'ollama_native_finance_tool_call_nonstream=PASS' "$provisioner" || fail "non-stream Finance tool-call preflight marker is missing"
+grep -Fq 'ollama_native_finance_tool_call_stream=PASS' "$provisioner" || fail "streaming Finance tool-call preflight marker is missing"
 
 grep -Fq 'OPENCLAW_CONFIG_PATH' "$provisioner" || fail "provisioner must isolate the OpenClaw config"
 grep -Fq 'OPENCLAW_STATE_DIR' "$provisioner" || fail "provisioner must isolate OpenClaw state"
