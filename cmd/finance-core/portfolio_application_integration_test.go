@@ -113,7 +113,8 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 		HTTPClient: &http.Client{Transport: bearerRoundTripper{
 			token: "portfolio-mcp-token",
 			base:  http.DefaultTransport,
-		}}, nil)
+		}},
+	}, nil)
 	if err != nil {
 		t.Fatalf("connect MCP: %v", err)
 	}
