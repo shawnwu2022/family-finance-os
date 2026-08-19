@@ -44,17 +44,22 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 	})
 
 	ledgerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/accounts/list.json" {
-			t.Fatalf("unexpected ledger path %q", r.URL.Path)
-		}
 		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
-			t.Fatalf("ledger Authorization=%q", got)
+			t.Errorf("ledger Authorization=%q", got)
 		}
 		if got := r.Header.Get("X-Timezone-Name"); got != "Asia/Shanghai" {
-			t.Fatalf("ledger timezone=%q", got)
+			t.Errorf("ledger timezone=%q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+		switch r.URL.Path {
+		case "/api/v1/accounts/list.json":
+			_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+		case "/api/v1/transactions/list.json":
+			_, _ = w.Write([]byte(`{"success":true,"result":{"items":[],"nextTimeSequenceId":0,"totalCount":0}}`))
+		default:
+			t.Errorf("unexpected ledger path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
 	}))
 	defer ledgerServer.Close()
 
@@ -108,8 +113,7 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 		HTTPClient: &http.Client{Transport: bearerRoundTripper{
 			token: "portfolio-mcp-token",
 			base:  http.DefaultTransport,
-		}},
-	}, nil)
+		}}, nil)
 	if err != nil {
 		t.Fatalf("connect MCP: %v", err)
 	}
