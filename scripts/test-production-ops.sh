@@ -12,8 +12,9 @@ preflight="scripts/preflight.sh"
 edge="scripts/check-edge-security.sh"
 live_smoke="scripts/acceptance/ezbookkeeping-live-smoke.sh"
 openclaw_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
+openclaw_release_contract="scripts/acceptance/test-openclaw-release-acceptance.sh"
 
-for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw_smoke"; do
+for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw_smoke" "$openclaw_release_contract"; do
   [[ -f "$script" ]] || fail "required script is missing: $script"
   bash -n "$script" || fail "shell syntax is invalid: $script"
 done
@@ -54,5 +55,7 @@ grep -Fq 'sha256sum' "$openclaw_smoke" || fail "OpenClaw live smoke must emit ha
 grep -Fq '401' "$openclaw_smoke" || fail "OpenClaw live smoke must verify unauthenticated rejection"
 grep -Fq '403' "$openclaw_smoke" || fail "OpenClaw live smoke must verify Origin rejection"
 grep -Fq -- '--code-mode direct' "$openclaw_smoke" || fail "OpenClaw live smoke must use direct tool mode"
+
+bash "$openclaw_release_contract"
 
 echo "Production operations contract OK"
