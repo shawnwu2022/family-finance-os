@@ -125,6 +125,42 @@ if [[ -n "$agent_model" ]]; then
   agent_args+=(--model "$agent_model")
 fi
 
+emit_agent_diagnostics() {
+  local label="$1"
+  local output="$2"
+  node - "$label" "$output" <<'NODE'
+const fs = require('fs');
+const [label, path] = process.argv.slice(2);
+let payload;
+try {
+  payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+} catch {
+  console.error(`openclaw_agent_diag label=${label} json_valid=false`);
+  process.exit(0);
+}
+const payloads = Array.isArray(payload.payloads) ? payload.payloads : [];
+const textPayloadCount = payloads.filter((entry) => entry && typeof entry.text === 'string' && entry.text.trim()).length;
+const meta = payload && typeof payload.meta === 'object' && payload.meta !== null ? payload.meta : {};
+const agentMeta = meta && typeof meta.agentMeta === 'object' && meta.agentMeta !== null ? meta.agentMeta : {};
+const safe = {
+  label,
+  payloadCount: payloads.length,
+  textPayloadCount,
+  topKeys: payload && typeof payload === 'object' ? Object.keys(payload).sort() : [],
+  metaKeys: Object.keys(meta).sort(),
+  agentMetaKeys: Object.keys(agentMeta).sort(),
+  provider: typeof agentMeta.provider === 'string' ? agentMeta.provider : undefined,
+  model: typeof agentMeta.model === 'string' ? agentMeta.model : undefined,
+  stopReason: typeof meta.stopReason === 'string' ? meta.stopReason : undefined,
+  aborted: typeof meta.aborted === 'boolean' ? meta.aborted : undefined,
+  hasError: Boolean(meta.error),
+  durationMs: typeof meta.durationMs === 'number' ? meta.durationMs : undefined,
+};
+console.error(`openclaw_agent_diag ${JSON.stringify(safe)}`);
+NODE
+  printf 'openclaw_agent_output_sha256 label=%s sha256=%s\n' "$label" "$(sha256sum "$output" | awk '{print $1}')" >&2
+}
+
 run_agent_check() {
   local label="$1"
   local marker="$2"
@@ -148,6 +184,7 @@ if (texts.length === 0) throw new Error('agent result contains no assistant text
 if (texts[texts.length - 1] !== marker) throw new Error('agent final assistant marker does not match');
 NODE
   then
+    emit_agent_diagnostics "$label" "$output"
     fail "OpenClaw agent $label result validation failed"
   fi
 
