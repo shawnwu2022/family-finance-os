@@ -23,7 +23,7 @@ config:
 	docker compose config
 
 preflight:
-	./scripts/preflight.sh
+	bash scripts/preflight.sh
 
 up:
 	docker compose up -d --build
@@ -35,13 +35,13 @@ logs:
 	docker compose logs -f --tail=200
 
 backup:
-	./scripts/backup.sh
+	bash scripts/backup.sh
 
 verify:
-	./scripts/ci/verify.sh
+	bash scripts/ci/verify.sh
 
 verify-contract:
-	./scripts/ci/contract-test.sh
+	bash scripts/ci/contract-test.sh
 
 verify-go:
 	@set -eu; \
@@ -68,7 +68,7 @@ verify-mcp-security:
 	docker compose -p "$$project" -f compose.ci.yaml run --rm --no-deps go bash /src/scripts/ci/mcp-security.sh
 
 verify-edge-security:
-	./scripts/ci/edge-security.sh
+	bash scripts/ci/edge-security.sh
 
 verify-container:
 	docker build -t family-finance-os:verify .
