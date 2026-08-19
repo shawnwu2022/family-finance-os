@@ -198,7 +198,7 @@ export EBK_API_TOKEN="$ebk_api_token"
 printf 'header = "Authorization: %s %s"\n' "Bearer" "$ebk_api_token" >"$workdir/ebk-auth.curl"
 chmod 0600 "$workdir/ebk-auth.curl"
 cat >"$workdir/account.json" <<'JSON'
-{"name":"Acceptance Checking","category":2,"type":1,"icon":"wallet","color":"2196F3","currency":"CNY"}
+{"name":"Acceptance Checking","category":2,"type":1,"icon":"1","color":"2196F3","currency":"CNY"}
 JSON
 if ! curl --config "$workdir/ebk-auth.curl" --silent --show-error --fail-with-body \
   --connect-timeout 5 --max-time 30 --cacert "$caddy_root" \
