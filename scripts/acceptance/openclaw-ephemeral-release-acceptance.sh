@@ -295,6 +295,12 @@ cat >"$openclaw_config" <<'JSON5'
       model: { primary: "ollama/qwen3.5:4b" },
     },
   },
+  tools: {
+    allow: [
+      "finance__get_household_overview",
+      "finance__simulate_purchase",
+    ],
+  },
   mcp: {
     servers: {
       finance: {
