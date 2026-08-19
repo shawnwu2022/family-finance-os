@@ -10,7 +10,7 @@ fail() {
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$ROOT_DIR"
 
-for command_name in docker curl openssl jq sha256sum sed grep awk getent npm; do
+for command_name in docker curl openssl jq sha256sum sed grep awk getent npm node; do
   command -v "$command_name" >/dev/null || fail "$command_name is required"
 done
 docker compose version >/dev/null || fail "Docker Compose v2 is required"
@@ -36,6 +36,8 @@ project="family-finance-openclaw-${GITHUB_RUN_ID:-$$}-${RANDOM}"
 hosts_tag="family-finance-openclaw-${GITHUB_RUN_ID:-$$}-${RANDOM}"
 hosts_added=0
 ollama_container=""
+ollama_proxy_pid=""
+ollama_proxy_diag="$workdir/ollama-boundary.jsonl"
 
 export FINANCE_ACCEPTANCE_SECRETS_DIR="$container_secrets_dir"
 
@@ -49,6 +51,10 @@ compose=(
 
 cleanup() {
   set +e
+  if [[ -n "$ollama_proxy_pid" ]]; then
+    kill "$ollama_proxy_pid" >/dev/null 2>&1 || true
+    wait "$ollama_proxy_pid" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$ollama_container" ]]; then
     docker rm -f "$ollama_container" >/dev/null 2>&1 || true
   fi
@@ -338,6 +344,30 @@ ollama_native_tool_probe() {
 
 ollama_native_tool_probe
 
+: >"$ollama_proxy_diag"
+chmod 0600 "$ollama_proxy_diag"
+OLLAMA_PROXY_UPSTREAM=http://127.0.0.1:11434 \
+OLLAMA_PROXY_LISTEN=127.0.0.1:11435 \
+OLLAMA_PROXY_DIAG_FILE="$ollama_proxy_diag" \
+  node "$ROOT_DIR/scripts/acceptance/ollama-request-proxy.mjs" \
+  >"$workdir/ollama-proxy.stdout" 2>"$workdir/ollama-proxy.stderr" &
+ollama_proxy_pid=$!
+
+ollama_proxy_ready=0
+for _ in $(seq 1 30); do
+  if ! kill -0 "$ollama_proxy_pid" >/dev/null 2>&1; then
+    fail "sanitized Ollama boundary proxy exited before readiness"
+  fi
+  if curl --silent --show-error --fail --connect-timeout 2 --max-time 5 \
+    http://127.0.0.1:11435/api/tags >/dev/null 2>&1; then
+    ollama_proxy_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$ollama_proxy_ready" == "1" ]] || fail "sanitized Ollama boundary proxy did not become ready"
+printf 'ollama_boundary_proxy=PASS\n'
+
 openclaw_home="$workdir/openclaw-home"
 openclaw_state="$workdir/openclaw-state"
 openclaw_read_config="$workdir/openclaw-read.json"
@@ -356,6 +386,14 @@ write_openclaw_agent_config() {
   agents: {
     defaults: {
       model: { primary: "ollama/qwen3.5:4b" }
+    }
+  },
+  models: {
+    providers: {
+      ollama: {
+        baseUrl: "http://127.0.0.1:11435",
+        api: "ollama"
+      }
     }
   },
   tools: {
