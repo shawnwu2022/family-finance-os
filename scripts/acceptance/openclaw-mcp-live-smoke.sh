@@ -142,6 +142,7 @@ const payloads = Array.isArray(payload.payloads) ? payload.payloads : [];
 const textPayloadCount = payloads.filter((entry) => entry && typeof entry.text === 'string' && entry.text.trim()).length;
 const meta = payload && typeof payload.meta === 'object' && payload.meta !== null ? payload.meta : {};
 const agentMeta = meta && typeof meta.agentMeta === 'object' && meta.agentMeta !== null ? meta.agentMeta : {};
+const toolSummary = meta && typeof meta.toolSummary === 'object' && meta.toolSummary !== null ? meta.toolSummary : {};
 const safe = {
   label,
   payloadCount: payloads.length,
@@ -154,6 +155,10 @@ const safe = {
   stopReason: typeof meta.stopReason === 'string' ? meta.stopReason : undefined,
   aborted: typeof meta.aborted === 'boolean' ? meta.aborted : undefined,
   hasError: Boolean(meta.error),
+  hasFinalAssistantVisibleText: typeof meta.finalAssistantVisibleText === 'string' && Boolean(meta.finalAssistantVisibleText.trim()),
+  toolCalls: typeof toolSummary.calls === 'number' ? toolSummary.calls : undefined,
+  toolNames: Array.isArray(toolSummary.tools) ? toolSummary.tools : undefined,
+  toolFailures: typeof toolSummary.failures === 'number' ? toolSummary.failures : undefined,
   durationMs: typeof meta.durationMs === 'number' ? meta.durationMs : undefined,
 };
 console.error(`openclaw_agent_diag ${JSON.stringify(safe)}`);
@@ -163,25 +168,37 @@ NODE
 
 run_agent_check() {
   local label="$1"
-  local marker="$2"
-  local prompt="$3"
-  local digest_path="$4"
+  local tool_name="$2"
+  local marker="$3"
+  local prompt="$4"
+  local digest_path="$5"
   local output="$workdir/${label}.json"
 
   if ! openclaw agent --local --agent main --message "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
     fail "OpenClaw agent $label turn failed"
   fi
 
-  if ! node - "$output" "$marker" <<'NODE'
+  if ! node - "$output" "$server_name" "$tool_name" "$marker" <<'NODE'
 const fs = require('fs');
-const [path, marker] = process.argv.slice(2);
+const [path, serverName, toolName, marker] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
-const payloads = Array.isArray(payload.payloads) ? payload.payloads : [];
-const texts = payloads
-  .map((entry) => (entry && typeof entry.text === 'string' ? entry.text.trim() : ''))
-  .filter(Boolean);
-if (texts.length === 0) throw new Error('agent result contains no assistant text payload');
-if (texts[texts.length - 1] !== marker) throw new Error('agent final assistant marker does not match');
+const meta = payload && typeof payload.meta === 'object' && payload.meta !== null ? payload.meta : {};
+const finalAssistantVisibleText = typeof meta.finalAssistantVisibleText === 'string'
+  ? meta.finalAssistantVisibleText.trim()
+  : '';
+if (finalAssistantVisibleText !== marker) {
+  throw new Error('stable meta.finalAssistantVisibleText does not match the acceptance marker');
+}
+const toolSummary = meta && typeof meta.toolSummary === 'object' && meta.toolSummary !== null
+  ? meta.toolSummary
+  : null;
+if (!toolSummary) throw new Error('stable meta.toolSummary is missing');
+const expectedToolName = `${serverName}__${toolName}`;
+if (toolSummary.calls !== 1) throw new Error(`toolSummary.calls ${toolSummary.calls} != 1`);
+if (!Array.isArray(toolSummary.tools) || toolSummary.tools.length !== 1 || toolSummary.tools[0] !== expectedToolName) {
+  throw new Error(`toolSummary.tools does not contain only ${expectedToolName}`);
+}
+if (Number(toolSummary.failures ?? 0) !== 0) throw new Error('toolSummary.failures is non-zero');
 NODE
   then
     emit_agent_diagnostics "$label" "$output"
@@ -192,11 +209,11 @@ NODE
 }
 
 read_prompt="Acceptance check. You MUST call the OpenClaw-managed MCP tool ${server_name}__get_household_overview exactly once. Do not use shell, browser, filesystem, memory, or any other tool. Only after that tool succeeds, reply exactly FINANCE_MCP_READ_OK. If the tool is unavailable or fails, do not output that marker."
-run_agent_check read FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest"
+run_agent_check read get_household_overview FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest"
 read_digest="$(cat "$workdir/read.digest")"
 
 simulation_prompt="Acceptance check. You MUST call the OpenClaw-managed MCP tool ${server_name}__simulate_purchase exactly once with amount_minor=100 and currency=CNY. Do not use shell, browser, filesystem, memory, or any other tool. Only after that tool succeeds, reply exactly FINANCE_MCP_SIM_OK. If the tool is unavailable or fails, do not output that marker."
-run_agent_check simulation FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest"
+run_agent_check simulation simulate_purchase FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest"
 simulation_digest="$(cat "$workdir/simulation.digest")"
 
 printf 'openclaw_finance_tools=%d\n' "${#expected_tools[@]}"
