@@ -295,9 +295,6 @@ cat >"$openclaw_config" <<'JSON5'
       model: { primary: "ollama/qwen3.5:4b" },
     },
   },
-  models: {
-    catalogRefresh: { enabled: false },
-  },
   mcp: {
     servers: {
       finance: {
