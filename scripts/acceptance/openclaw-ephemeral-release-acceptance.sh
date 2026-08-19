@@ -332,11 +332,17 @@ bash "$live_smoke"
 
 query_audit_count() {
   local tool_name="$1"
-  docker exec -e PGPASSWORD="$finance_db_password" "$postgres_cid" \
+  docker exec -i -e PGPASSWORD="$finance_db_password" "$postgres_cid" \
     psql -X -q -A -t -v ON_ERROR_STOP=1 -U finance_app -d finance \
-    -v household_id="$household_id" -v tool_name="$tool_name" \
-    -c "SELECT count(*) FROM agent_tool_audits WHERE household_id = :'household_id' AND tool_name = :'tool_name' AND status = 'success' AND completed_at IS NOT NULL AND output_sha256 IS NOT NULL;" \
-    | tr -d '[:space:]'
+    -v household_id="$household_id" -v tool_name="$tool_name" <<'SQL' | tr -d '[:space:]'
+SELECT count(*)
+FROM agent_tool_audits
+WHERE household_id = :'household_id'
+  AND tool_name = :'tool_name'
+  AND status = 'success'
+  AND completed_at IS NOT NULL
+  AND output_sha256 IS NOT NULL;
+SQL
 }
 
 read_audit_count="$(query_audit_count get_household_overview)"
