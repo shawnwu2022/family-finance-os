@@ -43,8 +43,16 @@ fi
 if grep -Fq 'read_digest="$(run_agent_check' "$live_smoke" || grep -Fq 'simulation_digest="$(run_agent_check' "$live_smoke"; then
   fail "agent marker validation must not run inside command substitution"
 fi
-grep -Fq 'run_agent_check read FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest"' "$live_smoke" || fail "read agent validation must write its digest only after validation succeeds"
-grep -Fq 'run_agent_check simulation FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest"' "$live_smoke" || fail "simulation agent validation must write its digest only after validation succeeds"
+grep -Fq 'run_agent_check read get_household_overview FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest"' "$live_smoke" || fail "read agent validation must bind the exact Finance tool and write its digest only after validation succeeds"
+grep -Fq 'run_agent_check simulation simulate_purchase FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest"' "$live_smoke" || fail "simulation agent validation must bind the exact Finance tool and write its digest only after validation succeeds"
+
+# Pinned stable OpenClaw stores the final assistant-visible answer and attempt tool
+# summary under result.meta. Do not infer successful agent behavior from payloads alone.
+grep -Fq 'finalAssistantVisibleText' "$live_smoke" || fail "agent validation must use stable meta.finalAssistantVisibleText"
+grep -Fq 'toolSummary' "$live_smoke" || fail "agent validation must require stable meta.toolSummary"
+grep -Fq 'toolSummary.tools' "$live_smoke" || fail "agent validation must verify the exact namespaced MCP tool"
+grep -Fq 'toolSummary.calls' "$live_smoke" || fail "agent validation must require at least one tool call"
+grep -Fq 'toolSummary.failures' "$live_smoke" || fail "agent validation must reject tool failures"
 
 # Task 2: production-shaped bootstrap must be explicit and fail closed.
 grep -Fq 'docker compose' "$provisioner" || fail "provisioner must run the real Docker Compose stack"
