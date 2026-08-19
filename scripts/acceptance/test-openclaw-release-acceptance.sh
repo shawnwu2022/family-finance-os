@@ -91,7 +91,7 @@ grep -Fq 'ollama_model="qwen3.5:4b"' "$provisioner" || fail "provisioner must pi
 grep -Fq 'ollama_native_finance_tool_probe()' "$live_smoke" || fail "live smoke must define the exact Finance Ollama tool-call preflight"
 grep -Fq 'OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT' "$live_smoke" || fail "Finance Ollama preflight must be acceptance-only"
 grep -Fq 'OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT' "$workflow" || fail "ephemeral release workflow must enable the Finance Ollama preflight"
-grep -Fq 'finance__get_household_overview' "$live_smoke" || fail "native Ollama preflight must use the exact namespaced Finance read tool"
+grep -Fq '${server_name}__get_household_overview' "$live_smoke" || fail "native Ollama preflight must construct the exact namespaced Finance read tool"
 grep -Fq 'Get the current deterministic Finance Core household overview. Preserve quality and warning metadata.' "$live_smoke" || fail "native Ollama preflight must use the real Finance read-tool description"
 grep -Fq 'additionalProperties: false' "$live_smoke" || fail "native Ollama preflight must use the real empty-object Finance read schema"
 grep -Fq 'message.tool_calls' "$live_smoke" || fail "native Ollama preflight must validate message.tool_calls"
