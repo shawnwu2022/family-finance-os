@@ -47,14 +47,16 @@ grep -Fq 'sha256sum' "$live_smoke" || fail "live ezBookkeeping smoke must emit o
 grep -Fq 'transaction ledger is empty' "$live_smoke" || fail "live ezBookkeeping smoke must reject an empty ledger by default"
 
 grep -Fq 'openclaw mcp probe' "$openclaw_smoke" || fail "OpenClaw live smoke must run a real MCP probe"
-grep -Fq 'openclaw agent exec' "$openclaw_smoke" || fail "OpenClaw live smoke must run real agent turns"
+grep -Fq 'openclaw agent --local' "$openclaw_smoke" || fail "OpenClaw live smoke must run real stable local agent turns"
 grep -Fq 'get_household_overview' "$openclaw_smoke" || fail "OpenClaw live smoke must exercise a read tool"
 grep -Fq 'simulate_purchase' "$openclaw_smoke" || fail "OpenClaw live smoke must exercise a simulation tool"
 grep -Fq 'FINANCE_MCP_SMOKE_TOKEN_FILE' "$openclaw_smoke" || fail "OpenClaw live smoke must read bearer from a file"
 grep -Fq 'sha256sum' "$openclaw_smoke" || fail "OpenClaw live smoke must emit hashed evidence"
 grep -Fq '401' "$openclaw_smoke" || fail "OpenClaw live smoke must verify unauthenticated rejection"
 grep -Fq '403' "$openclaw_smoke" || fail "OpenClaw live smoke must verify Origin rejection"
-grep -Fq -- '--code-mode direct' "$openclaw_smoke" || fail "OpenClaw live smoke must use direct tool mode"
+if grep -Fq 'openclaw agent exec' "$openclaw_smoke" || grep -Fq -- '--code-mode direct' "$openclaw_smoke"; then
+  fail "OpenClaw live smoke must stay compatible with pinned stable v2026.7.1-2"
+fi
 
 bash "$openclaw_release_contract"
 
