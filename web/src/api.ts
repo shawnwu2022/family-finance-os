@@ -6,6 +6,9 @@ import type {
   DebtsResponse,
   GoalsResponse,
   OverviewResponse,
+  PortfolioAssetResponse,
+  PortfolioAssetsResponse,
+  PortfolioAssetUpsertRequest,
 } from './types'
 
 interface APIErrorEnvelope {
@@ -40,7 +43,38 @@ export async function askAdvisor(householdId: number, question: string, requireR
   })
 }
 
+export async function listPortfolioAssets(householdId: number): Promise<PortfolioAssetsResponse> {
+  const household = encodeURIComponent(String(householdId))
+  return requestJSON<PortfolioAssetsResponse>(`/api/v1/portfolio/assets?household_id=${household}`)
+}
+
+export async function upsertPortfolioAsset(
+  householdId: number,
+  assetRef: string,
+  request: PortfolioAssetUpsertRequest,
+): Promise<PortfolioAssetResponse> {
+  const household = encodeURIComponent(String(householdId))
+  const encodedAssetRef = encodeURIComponent(assetRef)
+  return requestJSON<PortfolioAssetResponse>(`/api/v1/portfolio/assets/${encodedAssetRef}?household_id=${household}`, {
+    method: 'PUT',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function deletePortfolioAsset(householdId: number, assetRef: string): Promise<void> {
+  const household = encodeURIComponent(String(householdId))
+  const encodedAssetRef = encodeURIComponent(assetRef)
+  await requestResponse(`/api/v1/portfolio/assets/${encodedAssetRef}?household_id=${household}`, {
+    method: 'DELETE',
+  })
+}
+
 async function requestJSON<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const response = await requestResponse(url, init)
+  return (await response.json()) as T
+}
+
+async function requestResponse(url: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers)
   if (init.body) headers.set('Content-Type', 'application/json')
   headers.set('Accept', 'application/json')
@@ -61,5 +95,5 @@ async function requestJSON<T>(url: string, init: RequestInit = {}): Promise<T> {
     }
     throw new Error(code)
   }
-  return (await response.json()) as T
+  return response
 }
