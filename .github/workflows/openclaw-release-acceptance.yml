@@ -1,0 +1,23 @@
+name: OpenClaw Release Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/v2-openclaw-release-acceptance
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - name: Run real OpenClaw release acceptance
+        shell: bash
+        run: bash scripts/acceptance/openclaw-ephemeral-release-acceptance.sh
