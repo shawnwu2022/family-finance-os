@@ -17,14 +17,27 @@ for path in "${required[@]}"; do
 done
 
 provisioner="scripts/acceptance/openclaw-ephemeral-release-acceptance.sh"
+live_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
 workflow=".github/workflows/openclaw-release-acceptance.yml"
 
 bash -n "$provisioner" || fail "provisioner shell syntax is invalid"
+bash -n "$live_smoke" || fail "OpenClaw live smoke shell syntax is invalid"
 
-grep -Fq 'scripts/acceptance/openclaw-mcp-live-smoke.sh' "$provisioner" || fail "provisioner must reference the real OpenClaw live smoke"
+grep -Fq "$live_smoke" "$provisioner" || fail "provisioner must reference the real OpenClaw live smoke"
 grep -Fq 'agent_tool_audits' "$provisioner" || fail "provisioner must verify persisted agent tool audits"
-grep -Fq 'openclaw agent exec' "scripts/acceptance/openclaw-mcp-live-smoke.sh" || fail "release acceptance must retain real OpenClaw agent turns"
 grep -Fq 'bash scripts/acceptance/openclaw-ephemeral-release-acceptance.sh' "$workflow" || fail "release workflow must delegate to the repository provisioner"
+
+# The pinned stable OpenClaw v2026.7.1-2 CLI exposes `openclaw agent --local`.
+# Do not silently drift to newer unreleased `agent exec` / code-mode interfaces.
+grep -Fq 'openclaw agent --local' "$live_smoke" || fail "live smoke must use the pinned stable OpenClaw local agent CLI"
+grep -Fq -- '--agent main' "$live_smoke" || fail "live smoke must select the stable main agent explicitly"
+grep -Fq -- '--message "$prompt"' "$live_smoke" || fail "live smoke must pass the acceptance prompt through --message"
+if grep -Fq 'openclaw agent exec' "$live_smoke"; then
+  fail "pinned OpenClaw v2026.7.1-2 does not expose agent exec"
+fi
+if grep -Fq -- '--code-mode direct' "$live_smoke"; then
+  fail "pinned OpenClaw v2026.7.1-2 does not expose --code-mode direct"
+fi
 
 # Task 2: production-shaped bootstrap must be explicit and fail closed.
 grep -Fq 'docker compose' "$provisioner" || fail "provisioner must run the real Docker Compose stack"
