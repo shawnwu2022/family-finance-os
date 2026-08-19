@@ -25,6 +25,7 @@ bash -n "$live_smoke" || fail "OpenClaw live smoke shell syntax is invalid"
 
 grep -Fq "$live_smoke" "$provisioner" || fail "provisioner must reference the real OpenClaw live smoke"
 grep -Fq 'agent_tool_audits' "$provisioner" || fail "provisioner must verify persisted agent tool audits"
+grep -Fq 'bash scripts/acceptance/test-openclaw-release-acceptance.sh' "$workflow" || fail "release workflow must gate the expensive run on the static acceptance contract"
 grep -Fq 'bash scripts/acceptance/openclaw-ephemeral-release-acceptance.sh' "$workflow" || fail "release workflow must delegate to the repository provisioner"
 
 # The pinned stable OpenClaw v2026.7.1-2 CLI exposes `openclaw agent --local`.
@@ -85,15 +86,17 @@ grep -Fq 'ollama_model="qwen3.5:4b"' "$provisioner" || fail "provisioner must pi
 
 # Before paying the cost of full OpenClaw turns, prove that the pinned model handles
 # the exact read tool surface used by acceptance on both native Ollama response modes.
-# OpenClaw's pinned native adapter uses streaming /api/chat, while the non-stream probe
-# is a control that separates model/schema behavior from streaming compatibility.
-grep -Fq 'ollama_native_finance_tool_probe()' "$provisioner" || fail "provisioner must define the exact Finance Ollama tool-call preflight"
-grep -Fq 'finance__get_household_overview' "$provisioner" || fail "native Ollama preflight must use the exact namespaced Finance read tool"
-grep -Fq 'Get the current deterministic Finance Core household overview. Preserve quality and warning metadata.' "$provisioner" || fail "native Ollama preflight must use the real Finance read-tool description"
-grep -Fq '"additionalProperties":false' "$provisioner" || fail "native Ollama preflight must use the real empty-object Finance read schema"
-grep -Fq 'message.tool_calls' "$provisioner" || fail "native Ollama preflight must validate message.tool_calls"
-grep -Fq 'ollama_native_finance_tool_call_nonstream=PASS' "$provisioner" || fail "non-stream Finance tool-call preflight marker is missing"
-grep -Fq 'ollama_native_finance_tool_call_stream=PASS' "$provisioner" || fail "streaming Finance tool-call preflight marker is missing"
+# OpenClaw's pinned native adapter uses streaming /api/chat, while non-stream is the
+# control that separates model/schema behavior from streaming compatibility.
+grep -Fq 'ollama_native_finance_tool_probe()' "$live_smoke" || fail "live smoke must define the exact Finance Ollama tool-call preflight"
+grep -Fq 'OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT' "$live_smoke" || fail "Finance Ollama preflight must be acceptance-only"
+grep -Fq 'OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT' "$workflow" || fail "ephemeral release workflow must enable the Finance Ollama preflight"
+grep -Fq 'finance__get_household_overview' "$live_smoke" || fail "native Ollama preflight must use the exact namespaced Finance read tool"
+grep -Fq 'Get the current deterministic Finance Core household overview. Preserve quality and warning metadata.' "$live_smoke" || fail "native Ollama preflight must use the real Finance read-tool description"
+grep -Fq 'additionalProperties: false' "$live_smoke" || fail "native Ollama preflight must use the real empty-object Finance read schema"
+grep -Fq 'message.tool_calls' "$live_smoke" || fail "native Ollama preflight must validate message.tool_calls"
+grep -Fq 'ollama_native_finance_tool_call_nonstream=PASS' "$live_smoke" || fail "non-stream Finance tool-call preflight marker is missing"
+grep -Fq 'ollama_native_finance_tool_call_stream=PASS' "$live_smoke" || fail "streaming Finance tool-call preflight marker is missing"
 
 grep -Fq 'OPENCLAW_CONFIG_PATH' "$provisioner" || fail "provisioner must isolate the OpenClaw config"
 grep -Fq 'OPENCLAW_STATE_DIR' "$provisioner" || fail "provisioner must isolate OpenClaw state"
