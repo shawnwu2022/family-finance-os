@@ -7,10 +7,10 @@ cd "$ROOT_DIR"
 bash scripts/ci/contract-test.sh
 docker compose version >/dev/null
 
-bash scripts/ci/go-stack-verify.sh
-bash scripts/ci/mcp-security.sh
-bash scripts/ci/web-verify.sh
-bash scripts/ci/edge-security.sh
-bash scripts/ci/container-verify.sh
+make verify-go
+make verify-mcp-security
+make verify-web
+make verify-edge-security
+make verify-container
 
 echo "Repository-native verification OK"
