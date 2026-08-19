@@ -82,6 +82,14 @@ grep -Fq 'openclaw_version="2026.7.1-2"' "$provisioner" || fail "provisioner mus
 grep -Fq 'npm install --global "openclaw@${openclaw_version}"' "$provisioner" || fail "provisioner must install the pinned real OpenClaw CLI"
 grep -Fq 'ollama_image="ollama/ollama:0.32.5"' "$provisioner" || fail "provisioner must pin the Ollama runtime image"
 grep -Fq 'ollama_model="qwen3.5:4b"' "$provisioner" || fail "provisioner must pin the tool-capable local acceptance model"
+
+# The model must first prove native Ollama function-call capability. This is a
+# preflight only: the real release gate remains the OpenClaw-managed MCP turns.
+grep -Fq 'ollama_native_tool_probe()' "$provisioner" || fail "provisioner must define the native Ollama tool-call preflight"
+grep -Fq 'finance_acceptance_tool_probe' "$provisioner" || fail "native Ollama preflight must use a dedicated deterministic tool"
+grep -Fq 'message.tool_calls' "$provisioner" || fail "native Ollama preflight must validate message.tool_calls"
+grep -Fq 'ollama_native_tool_call=PASS' "$provisioner" || fail "native Ollama tool-call preflight must emit a sanitized PASS marker"
+
 grep -Fq 'OPENCLAW_CONFIG_PATH' "$provisioner" || fail "provisioner must isolate the OpenClaw config"
 grep -Fq 'OPENCLAW_STATE_DIR' "$provisioner" || fail "provisioner must isolate OpenClaw state"
 grep -Fq 'OPENCLAW_HOME' "$provisioner" || fail "provisioner must isolate OpenClaw home"
