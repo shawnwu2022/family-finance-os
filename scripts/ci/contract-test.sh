@@ -45,10 +45,9 @@ if grep -REq 'actions/setup-(go|node)|go test|npm (ci|test|run)|^[[:space:]]+ser
 fi
 
 for workflow in .github/workflows/ci.yml .github/workflows/mcp-security.yml .github/workflows/edge-security.yml; do
+  grep -Eq '^[[:space:]]*pull_request:' "$workflow" || fail "$workflow must run automatically for pull requests"
+  grep -Eq '^[[:space:]]*push:' "$workflow" || fail "$workflow must run automatically for main pushes"
   grep -Eq '^[[:space:]]*workflow_dispatch:' "$workflow" || fail "$workflow must support manual workflow_dispatch"
-  if grep -Eq '^[[:space:]]*(pull_request|push):' "$workflow"; then
-    fail "$workflow must not automatically consume GitHub-hosted runner minutes"
-  fi
 done
 
 for phase in \
