@@ -54,6 +54,14 @@ grep -Fq 'toolSummary.tools' "$live_smoke" || fail "agent validation must verify
 grep -Fq 'toolSummary.calls' "$live_smoke" || fail "agent validation must require at least one tool call"
 grep -Fq 'toolSummary.failures' "$live_smoke" || fail "agent validation must reject tool failures"
 
+# Keep the local 4B model's active agent tool surface intentionally narrow. The
+# separate MCP probe still verifies the full 12-tool server surface; these two are
+# the actual read/simulation tools exercised by agent turns and persisted audits.
+grep -Fq 'tools: {' "$provisioner" || fail "OpenClaw acceptance config must declare an agent tool policy"
+grep -Fq 'allow: [' "$provisioner" || fail "OpenClaw acceptance config must use a narrow tool allowlist"
+grep -Fq '"finance__get_household_overview"' "$provisioner" || fail "OpenClaw agent allowlist must include the read acceptance tool"
+grep -Fq '"finance__simulate_purchase"' "$provisioner" || fail "OpenClaw agent allowlist must include the simulation acceptance tool"
+
 # Task 2: production-shaped bootstrap must be explicit and fail closed.
 grep -Fq 'docker compose' "$provisioner" || fail "provisioner must run the real Docker Compose stack"
 grep -Fq 'goose_linux_x86_64' "$provisioner" || fail "provisioner must install pinned goose for Finance migrations"
