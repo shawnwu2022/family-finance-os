@@ -99,6 +99,38 @@ export interface AdvisorResponse {
   warnings?: string[]
 }
 
+export type PortfolioAssetClass =
+  | 'cash'
+  | 'deposit'
+  | 'fixed_income'
+  | 'equity'
+  | 'fund'
+  | 'gold'
+  | 'property'
+  | 'other'
+
+export type PortfolioSnapshotSourceKind = 'manual' | 'import'
+
+export interface PortfolioAssetUpsertRequest {
+  name: string
+  asset_class: PortfolioAssetClass
+  value_minor: string
+  currency: string
+  source_currency: string
+  valuation_as_of: string
+  fx_as_of?: string
+  source_account_ref?: string
+  source_kind: PortfolioSnapshotSourceKind
+}
+
+export interface PortfolioAssetResponse extends PortfolioAssetUpsertRequest {
+  asset_ref: string
+}
+
+export interface PortfolioAssetsResponse {
+  items: PortfolioAssetResponse[]
+}
+
 export interface DashboardData {
   overview: OverviewResponse
   cashflow: CashflowResponse
