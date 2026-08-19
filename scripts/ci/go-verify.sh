@@ -26,11 +26,19 @@ goose -version
 govulncheck -version
 
 sqlc generate
-git diff --exit-code -- internal/store/sqlc
-test -z "$(git ls-files --others --exclude-standard internal/store/sqlc)"
+diff -ru "$SOURCE_ROOT/internal/store/sqlc" "$WORK_ROOT/internal/store/sqlc"
 
 go mod tidy
-git diff --exit-code -- go.mod go.sum
+cmp -s "$SOURCE_ROOT/go.mod" "$WORK_ROOT/go.mod" || {
+  echo "go mod tidy changed go.mod" >&2
+  diff -u "$SOURCE_ROOT/go.mod" "$WORK_ROOT/go.mod" || true
+  exit 1
+}
+cmp -s "$SOURCE_ROOT/go.sum" "$WORK_ROOT/go.sum" || {
+  echo "go mod tidy changed go.sum" >&2
+  diff -u "$SOURCE_ROOT/go.sum" "$WORK_ROOT/go.sum" || true
+  exit 1
+}
 
 mcp_version="$(go list -m -f '{{.Version}}' github.com/modelcontextprotocol/go-sdk)"
 if [[ "$mcp_version" != "v1.6.1" ]]; then
