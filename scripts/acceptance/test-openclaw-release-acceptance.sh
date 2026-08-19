@@ -54,8 +54,8 @@ grep -Fq 'http://127.0.0.1:11434' "$provisioner" || fail "OpenClaw acceptance mu
 grep -Fq 'transport: "streamable-http"' "$provisioner" || fail "OpenClaw config must use canonical Streamable HTTP MCP transport"
 grep -Fq 'Bearer ${FINANCE_MCP_OPENCLAW_TOKEN}' "$provisioner" || fail "OpenClaw MCP bearer must use environment interpolation"
 grep -Eq '^[[:space:]]*bash[[:space:]]+"\$live_smoke"[[:space:]]*$' "$provisioner" || fail "provisioner must actually execute the real OpenClaw live smoke"
-grep -Fq "tool_name = 'get_household_overview'" "$provisioner" || fail "provisioner must verify the read-tool audit row"
-grep -Fq "tool_name = 'simulate_purchase'" "$provisioner" || fail "provisioner must verify the simulation-tool audit row"
+grep -Eq '^[[:space:]]*read_audit_count="\$\(query_audit_count get_household_overview\)"' "$provisioner" || fail "provisioner must verify the read-tool audit row"
+grep -Eq '^[[:space:]]*simulation_audit_count="\$\(query_audit_count simulate_purchase\)"' "$provisioner" || fail "provisioner must verify the simulation-tool audit row"
 grep -Fq "status = 'success'" "$provisioner" || fail "provisioner must require successful audit completion"
 grep -Fq 'openclaw_release_acceptance=PASS' "$provisioner" || fail "provisioner must emit the final sanitized PASS marker"
 
