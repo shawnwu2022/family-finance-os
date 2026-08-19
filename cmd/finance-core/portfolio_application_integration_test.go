@@ -32,6 +32,12 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 	if err != nil {
 		t.Fatalf("CreateHousehold: %v", err)
 	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO household_policies (household_id, liquidity_floor_minor, currency)
+		VALUES ($1, 0, 'CNY')
+	`, household.ID); err != nil {
+		t.Fatalf("create household policy: %v", err)
+	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM agent_tool_audits WHERE household_id = $1`, household.ID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM households WHERE id = $1`, household.ID)
