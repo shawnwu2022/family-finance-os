@@ -10,7 +10,7 @@ fail() {
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$ROOT_DIR"
 
-for command_name in docker curl openssl jq sha256sum sed grep awk getent; do
+for command_name in docker curl openssl jq sha256sum sed grep awk getent npm; do
   command -v "$command_name" >/dev/null || fail "$command_name is required"
 done
 docker compose version >/dev/null || fail "Docker Compose v2 is required"
@@ -19,6 +19,10 @@ live_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
 audit_table="agent_tool_audits"
 [[ -f "$live_smoke" ]] || fail "live smoke helper is missing"
 [[ -n "$audit_table" ]] || fail "audit table contract is missing"
+
+openclaw_version="2026.7.1-2"
+ollama_image="ollama/ollama:0.32.5"
+ollama_model="qwen3.5:4b"
 
 workdir="$(mktemp -d /tmp/family-finance-openclaw-acceptance.XXXXXX)"
 chmod 0700 "$workdir"
@@ -31,6 +35,7 @@ caddy_root="$workdir/caddy-root.crt"
 project="family-finance-openclaw-${GITHUB_RUN_ID:-$$}-${RANDOM}"
 hosts_tag="family-finance-openclaw-${GITHUB_RUN_ID:-$$}-${RANDOM}"
 hosts_added=0
+ollama_container=""
 
 export FINANCE_ACCEPTANCE_SECRETS_DIR="$container_secrets_dir"
 
@@ -44,6 +49,9 @@ compose=(
 
 cleanup() {
   set +e
+  if [[ -n "$ollama_container" ]]; then
+    docker rm -f "$ollama_container" >/dev/null 2>&1 || true
+  fi
   "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   if [[ "$hosts_added" == "1" ]]; then
     sudo sed -i "/# ${hosts_tag}$/d" /etc/hosts >/dev/null 2>&1 || true
@@ -232,7 +240,117 @@ printf 'finance_https_health=PASS\n'
 printf 'ezbookkeeping_account_seed=PASS\n'
 printf 'acceptance_household_id=%s\n' "$household_id"
 
-# Task 3 replaces this fail-closed boundary with the real OpenClaw + Ollama turn.
-# bash scripts/acceptance/openclaw-mcp-live-smoke.sh
-# Then verify successful scoped rows in agent_tool_audits.
-fail "real OpenClaw/Ollama agent stage is not implemented yet"
+npm install --global "openclaw@${openclaw_version}" --no-audit --no-fund >"$workdir/openclaw-install.stdout" 2>"$workdir/openclaw-install.stderr" \
+  || fail "pinned OpenClaw installation failed"
+installed_openclaw_version="$(openclaw --version 2>/dev/null | tr -d '\r' | tail -n 1)"
+[[ "$installed_openclaw_version" == *"${openclaw_version}"* ]] \
+  || fail "installed OpenClaw version does not match the pinned release"
+
+ollama_container="${project}-ollama"
+docker run -d --name "$ollama_container" --pull always \
+  -p 127.0.0.1:11434:11434 "$ollama_image" >"$workdir/ollama-container-id" \
+  || fail "Ollama container failed to start"
+
+ollama_ready=0
+for _ in $(seq 1 60); do
+  if curl --silent --show-error --fail --connect-timeout 2 --max-time 5 \
+    http://127.0.0.1:11434/api/tags >"$workdir/ollama-tags.json" 2>/dev/null; then
+    ollama_ready=1
+    break
+  fi
+  sleep 2
+done
+[[ "$ollama_ready" == "1" ]] || fail "Ollama native API did not become ready"
+
+if ! docker exec "$ollama_container" ollama pull "$ollama_model" \
+  >"$workdir/ollama-pull.stdout" 2>"$workdir/ollama-pull.stderr"; then
+  fail "Ollama acceptance model pull failed"
+fi
+
+jq -n --arg model "$ollama_model" '{model:$model,messages:[{role:"user",content:"Reply with exactly: pong"}],stream:false,think:false,keep_alive:"5m"}' \
+  >"$workdir/ollama-smoke-request.json"
+if ! curl --silent --show-error --fail --connect-timeout 5 --max-time 300 \
+  --header 'Content-Type: application/json' \
+  --data-binary @"$workdir/ollama-smoke-request.json" \
+  http://127.0.0.1:11434/api/chat >"$workdir/ollama-smoke-response.json"; then
+  fail "Ollama model smoke failed"
+fi
+jq -e '.message.content | type == "string" and length > 0' "$workdir/ollama-smoke-response.json" >/dev/null \
+  || fail "Ollama model smoke returned no assistant content"
+
+openclaw_home="$workdir/openclaw-home"
+openclaw_state="$workdir/openclaw-state"
+openclaw_config="$workdir/openclaw.json5"
+mkdir -m 0700 "$openclaw_home" "$openclaw_state"
+export OPENCLAW_HOME="$openclaw_home"
+export OPENCLAW_STATE_DIR="$openclaw_state"
+export OPENCLAW_CONFIG_PATH="$openclaw_config"
+export OLLAMA_API_KEY="ollama-local"
+export FINANCE_MCP_OPENCLAW_TOKEN="$mcp_token"
+
+cat >"$openclaw_config" <<'JSON5'
+{
+  agents: {
+    defaults: {
+      model: { primary: "ollama/qwen3.5:4b" },
+    },
+  },
+  models: {
+    catalogRefresh: { enabled: false },
+  },
+  mcp: {
+    servers: {
+      finance: {
+        url: "https://finance.localhost/mcp",
+        transport: "streamable-http",
+        enabled: true,
+        connectionTimeoutMs: 10000,
+        requestTimeoutMs: 30000,
+        headers: {
+          Authorization: "Bearer ${FINANCE_MCP_OPENCLAW_TOKEN}",
+        },
+      },
+    },
+  },
+}
+JSON5
+chmod 0600 "$openclaw_config"
+
+if ! openclaw models list --provider ollama --json >"$workdir/openclaw-models.json" 2>"$workdir/openclaw-models.stderr"; then
+  fail "OpenClaw could not discover the local Ollama provider"
+fi
+if ! grep -Fq "$ollama_model" "$workdir/openclaw-models.json"; then
+  fail "OpenClaw model catalog does not contain the pinned Ollama model"
+fi
+
+export FINANCE_ENV_FILE="$env_file"
+export FINANCE_MCP_SMOKE_URL="https://finance.localhost/mcp"
+export FINANCE_MCP_SMOKE_TOKEN_FILE="$smoke_secrets_dir/finance-mcp-token"
+export OPENCLAW_FINANCE_MCP_SERVER="finance"
+export OPENCLAW_FINANCE_SMOKE_AGENT_TIMEOUT="300"
+export OPENCLAW_FINANCE_SMOKE_MODEL="ollama/${ollama_model}"
+export OPENCLAW_FINANCE_SMOKE_CONFIG="$openclaw_config"
+
+bash "$live_smoke"
+
+query_audit_count() {
+  local tool_name="$1"
+  docker exec -e PGPASSWORD="$finance_db_password" "$postgres_cid" \
+    psql -X -q -A -t -v ON_ERROR_STOP=1 -U finance_app -d finance \
+    -v household_id="$household_id" -v tool_name="$tool_name" \
+    -c "SELECT count(*) FROM agent_tool_audits WHERE household_id = :'household_id' AND tool_name = :'tool_name' AND status = 'success' AND completed_at IS NOT NULL AND output_sha256 IS NOT NULL;" \
+    | tr -d '[:space:]'
+}
+
+read_audit_count="$(query_audit_count get_household_overview)"
+simulation_audit_count="$(query_audit_count simulate_purchase)"
+[[ "$read_audit_count" =~ ^[0-9]+$ && "$read_audit_count" -ge 1 ]] \
+  || fail "successful get_household_overview audit row is missing"
+[[ "$simulation_audit_count" =~ ^[0-9]+$ && "$simulation_audit_count" -ge 1 ]] \
+  || fail "successful simulate_purchase audit row is missing"
+
+printf 'openclaw_version=%s\n' "$openclaw_version"
+printf 'ollama_model=%s\n' "$ollama_model"
+printf 'audit_get_household_overview=%s\n' "$read_audit_count"
+printf 'audit_simulate_purchase=%s\n' "$simulation_audit_count"
+printf 'openclaw_release_acceptance=PASS\n'
