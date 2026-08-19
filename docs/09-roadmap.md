@@ -8,7 +8,7 @@
 | V1 | Finance Core 全闭环 | 模块化单体 | **当前主开发** |
 | V1.1 | 自动对账/数据质量 | matching | 后续按需 |
 | V1.2 | P40/本地隐私 AI | local worker | 后续按需 |
-| V1.3 | Portfolio/Market | 市场数据 | 后续按需 |
+| V1.3 | Portfolio/Market | 先显式资产快照，后按需市场数据 | **当前增量：Snapshot 层完成** |
 | V1.4 | 家庭 RBAC | 权限模型 | 后续按需 |
 | V2 | MCP/OpenClaw/渠道 | Agent Adapter | 后续 |
 | V2.1 | 统一移动端 | PWA/Capacitor | 后续 |
@@ -62,12 +62,15 @@ Benchmark gate：
 ## V1.3 Portfolio
 
 逐级增加，不一次造券商系统：
-1. 资产类别汇总；
-2. Instrument/Position；
-3. 市场价格；
-4. 风险敞口；
-5. 再平衡建议；
-6. 税务成本/lot 只有真实需要再做。
+
+1. **当前资产快照 + 资产类别汇总 — 已完成。** Finance Core 按 `(household_id, asset_ref)` 保存显式 current snapshot，支持 `cash/deposit/fund/equity/property/gold/other`；显式 snapshot 已经是报告币种的确定性估值事实。linked snapshot 在 allocation 中替换对应粗粒度 ledger account，避免双重计算；uncovered account 继续使用保守 fallback。跨币种 snapshot 若其 `Value.Currency` 不是家庭基准币则跳过并标记 partial；本阶段不做隐式 FX 转换或价格抓取。
+2. Instrument/Position — **延期**，只在需要持仓数量、成本基础、证券标识和多账户聚合时进入。
+3. 市场价格/FX feed — **延期**，只有明确的数据源、刷新频率、故障语义和运维收益后再引入。
+4. 风险敞口 — **延期**，依赖可验证的 position/instrument 数据。
+5. 再平衡建议 — **延期**，依赖风险模型和用户投资政策，不提前生成。
+6. 税务成本/lot — 只有真实需要再做。
+
+当前 V1.3 snapshot 层提供 Finance HTTP CRUD，并被现有 deterministic `get_asset_allocation` 读取；Agent/MCP 不增加写工具，仍保持十二个 read/simulation tools。
 
 ## V1.4 RBAC
 
