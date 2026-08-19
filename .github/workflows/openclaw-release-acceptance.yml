@@ -26,4 +26,6 @@ jobs:
           node-version: '24.19.0'
       - name: Run real OpenClaw release acceptance
         shell: bash
+        env:
+          OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT: '1'
         run: bash scripts/acceptance/openclaw-ephemeral-release-acceptance.sh
