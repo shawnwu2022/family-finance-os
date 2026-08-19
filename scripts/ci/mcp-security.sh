@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SOURCE_ROOT="${CI_SOURCE_ROOT:-/src}"
-[[ -d "$SOURCE_ROOT/.git" || -f "$SOURCE_ROOT/.git" ]] || {
-  echo "MCP security verification requires a git checkout mounted at $SOURCE_ROOT" >&2
+[[ -f "$SOURCE_ROOT/go.mod" ]] || {
+  echo "MCP security verification requires repository source mounted at $SOURCE_ROOT" >&2
   exit 1
 }
 
