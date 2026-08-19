@@ -64,4 +64,11 @@ grep -Fq 'goose -dir /src/db/migrations' scripts/ci/go-stack-verify.sh || fail "
 grep -Fq 'scripts/ci/restore-verify.sh' scripts/ci/go-stack-verify.sh || fail "Go stack verifier must include the backup/restore drill"
 grep -Fq 'scripts/test-production-ops.sh' scripts/ci/container-verify.sh || fail "container verifier must preserve the production operations contract"
 
+if grep -Fq 'git diff' scripts/ci/go-verify.sh || grep -Fq 'git ls-files' scripts/ci/go-verify.sh; then
+  fail "Go verifier temp workspace must not depend on copied Git metadata"
+fi
+grep -Fq 'diff -ru "$SOURCE_ROOT/internal/store/sqlc" "$WORK_ROOT/internal/store/sqlc"' scripts/ci/go-verify.sh || fail "Go verifier must compare generated sqlc sources against the read-only checkout"
+grep -Fq 'cmp -s "$SOURCE_ROOT/go.mod" "$WORK_ROOT/go.mod"' scripts/ci/go-verify.sh || fail "Go verifier must compare go.mod against the read-only checkout"
+grep -Fq 'cmp -s "$SOURCE_ROOT/go.sum" "$WORK_ROOT/go.sum"' scripts/ci/go-verify.sh || fail "Go verifier must compare go.sum against the read-only checkout"
+
 echo "Repository-native CI contract OK"
