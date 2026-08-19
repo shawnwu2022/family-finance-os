@@ -280,26 +280,26 @@ jq -e '.message.content | type == "string" and length > 0' "$workdir/ollama-smok
 
 openclaw_home="$workdir/openclaw-home"
 openclaw_state="$workdir/openclaw-state"
-openclaw_config="$workdir/openclaw.json5"
+openclaw_read_config="$workdir/openclaw-read.json"
+openclaw_simulation_config="$workdir/openclaw-simulation.json"
 mkdir -m 0700 "$openclaw_home" "$openclaw_state"
 export OPENCLAW_HOME="$openclaw_home"
 export OPENCLAW_STATE_DIR="$openclaw_state"
-export OPENCLAW_CONFIG_PATH="$openclaw_config"
 export OLLAMA_API_KEY="ollama-local"
 export FINANCE_MCP_OPENCLAW_TOKEN="$mcp_token"
 
-cat >"$openclaw_config" <<'JSON5'
+write_openclaw_agent_config() {
+  local config_path="$1"
+  local allowed_tool="$2"
+  jq -n --arg allowed_tool "$allowed_tool" '
 {
   agents: {
     defaults: {
-      model: { primary: "ollama/qwen3.5:4b" },
-    },
+      model: { primary: "ollama/qwen3.5:4b" }
+    }
   },
   tools: {
-    allow: [
-      "finance__get_household_overview",
-      "finance__simulate_purchase",
-    ],
+    allow: [$allowed_tool]
   },
   mcp: {
     servers: {
@@ -310,14 +310,19 @@ cat >"$openclaw_config" <<'JSON5'
         connectionTimeoutMs: 10000,
         requestTimeoutMs: 30000,
         headers: {
-          Authorization: "Bearer ${FINANCE_MCP_OPENCLAW_TOKEN}",
-        },
-      },
-    },
-  },
+          Authorization: "Bearer ${FINANCE_MCP_OPENCLAW_TOKEN}"
+        }
+      }
+    }
+  }
 }
-JSON5
-chmod 0600 "$openclaw_config"
+' >"$config_path"
+  chmod 0600 "$config_path"
+}
+
+write_openclaw_agent_config "$openclaw_read_config" "finance__get_household_overview"
+write_openclaw_agent_config "$openclaw_simulation_config" "finance__simulate_purchase"
+export OPENCLAW_CONFIG_PATH="$openclaw_read_config"
 
 if ! openclaw models list --provider ollama --json >"$workdir/openclaw-models.json" 2>"$workdir/openclaw-models.stderr"; then
   fail "OpenClaw could not discover the local Ollama provider"
@@ -332,7 +337,9 @@ export FINANCE_MCP_SMOKE_TOKEN_FILE="$smoke_secrets_dir/finance-mcp-token"
 export OPENCLAW_FINANCE_MCP_SERVER="finance"
 export OPENCLAW_FINANCE_SMOKE_AGENT_TIMEOUT="300"
 export OPENCLAW_FINANCE_SMOKE_MODEL="ollama/${ollama_model}"
-export OPENCLAW_FINANCE_SMOKE_CONFIG="$openclaw_config"
+export OPENCLAW_FINANCE_SMOKE_CONFIG="$openclaw_read_config"
+export OPENCLAW_FINANCE_SMOKE_READ_CONFIG="$openclaw_read_config"
+export OPENCLAW_FINANCE_SMOKE_SIMULATION_CONFIG="$openclaw_simulation_config"
 
 bash "$live_smoke"
 
