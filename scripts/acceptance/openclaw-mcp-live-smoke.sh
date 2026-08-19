@@ -48,6 +48,8 @@ agent_model="${OPENCLAW_FINANCE_SMOKE_MODEL:-}"
 agent_config="${OPENCLAW_FINANCE_SMOKE_CONFIG:-}"
 read_agent_config="${OPENCLAW_FINANCE_SMOKE_READ_CONFIG:-$agent_config}"
 simulation_agent_config="${OPENCLAW_FINANCE_SMOKE_SIMULATION_CONFIG:-$agent_config}"
+ollama_preflight="${OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT:-0}"
+[[ "$ollama_preflight" == "0" || "$ollama_preflight" == "1" ]] || fail "OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT must be 0 or 1"
 for config_path in "$agent_config" "$read_agent_config" "$simulation_agent_config"; do
   if [[ -n "$config_path" ]]; then
     [[ -f "$config_path" ]] || fail "OpenClaw config not found: $config_path"
@@ -247,7 +249,85 @@ NODE
   sha256sum "$output" | awk '{print $1}' >"$digest_path"
 }
 
+ollama_native_finance_tool_probe() {
+  [[ "$ollama_preflight" == "1" ]] || return 0
+  [[ "$agent_model" == ollama/* ]] || fail "Ollama Finance preflight requires an ollama/* acceptance model"
+
+  local native_model="${agent_model#ollama/}"
+  local expected_tool="${server_name}__get_household_overview"
+  local description="Get the current deterministic Finance Core household overview. Preserve quality and warning metadata."
+  local mode stream_json request response
+
+  for mode in nonstream stream; do
+    if [[ "$mode" == "nonstream" ]]; then
+      stream_json=false
+    else
+      stream_json=true
+    fi
+    request="$workdir/ollama-finance-${mode}-request.json"
+    response="$workdir/ollama-finance-${mode}-response.json"
+
+    jq -n \
+      --arg model "$native_model" \
+      --arg prompt "$read_prompt" \
+      --arg tool "$expected_tool" \
+      --arg description "$description" \
+      --argjson stream "$stream_json" '
+{
+  model: $model,
+  messages: [{role: "user", content: $prompt}],
+  stream: $stream,
+  think: false,
+  keep_alive: "5m",
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: $tool,
+        description: $description,
+        parameters: {
+          type: "object",
+          additionalProperties: false
+        }
+      }
+    }
+  ]
+}
+' >"$request"
+
+    if ! curl --silent --show-error --fail --connect-timeout 5 --max-time 300 \
+      --header 'Content-Type: application/json' \
+      --data-binary @"$request" \
+      http://127.0.0.1:11434/api/chat >"$response"; then
+      fail "Ollama exact Finance ${mode} tool-call preflight request failed"
+    fi
+
+    if [[ "$mode" == "nonstream" ]]; then
+      if ! jq -e --arg tool "$expected_tool" '
+        (.message.tool_calls | type == "array")
+        and (.message.tool_calls | length == 1)
+        and (.message.tool_calls[0].function.name == $tool)
+        and ((.message.tool_calls[0].function.arguments // {}) == {})
+      ' "$response" >/dev/null; then
+        fail "Ollama model did not emit the exact Finance non-stream function call"
+      fi
+      printf 'ollama_native_finance_tool_call_nonstream=PASS\n'
+    else
+      if ! jq -s -e --arg tool "$expected_tool" '
+        [.[].message.tool_calls[]?] as $calls
+        | ($calls | length == 1)
+          and ($calls[0].function.name == $tool)
+          and (($calls[0].function.arguments // {}) == {})
+      ' "$response" >/dev/null; then
+        fail "Ollama model did not emit the exact Finance streaming function call"
+      fi
+      printf 'ollama_native_finance_tool_call_stream=PASS\n'
+    fi
+  done
+}
+
 read_prompt="Acceptance check. You MUST call the only available tool, ${server_name}__get_household_overview, exactly once. Do not answer from memory or prior knowledge. Only after that tool succeeds, reply exactly FINANCE_MCP_READ_OK. If the tool is unavailable or fails, do not output that marker."
+ollama_native_finance_tool_probe
 run_agent_check read get_household_overview FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest" "$read_agent_config"
 read_digest="$(cat "$workdir/read.digest")"
 
