@@ -13,7 +13,18 @@ permissions:
   contents: read
 
 jobs:
+  ollama-schema-probe:
+    name: Ollama schema compatibility probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe pinned Ollama empty-object schema compatibility
+        shell: bash
+        run: bash scripts/acceptance/ollama-schema-probe.sh
+
   acceptance:
+    needs: ollama-schema-probe
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
