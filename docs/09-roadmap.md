@@ -63,7 +63,7 @@ Benchmark gate：
 
 逐级增加，不一次造券商系统：
 
-1. **当前资产快照 + 资产类别汇总 — 已完成。** Finance Core 按 `(household_id, asset_ref)` 保存显式 current snapshot，支持 `cash/deposit/fund/equity/property/gold/other`；显式 snapshot 已经是报告币种的确定性估值事实。linked snapshot 在 allocation 中替换对应粗粒度 ledger account，避免双重计算；uncovered account 继续使用保守 fallback。跨币种 snapshot 若其 `Value.Currency` 不是家庭基准币则跳过并标记 partial；本阶段不做隐式 FX 转换或价格抓取。
+1. **当前资产快照 + 资产类别汇总 — 已完成。** Finance Core 按 `(household_id, asset_ref)` 保存显式 current snapshot，支持 `cash/deposit/fixed_income/equity/fund/gold/property/other`；显式 snapshot 已经是报告币种的确定性估值事实。linked snapshot 在 allocation 中替换对应粗粒度 ledger account，避免双重计算；uncovered account 继续使用保守 fallback。跨币种 snapshot 若其 `Value.Currency` 不是家庭基准币则跳过并标记 partial；本阶段不做隐式 FX 转换或价格抓取。
 2. Instrument/Position — **延期**，只在需要持仓数量、成本基础、证券标识和多账户聚合时进入。
 3. 市场价格/FX feed — **延期**，只有明确的数据源、刷新频率、故障语义和运维收益后再引入。
 4. 风险敞口 — **延期**，依赖可验证的 position/instrument 数据。
