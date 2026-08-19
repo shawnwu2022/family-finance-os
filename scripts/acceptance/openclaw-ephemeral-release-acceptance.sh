@@ -278,6 +278,66 @@ fi
 jq -e '.message.content | type == "string" and length > 0' "$workdir/ollama-smoke-response.json" >/dev/null \
   || fail "Ollama model smoke returned no assistant content"
 
+ollama_native_tool_probe() {
+  local request="$workdir/ollama-tool-request.json"
+  local response="$workdir/ollama-tool-response.json"
+
+  jq -n --arg model "$ollama_model" '
+{
+  model: $model,
+  messages: [
+    {
+      role: "user",
+      content: "Call finance_acceptance_tool_probe exactly once with key=family-finance. Do not answer directly."
+    }
+  ],
+  stream: false,
+  think: false,
+  keep_alive: "5m",
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "finance_acceptance_tool_probe",
+        description: "Return a deterministic release-acceptance nonce for the requested key.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            key: {
+              type: "string",
+              enum: ["family-finance"]
+            }
+          },
+          required: ["key"]
+        }
+      }
+    }
+  ]
+}
+' >"$request"
+
+  if ! curl --silent --show-error --fail --connect-timeout 5 --max-time 300 \
+    --header 'Content-Type: application/json' \
+    --data-binary @"$request" \
+    http://127.0.0.1:11434/api/chat >"$response"; then
+    fail "Ollama native tool-call preflight request failed"
+  fi
+
+  if ! jq -e '
+    (.message.tool_calls | type == "array")
+    and (.message.tool_calls | length == 1)
+    and (.message.tool_calls[0].function.name == "finance_acceptance_tool_probe")
+    and (.message.tool_calls[0].function.arguments == {"key":"family-finance"})
+  ' "$response" >/dev/null; then
+    fail "Ollama model did not emit the required native function call"
+  fi
+
+  printf 'ollama_native_tool_call=PASS\n'
+}
+
+ollama_native_tool_probe
+
 openclaw_home="$workdir/openclaw-home"
 openclaw_state="$workdir/openclaw-state"
 openclaw_read_config="$workdir/openclaw-read.json"
