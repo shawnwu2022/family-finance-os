@@ -72,4 +72,9 @@ grep -Fq 'cmp -s "$SOURCE_ROOT/go.mod" "$WORK_ROOT/go.mod"' scripts/ci/go-verify
 grep -Fq 'cmp -s "$SOURCE_ROOT/go.sum" "$WORK_ROOT/go.sum"' scripts/ci/go-verify.sh || fail "Go verifier must compare go.sum against the read-only checkout"
 grep -Fq 'go build -buildvcs=false -trimpath' scripts/ci/go-verify.sh || fail "Go verifier temp build must disable VCS stamping"
 
+if grep -Fq '.git' scripts/ci/mcp-security.sh; then
+  fail "MCP security verifier must not require Git metadata"
+fi
+grep -Fq '[[ -f "$SOURCE_ROOT/go.mod" ]]' scripts/ci/mcp-security.sh || fail "MCP security verifier must validate the mounted source tree by go.mod"
+
 echo "Repository-native CI contract OK"
