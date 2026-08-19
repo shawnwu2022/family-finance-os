@@ -141,7 +141,14 @@ func TestAssetAllocationMergesExplicitSnapshotsWithoutDoubleCounting(t *testing.
 	}
 	wantClasses := []string{"cash", "equity", "fund", "gold", "other", "property"}
 	wantMinor := []int64{10_000, 20_000, 30_000, 10_000, 10_000, 20_000}
-	wantShare := []string{"0.1", "0.2", "0.3", "0.1", "0.1", "0.2"}
+	wantShare := []string{
+		"0.1000000000000000000000000000000000",
+		"0.2000000000000000000000000000000000",
+		"0.3000000000000000000000000000000000",
+		"0.1000000000000000000000000000000000",
+		"0.1000000000000000000000000000000000",
+		"0.2000000000000000000000000000000000",
+	}
 	if len(got.Items) != len(wantClasses) {
 		t.Fatalf("items=%#v want %d classes", got.Items, len(wantClasses))
 	}
