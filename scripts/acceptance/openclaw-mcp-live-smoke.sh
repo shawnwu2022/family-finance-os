@@ -46,8 +46,14 @@ agent_timeout="${OPENCLAW_FINANCE_SMOKE_AGENT_TIMEOUT:-120}"
 [[ "$agent_timeout" =~ ^[1-9][0-9]*$ ]] || fail "OPENCLAW_FINANCE_SMOKE_AGENT_TIMEOUT must be a positive integer"
 agent_model="${OPENCLAW_FINANCE_SMOKE_MODEL:-}"
 agent_config="${OPENCLAW_FINANCE_SMOKE_CONFIG:-}"
+read_agent_config="${OPENCLAW_FINANCE_SMOKE_READ_CONFIG:-$agent_config}"
+simulation_agent_config="${OPENCLAW_FINANCE_SMOKE_SIMULATION_CONFIG:-$agent_config}"
+for config_path in "$agent_config" "$read_agent_config" "$simulation_agent_config"; do
+  if [[ -n "$config_path" ]]; then
+    [[ -f "$config_path" ]] || fail "OpenClaw config not found: $config_path"
+  fi
+done
 if [[ -n "$agent_config" ]]; then
-  [[ -f "$agent_config" ]] || fail "OpenClaw config not found: $agent_config"
   export OPENCLAW_CONFIG_PATH="$agent_config"
 fi
 
@@ -185,9 +191,15 @@ run_agent_check() {
   local marker="$3"
   local prompt="$4"
   local digest_path="$5"
+  local turn_config="$6"
   local output="$workdir/${label}.json"
+  local session_id="finance-acceptance-${label}"
 
-  if ! openclaw agent --local --agent main --message "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
+  if [[ -n "$turn_config" ]]; then
+    if ! OPENCLAW_CONFIG_PATH="$turn_config" openclaw agent --local --agent main --session-id "$session_id" --message "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
+      fail "OpenClaw agent $label turn failed"
+    fi
+  elif ! openclaw agent --local --agent main --session-id "$session_id" --message "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
     fail "OpenClaw agent $label turn failed"
   fi
 
@@ -196,6 +208,21 @@ const fs = require('fs');
 const [path, serverName, toolName, marker] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
 const meta = payload && typeof payload.meta === 'object' && payload.meta !== null ? payload.meta : {};
+const expectedToolName = `${serverName}__${toolName}`;
+const systemPromptReport = meta && typeof meta.systemPromptReport === 'object' && meta.systemPromptReport !== null
+  ? meta.systemPromptReport
+  : {};
+const reportTools = systemPromptReport && typeof systemPromptReport.tools === 'object' && systemPromptReport.tools !== null
+  ? systemPromptReport.tools
+  : {};
+const runtimeToolNames = Array.isArray(reportTools.entries)
+  ? reportTools.entries
+      .map((entry) => (entry && typeof entry.name === 'string' ? entry.name : ''))
+      .filter(Boolean)
+  : [];
+if (runtimeToolNames.length !== 1 || runtimeToolNames[0] !== expectedToolName) {
+  throw new Error(`model-facing tool surface is not exactly ${expectedToolName}`);
+}
 const finalAssistantVisibleText = typeof meta.finalAssistantVisibleText === 'string'
   ? meta.finalAssistantVisibleText.trim()
   : '';
@@ -206,7 +233,6 @@ const toolSummary = meta && typeof meta.toolSummary === 'object' && meta.toolSum
   ? meta.toolSummary
   : null;
 if (!toolSummary) throw new Error('stable meta.toolSummary is missing');
-const expectedToolName = `${serverName}__${toolName}`;
 if (toolSummary.calls !== 1) throw new Error(`toolSummary.calls ${toolSummary.calls} != 1`);
 if (!Array.isArray(toolSummary.tools) || toolSummary.tools.length !== 1 || toolSummary.tools[0] !== expectedToolName) {
   throw new Error(`toolSummary.tools does not contain only ${expectedToolName}`);
@@ -221,12 +247,12 @@ NODE
   sha256sum "$output" | awk '{print $1}' >"$digest_path"
 }
 
-read_prompt="Acceptance check. You MUST call the OpenClaw-managed MCP tool ${server_name}__get_household_overview exactly once. Do not use shell, browser, filesystem, memory, or any other tool. Only after that tool succeeds, reply exactly FINANCE_MCP_READ_OK. If the tool is unavailable or fails, do not output that marker."
-run_agent_check read get_household_overview FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest"
+read_prompt="Acceptance check. You MUST call the only available tool, ${server_name}__get_household_overview, exactly once. Do not answer from memory or prior knowledge. Only after that tool succeeds, reply exactly FINANCE_MCP_READ_OK. If the tool is unavailable or fails, do not output that marker."
+run_agent_check read get_household_overview FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest" "$read_agent_config"
 read_digest="$(cat "$workdir/read.digest")"
 
-simulation_prompt="Acceptance check. You MUST call the OpenClaw-managed MCP tool ${server_name}__simulate_purchase exactly once with amount_minor=100 and currency=CNY. Do not use shell, browser, filesystem, memory, or any other tool. Only after that tool succeeds, reply exactly FINANCE_MCP_SIM_OK. If the tool is unavailable or fails, do not output that marker."
-run_agent_check simulation simulate_purchase FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest"
+simulation_prompt="Acceptance check. You MUST call the only available tool, ${server_name}__simulate_purchase, exactly once with amount_minor=100 and currency=CNY. Do not answer from memory or prior knowledge. Only after that tool succeeds, reply exactly FINANCE_MCP_SIM_OK. If the tool is unavailable or fails, do not output that marker."
+run_agent_check simulation simulate_purchase FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest" "$simulation_agent_config"
 simulation_digest="$(cat "$workdir/simulation.digest")"
 
 printf 'openclaw_finance_tools=%d\n' "${#expected_tools[@]}"
