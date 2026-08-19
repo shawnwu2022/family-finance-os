@@ -143,6 +143,17 @@ const textPayloadCount = payloads.filter((entry) => entry && typeof entry.text =
 const meta = payload && typeof payload.meta === 'object' && payload.meta !== null ? payload.meta : {};
 const agentMeta = meta && typeof meta.agentMeta === 'object' && meta.agentMeta !== null ? meta.agentMeta : {};
 const toolSummary = meta && typeof meta.toolSummary === 'object' && meta.toolSummary !== null ? meta.toolSummary : {};
+const systemPromptReport = meta && typeof meta.systemPromptReport === 'object' && meta.systemPromptReport !== null
+  ? meta.systemPromptReport
+  : {};
+const reportTools = systemPromptReport && typeof systemPromptReport.tools === 'object' && systemPromptReport.tools !== null
+  ? systemPromptReport.tools
+  : {};
+const runtimeToolNames = Array.isArray(reportTools.entries)
+  ? reportTools.entries
+      .map((entry) => (entry && typeof entry.name === 'string' ? entry.name : ''))
+      .filter(Boolean)
+  : [];
 const safe = {
   label,
   payloadCount: payloads.length,
@@ -156,6 +167,8 @@ const safe = {
   aborted: typeof meta.aborted === 'boolean' ? meta.aborted : undefined,
   hasError: Boolean(meta.error),
   hasFinalAssistantVisibleText: typeof meta.finalAssistantVisibleText === 'string' && Boolean(meta.finalAssistantVisibleText.trim()),
+  runtimeToolCount: runtimeToolNames.length,
+  runtimeToolNames,
   toolCalls: typeof toolSummary.calls === 'number' ? toolSummary.calls : undefined,
   toolNames: Array.isArray(toolSummary.tools) ? toolSummary.tools : undefined,
   toolFailures: typeof toolSummary.failures === 'number' ? toolSummary.failures : undefined,
