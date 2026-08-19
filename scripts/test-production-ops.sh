@@ -12,9 +12,10 @@ preflight="scripts/preflight.sh"
 edge="scripts/check-edge-security.sh"
 live_smoke="scripts/acceptance/ezbookkeeping-live-smoke.sh"
 openclaw_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
+ollama_schema_contract="scripts/acceptance/test-ollama-schema-probe.sh"
 openclaw_release_contract="scripts/acceptance/test-openclaw-release-acceptance.sh"
 
-for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw_smoke" "$openclaw_release_contract"; do
+for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw_smoke" "$ollama_schema_contract" "$openclaw_release_contract"; do
   [[ -f "$script" ]] || fail "required script is missing: $script"
   bash -n "$script" || fail "shell syntax is invalid: $script"
 done
@@ -58,6 +59,7 @@ if grep -Fq 'openclaw agent exec' "$openclaw_smoke" || grep -Fq -- '--code-mode 
   fail "OpenClaw live smoke must stay compatible with pinned stable v2026.7.1-2"
 fi
 
+bash "$ollama_schema_contract"
 bash "$openclaw_release_contract"
 
 echo "Production operations contract OK"
