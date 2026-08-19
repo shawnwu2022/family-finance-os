@@ -1,4 +1,4 @@
-import { moneyInputFromMinor, parseMoneyInput } from './money'
+import { moneyInputFromMinor, parseMoneyInput } from './money.ts'
 import type {
   PortfolioAssetClass,
   PortfolioAssetResponse,
