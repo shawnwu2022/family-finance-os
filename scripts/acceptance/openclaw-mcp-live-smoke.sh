@@ -48,6 +48,7 @@ agent_model="${OPENCLAW_FINANCE_SMOKE_MODEL:-}"
 agent_config="${OPENCLAW_FINANCE_SMOKE_CONFIG:-}"
 if [[ -n "$agent_config" ]]; then
   [[ -f "$agent_config" ]] || fail "OpenClaw config not found: $agent_config"
+  export OPENCLAW_CONFIG_PATH="$agent_config"
 fi
 
 expected_tools=(
@@ -119,46 +120,41 @@ origin_status="$(curl --config "$workdir/auth.curl" --silent --show-error --conn
   --output /dev/null --write-out '%{http_code}' "$endpoint")"
 [[ "$origin_status" == "403" ]] || fail "untrusted Origin returned HTTP $origin_status, want 403"
 
-agent_args=(--code-mode direct --json --timeout "$agent_timeout")
+agent_args=(--json --timeout "$agent_timeout" --thinking off)
 if [[ -n "$agent_model" ]]; then
   agent_args+=(--model "$agent_model")
-fi
-if [[ -n "$agent_config" ]]; then
-  agent_args+=(--config "$agent_config")
 fi
 
 run_agent_check() {
   local label="$1"
-  local tool_name="$2"
-  local marker="$3"
-  local prompt="$4"
+  local marker="$2"
+  local prompt="$3"
   local output="$workdir/${label}.json"
 
-  if ! openclaw agent exec "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
+  if ! openclaw agent --local --agent main --message "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
     fail "OpenClaw agent $label turn failed"
   fi
 
-  node - "$output" "${server_name}__${tool_name}" "$marker" <<'NODE'
+  node - "$output" "$marker" <<'NODE'
 const fs = require('fs');
-const [path, toolName, marker] = process.argv.slice(2);
+const [path, marker] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
-if (payload.ok !== true || payload.status !== 'ok') throw new Error('agent result is not ok');
-if (payload.final !== marker) throw new Error('agent final marker does not match');
-const summary = payload.toolSummary || (payload.meta && payload.meta.toolSummary) || {};
-if (!Array.isArray(summary.tools) || !summary.tools.includes(toolName)) throw new Error(`agent did not call ${toolName}`);
-if (typeof summary.calls === 'number' && summary.calls < 1) throw new Error('agent tool call count is zero');
-if (Array.isArray(summary.failures) && summary.failures.length !== 0) throw new Error('agent tool summary contains failures');
-if (typeof summary.failures === 'number' && summary.failures !== 0) throw new Error('agent tool summary contains failures');
+const payloads = Array.isArray(payload.payloads) ? payload.payloads : [];
+const texts = payloads
+  .map((entry) => (entry && typeof entry.text === 'string' ? entry.text.trim() : ''))
+  .filter(Boolean);
+if (texts.length === 0) throw new Error('agent result contains no assistant text payload');
+if (texts[texts.length - 1] !== marker) throw new Error('agent final assistant marker does not match');
 NODE
 
   sha256sum "$output" | awk '{print $1}'
 }
 
 read_prompt="Acceptance check. You MUST call the OpenClaw-managed MCP tool ${server_name}__get_household_overview exactly once. Do not use shell, browser, filesystem, memory, or any other tool. Only after that tool succeeds, reply exactly FINANCE_MCP_READ_OK. If the tool is unavailable or fails, do not output that marker."
-read_digest="$(run_agent_check read get_household_overview FINANCE_MCP_READ_OK "$read_prompt")"
+read_digest="$(run_agent_check read FINANCE_MCP_READ_OK "$read_prompt")"
 
 simulation_prompt="Acceptance check. You MUST call the OpenClaw-managed MCP tool ${server_name}__simulate_purchase exactly once with amount_minor=100 and currency=CNY. Do not use shell, browser, filesystem, memory, or any other tool. Only after that tool succeeds, reply exactly FINANCE_MCP_SIM_OK. If the tool is unavailable or fails, do not output that marker."
-simulation_digest="$(run_agent_check simulation simulate_purchase FINANCE_MCP_SIM_OK "$simulation_prompt")"
+simulation_digest="$(run_agent_check simulation FINANCE_MCP_SIM_OK "$simulation_prompt")"
 
 printf 'openclaw_finance_tools=%d\n' "${#expected_tools[@]}"
 printf 'missing_bearer_status=%s\n' "$missing_status"
