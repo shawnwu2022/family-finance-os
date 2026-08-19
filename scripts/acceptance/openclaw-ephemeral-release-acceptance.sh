@@ -22,15 +22,17 @@ audit_table="agent_tool_audits"
 
 workdir="$(mktemp -d /tmp/family-finance-openclaw-acceptance.XXXXXX)"
 chmod 0700 "$workdir"
-secrets_dir="$workdir/secrets"
-mkdir -m 0700 "$secrets_dir"
+smoke_secrets_dir="$workdir/secrets"
+container_secrets_dir="$workdir/container-secrets"
+mkdir -m 0700 "$smoke_secrets_dir"
+mkdir -m 0755 "$container_secrets_dir"
 env_file="$workdir/acceptance.env"
 caddy_root="$workdir/caddy-root.crt"
 project="family-finance-openclaw-${GITHUB_RUN_ID:-$$}-${RANDOM}"
 hosts_tag="family-finance-openclaw-${GITHUB_RUN_ID:-$$}-${RANDOM}"
 hosts_added=0
 
-export FINANCE_ACCEPTANCE_SECRETS_DIR="$secrets_dir"
+export FINANCE_ACCEPTANCE_SECRETS_DIR="$container_secrets_dir"
 
 compose=(
   docker compose
@@ -61,8 +63,10 @@ finance_auth_password="$(random_hex 18)"
 ebk_user_password="$(random_hex 18)"
 ebk_security_secret="$(openssl rand -base64 32 | tr -d '\n')"
 mcp_token="$(random_hex 32)"
-printf '%s' "$mcp_token" >"$secrets_dir/finance-mcp-token"
-chmod 0600 "$secrets_dir/finance-mcp-token"
+printf '%s' "$mcp_token" >"$smoke_secrets_dir/finance-mcp-token"
+chmod 0600 "$smoke_secrets_dir/finance-mcp-token"
+printf '%s' "$mcp_token" >"$container_secrets_dir/finance-mcp-token"
+chmod 0444 "$container_secrets_dir/finance-mcp-token"
 
 finance_auth_hash="$(docker run --rm caddy:2.11.4-alpine caddy hash-password --algorithm bcrypt --plaintext "$finance_auth_password")"
 [[ -n "$finance_auth_hash" ]] || fail "could not generate Caddy Basic Auth hash"
@@ -96,7 +100,7 @@ MCP_REQUEST_TIMEOUT=30s
 MCP_MAX_CONCURRENT=4
 MCP_REQUESTS_PER_MINUTE=120
 MCP_MAX_BODY_BYTES=262144
-FINANCE_ACCEPTANCE_SECRETS_DIR=$secrets_dir
+FINANCE_ACCEPTANCE_SECRETS_DIR=$container_secrets_dir
 EOF_ENV
 chmod 0600 "$env_file"
 
