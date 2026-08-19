@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - feature/v2-openclaw-release-acceptance
+  pull_request:
+    branches:
+      - feature/v2-agent-adapter
 
 permissions:
   contents: read
