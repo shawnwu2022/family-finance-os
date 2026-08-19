@@ -23,7 +23,7 @@ const currencyMarks: Record<string, string> = {
 }
 
 export function formatMoney(value: MoneyDTO): string {
-  const digits = currencyDigits[value.currency] ?? 2
+  const digits = digitsForCurrency(value.currency)
   const minor = BigInt(value.minor)
   const negative = minor < 0n
   const absolute = negative ? -minor : minor
@@ -34,6 +34,32 @@ export function formatMoney(value: MoneyDTO): string {
   const fractionText = digits === 0 ? '' : `.${fraction.toString().padStart(digits, '0')}`
   const mark = currencyMarks[value.currency] ?? `${value.currency} `
   return `${negative ? '-' : ''}${mark}${wholeText}${fractionText}`
+}
+
+export function parseMoneyInput(value: string, currency: string): string | null {
+  const digits = digitsForCurrency(currency)
+  const normalized = value.trim()
+  const pattern = digits === 0 ? /^\d+$/ : new RegExp(`^\\d+(?:\\.\\d{1,${digits}})?$`)
+  if (!pattern.test(normalized)) return null
+
+  const [whole, fraction = ''] = normalized.split('.')
+  const scale = 10n ** BigInt(digits)
+  const paddedFraction = fraction.padEnd(digits, '0')
+  const fractionalMinor = paddedFraction === '' ? 0n : BigInt(paddedFraction)
+  return (BigInt(whole) * scale + fractionalMinor).toString()
+}
+
+export function moneyInputFromMinor(minor: string, currency: string): string {
+  if (!/^\d+$/.test(minor)) throw new Error('invalid_minor_units')
+
+  const digits = digitsForCurrency(currency)
+  const value = BigInt(minor)
+  if (digits === 0) return value.toString()
+
+  const scale = 10n ** BigInt(digits)
+  const whole = value / scale
+  const fraction = value % scale
+  return `${whole}.${fraction.toString().padStart(digits, '0')}`
 }
 
 export function formatPercent(ratio?: string, fractionDigits = 1): string {
@@ -69,8 +95,12 @@ export function formatPercent(ratio?: string, fractionDigits = 1): string {
 }
 
 export function chartValue(value: MoneyDTO): number {
-  const digits = currencyDigits[value.currency] ?? 2
+  const digits = digitsForCurrency(value.currency)
   return Number(BigInt(value.minor)) / 10 ** digits
+}
+
+function digitsForCurrency(currency: string): number {
+  return currencyDigits[currency.trim().toUpperCase()] ?? 2
 }
 
 function groupDigits(value: string): string {
