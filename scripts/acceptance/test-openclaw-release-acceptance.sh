@@ -108,7 +108,15 @@ grep -Fq 'Bearer ${FINANCE_MCP_OPENCLAW_TOKEN}' "$provisioner" || fail "OpenClaw
 if grep -Fq 'catalogRefresh' "$provisioner"; then
   fail "pinned OpenClaw v2026.7.1-2 config must not use non-stable models.catalogRefresh"
 fi
-grep -Eq '^[[:space:]]*bash[[:space:]]+"\$live_smoke"[[:space:]]*$' "$provisioner" || fail "provisioner must actually execute the real OpenClaw live smoke"
+
+# A failed real agent turn must still leave enough privacy-preserving Finance evidence
+# to diagnose whether the failure was schema/adapter/backend related. Never print raw
+# tool arguments or tool outputs; the audit table already stores only codes and hashes.
+grep -Fq 'audit_failure_summary()' "$provisioner" || fail "provisioner must define a sanitized audit failure summary"
+grep -Fq 'if ! bash "$live_smoke"; then' "$provisioner" || fail "provisioner must emit audit evidence before failing a live smoke"
+grep -Fq "COALESCE(error_code, '')" "$provisioner" || fail "audit failure summary must expose only the stored error code"
+grep -Fq 'GROUP BY tool_name, status, error_code' "$provisioner" || fail "audit failure summary must aggregate by tool/status/error code"
+
 grep -Eq '^[[:space:]]*read_audit_count="\$\(query_audit_count get_household_overview\)"' "$provisioner" || fail "provisioner must verify the read-tool audit row"
 grep -Eq '^[[:space:]]*simulation_audit_count="\$\(query_audit_count simulate_purchase\)"' "$provisioner" || fail "provisioner must verify the simulation-tool audit row"
 grep -Fq "status = 'success'" "$provisioner" || fail "provisioner must require successful audit completion"
