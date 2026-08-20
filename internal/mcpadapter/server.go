@@ -6,15 +6,22 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/shawnwu2022/family-finance-os/internal/agentadapter"
 )
 
+const (
+	defaultServerRequestTimeout = 15 * time.Second
+	maxToolCompletionReserve    = 3 * time.Second
+)
+
 type ServerOptions struct {
-	Name      string
-	Version   string
-	Principal agentadapter.Principal
+	Name           string
+	Version        string
+	Principal      agentadapter.Principal
+	RequestTimeout time.Duration
 }
 
 func NewServer(service *agentadapter.AuditedService, opts ServerOptions) (*mcp.Server, error) {
@@ -32,6 +39,14 @@ func NewServer(service *agentadapter.AuditedService, opts ServerOptions) (*mcp.S
 	if strings.TrimSpace(opts.Principal.Kind) == "" || opts.Principal.HouseholdID <= 0 {
 		return nil, fmt.Errorf("mcpadapter: scoped principal is required")
 	}
+	requestTimeout := opts.RequestTimeout
+	if requestTimeout < 0 {
+		return nil, fmt.Errorf("mcpadapter: request timeout must not be negative")
+	}
+	if requestTimeout == 0 {
+		requestTimeout = defaultServerRequestTimeout
+	}
+	toolTimeout := toolExecutionBudget(requestTimeout)
 
 	definitions := service.Definitions()
 	seen := make(map[agentadapter.ToolName]struct{}, len(definitions))
@@ -66,12 +81,23 @@ func NewServer(service *agentadapter.AuditedService, opts ServerOptions) (*mcp.S
 				IdempotentHint:  true,
 				OpenWorldHint:   boolPointer(false),
 			},
-		}, toolHandler(service, opts.Principal, definition.Name))
+		}, toolHandler(service, opts.Principal, definition.Name, toolTimeout))
 	}
 	return server, nil
 }
 
-func toolHandler(service *agentadapter.AuditedService, principal agentadapter.Principal, name agentadapter.ToolName) mcp.ToolHandler {
+func toolExecutionBudget(requestTimeout time.Duration) time.Duration {
+	reserve := requestTimeout / 5
+	if reserve > maxToolCompletionReserve {
+		reserve = maxToolCompletionReserve
+	}
+	if reserve <= 0 || reserve >= requestTimeout {
+		return requestTimeout
+	}
+	return requestTimeout - reserve
+}
+
+func toolHandler(service *agentadapter.AuditedService, principal agentadapter.Principal, name agentadapter.ToolName, timeout time.Duration) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if req == nil || req.Params == nil || req.Session == nil {
 			return toolErrorResult(agentadapter.CodeInternal, "MCP request metadata unavailable"), nil
@@ -90,7 +116,9 @@ func toolHandler(service *agentadapter.AuditedService, principal agentadapter.Pr
 			metadata.ClientVersion = initialize.ClientInfo.Version
 		}
 
-		result, err := service.Call(ctx, principal, metadata, name, req.Params.Arguments)
+		callCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		result, err := service.Call(callCtx, principal, metadata, name, req.Params.Arguments)
 		if err != nil {
 			code := agentadapter.CodeInternal
 			message := "tool call failed"

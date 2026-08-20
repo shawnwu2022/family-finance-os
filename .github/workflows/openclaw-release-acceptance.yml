@@ -1,0 +1,65 @@
+name: OpenClaw Release Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/v2-openclaw-release-acceptance
+  pull_request:
+    branches:
+      - feature/v2-agent-adapter
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: OpenClaw acceptance contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release acceptance contract
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-release-acceptance.sh
+      - name: Verify audit completion schema contract
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-audit-completion-schema.sh
+      - name: Verify Ollama runtime model params contract
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-runtime-model-params.sh
+      - name: Verify retry-aware agent result validator
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-agent-result-validator.sh
+      - name: Verify deterministic simulation prompt contract
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-simulation-prompt.sh
+      - name: Verify sanitized Ollama boundary proxy contract
+        shell: bash
+        run: bash scripts/acceptance/test-ollama-boundary-proxy.sh
+
+  acceptance:
+    name: Real OpenClaw acceptance
+    needs: contracts
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[openclaw-full]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - name: Run real OpenClaw release acceptance
+        shell: bash
+        env:
+          OPENCLAW_FINANCE_SMOKE_OLLAMA_PREFLIGHT: '1'
+        run: bash scripts/acceptance/openclaw-ephemeral-release-acceptance.sh
+      - name: Print sanitized Ollama boundary diagnostics
+        if: always()
+        shell: bash
+        run: |
+          safe_log=/tmp/family-finance-ollama-boundary-safe.jsonl
+          if [[ -f "$safe_log" ]]; then
+            sed 's/^/ollama_boundary_diag /' "$safe_log"
+          else
+            echo 'ollama_boundary_diag unavailable'
+          fi
