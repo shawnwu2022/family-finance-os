@@ -68,6 +68,31 @@ function safeOptionSummary(value) {
   return summary;
 }
 
+function jsonValueType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
+function safeToolArgumentTypes(value) {
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return { $root: "string" };
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { $root: jsonValueType(parsed) };
+  }
+  return Object.fromEntries(
+    Object.entries(parsed)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, jsonValueType(nested)]),
+  );
+}
+
 function requestSummary(requestId, path, body) {
   if (path !== "/api/chat" || !body || typeof body !== "object" || Array.isArray(body)) {
     return undefined;
@@ -182,6 +207,7 @@ function createResponseObserver(requestId, path, status) {
   let chunkCount = 0;
   let responseToolCallCount = 0;
   const responseToolNames = [];
+  const responseToolArgumentTypes = [];
   const doneReasons = [];
 
   function observeObject(value) {
@@ -191,6 +217,7 @@ function createResponseObserver(requestId, path, status) {
       responseToolCallCount += 1;
       const name = call?.function?.name;
       if (typeof name === "string") responseToolNames.push(name);
+      responseToolArgumentTypes.push(safeToolArgumentTypes(call?.function?.arguments));
     }
     const reason = value.done_reason;
     if (typeof reason === "string" && reason) doneReasons.push(reason);
@@ -230,6 +257,7 @@ function createResponseObserver(requestId, path, status) {
         chunkCount,
         responseToolCallCount,
         responseToolNames,
+        responseToolArgumentTypes,
         doneReasons,
       };
     },
