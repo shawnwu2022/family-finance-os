@@ -18,12 +18,12 @@ if grep -Eq '^      params: \{ num_ctx: 32768 \}$' "$provisioner"; then
 fi
 
 awk '
-  /model: \{ primary: "ollama\/qwen3\.5:4b" \}/ { saw_primary=1; next }
+  /model: \{ primary: "ollama\/qwen3\.5:9b" \}/ { saw_primary=1; next }
   saw_primary && /models: \{/ { saw_models=1; next }
-  saw_models && /"ollama\/qwen3\.5:4b": \{/ { saw_entry=1; next }
+  saw_models && /"ollama\/qwen3\.5:9b": \{/ { saw_entry=1; next }
   saw_entry && /params: \{ num_ctx: 32768 \}/ { found=1 }
   END { exit(found ? 0 : 1) }
-' "$provisioner" || fail "qwen3.5:4b must declare per-model params.num_ctx=32768"
+' "$provisioner" || fail "qwen3.5:9b must declare per-model params.num_ctx=32768"
 
 # The pinned stable runtime applies an implicit 120s LLM idle watchdog when the
 # CLI supplies a bounded run timeout. Slow local/self-hosted providers can opt
