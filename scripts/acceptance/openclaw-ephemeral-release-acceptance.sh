@@ -448,7 +448,57 @@ export OPENCLAW_FINANCE_SMOKE_CONFIG="$openclaw_read_config"
 export OPENCLAW_FINANCE_SMOKE_READ_CONFIG="$openclaw_read_config"
 export OPENCLAW_FINANCE_SMOKE_SIMULATION_CONFIG="$openclaw_simulation_config"
 
-bash "$live_smoke"
+expected_simulation_input_sha256="$(printf '%s' '{"amount_minor":"100","currency":"CNY"}' | sha256sum | awk '{print $1}')"
+[[ "$expected_simulation_input_sha256" =~ ^[0-9a-f]{64}$ ]] \
+  || fail "expected simulation input hash could not be calculated"
+
+emit_agent_audit_diagnostics() {
+  local row
+  local calls expected_input_calls different_input_calls success_count error_count running_count error_codes
+
+  if ! row="$(
+    docker exec -i -e PGPASSWORD="$finance_db_password" "$postgres_cid" \
+      psql -X -q -A -t -F '|' -v ON_ERROR_STOP=1 -U finance_app -d finance \
+      -v household_id="$household_id" \
+      -v expected_input_sha256="$expected_simulation_input_sha256" <<'SQL'
+SELECT
+    count(*),
+    count(*) FILTER (WHERE input_sha256 = :'expected_input_sha256'),
+    count(*) FILTER (WHERE input_sha256 <> :'expected_input_sha256'),
+    count(*) FILTER (WHERE status = 'success'),
+    count(*) FILTER (WHERE status = 'error'),
+    count(*) FILTER (WHERE status = 'running'),
+    COALESCE(string_agg(DISTINCT error_code, ','), 'none')
+FROM agent_tool_audits
+WHERE household_id = :'household_id'
+  AND tool_name = 'simulate_purchase';
+SQL
+  )"; then
+    printf 'openclaw_finance_audit_diag tool=simulate_purchase unavailable=true\n'
+    return 0
+  fi
+
+  row="$(printf '%s' "$row" | tr -d '\r\n')"
+  IFS='|' read -r calls expected_input_calls different_input_calls success_count error_count running_count error_codes <<<"$row"
+  for value in "$calls" "$expected_input_calls" "$different_input_calls" "$success_count" "$error_count" "$running_count"; do
+    if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+      printf 'openclaw_finance_audit_diag tool=simulate_purchase unavailable=invalid-row\n'
+      return 0
+    fi
+  done
+  [[ -n "$error_codes" ]] || error_codes="none"
+
+  printf 'openclaw_finance_audit_diag tool=simulate_purchase calls=%s expected_input_calls=%s different_input_calls=%s success=%s error=%s running=%s error_codes=%s\n' \
+    "$calls" "$expected_input_calls" "$different_input_calls" "$success_count" "$error_count" "$running_count" "$error_codes"
+}
+
+if bash "$live_smoke"; then
+  :
+else
+  live_smoke_status=$?
+  emit_agent_audit_diagnostics
+  fail "OpenClaw MCP live smoke failed with exit code $live_smoke_status"
+fi
 
 query_audit_count() {
   local tool_name="$1"
