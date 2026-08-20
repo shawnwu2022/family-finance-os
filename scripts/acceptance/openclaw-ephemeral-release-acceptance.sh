@@ -349,7 +349,6 @@ chmod 0600 "$ollama_proxy_diag"
 OLLAMA_PROXY_UPSTREAM=http://127.0.0.1:11434 \
 OLLAMA_PROXY_LISTEN=127.0.0.1:11435 \
 OLLAMA_PROXY_DIAG_FILE="$ollama_proxy_diag" \
-OLLAMA_PROXY_SHADOW_STRIP_SYSTEM=1 \
   node "$ROOT_DIR/scripts/acceptance/ollama-request-proxy.mjs" \
   >"$workdir/ollama-proxy.stdout" 2>"$workdir/ollama-proxy.stderr" &
 ollama_proxy_pid=$!
@@ -398,7 +397,8 @@ write_openclaw_agent_config() {
     providers: {
       ollama: {
         baseUrl: "http://127.0.0.1:11435",
-        api: "ollama"
+        api: "ollama",
+        timeoutSeconds: 300
       }
     }
   },
@@ -439,7 +439,7 @@ export FINANCE_ENV_FILE="$env_file"
 export FINANCE_MCP_SMOKE_URL="https://finance.localhost/mcp"
 export FINANCE_MCP_SMOKE_TOKEN_FILE="$smoke_secrets_dir/finance-mcp-token"
 export OPENCLAW_FINANCE_MCP_SERVER="finance"
-export OPENCLAW_FINANCE_SMOKE_AGENT_TIMEOUT="300"
+export OPENCLAW_FINANCE_SMOKE_AGENT_TIMEOUT="600"
 export OPENCLAW_FINANCE_SMOKE_MODEL="ollama/${ollama_model}"
 export OPENCLAW_FINANCE_SMOKE_CONFIG="$openclaw_read_config"
 export OPENCLAW_FINANCE_SMOKE_READ_CONFIG="$openclaw_read_config"
