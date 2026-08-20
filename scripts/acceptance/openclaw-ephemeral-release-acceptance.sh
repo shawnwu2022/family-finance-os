@@ -453,6 +453,7 @@ expected_simulation_input_sha256="$(printf '%s' '{"amount_minor":"100","currency
   || fail "expected simulation input hash could not be calculated"
 
 emit_agent_audit_diagnostics() {
+  local phase="${1:-unspecified}"
   local row
   local calls expected_input_calls different_input_calls success_count error_count running_count error_codes
 
@@ -474,7 +475,7 @@ WHERE household_id = :'household_id'
   AND tool_name = 'simulate_purchase';
 SQL
   )"; then
-    printf 'openclaw_finance_audit_diag tool=simulate_purchase unavailable=true\n'
+    printf 'openclaw_finance_audit_diag tool=simulate_purchase phase=%s unavailable=true\n' "$phase"
     return 0
   fi
 
@@ -482,21 +483,185 @@ SQL
   IFS='|' read -r calls expected_input_calls different_input_calls success_count error_count running_count error_codes <<<"$row"
   for value in "$calls" "$expected_input_calls" "$different_input_calls" "$success_count" "$error_count" "$running_count"; do
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
-      printf 'openclaw_finance_audit_diag tool=simulate_purchase unavailable=invalid-row\n'
+      printf 'openclaw_finance_audit_diag tool=simulate_purchase phase=%s unavailable=invalid-row\n' "$phase"
       return 0
     fi
   done
   [[ -n "$error_codes" ]] || error_codes="none"
 
-  printf 'openclaw_finance_audit_diag tool=simulate_purchase calls=%s expected_input_calls=%s different_input_calls=%s success=%s error=%s running=%s error_codes=%s\n' \
-    "$calls" "$expected_input_calls" "$different_input_calls" "$success_count" "$error_count" "$running_count" "$error_codes"
+  printf 'openclaw_finance_audit_diag tool=simulate_purchase phase=%s calls=%s expected_input_calls=%s different_input_calls=%s success=%s error=%s running=%s error_codes=%s\n' \
+    "$phase" "$calls" "$expected_input_calls" "$different_input_calls" "$success_count" "$error_count" "$running_count" "$error_codes"
+}
+
+direct_mcp_auth="$workdir/direct-mcp-auth.curl"
+escaped_mcp_token="${mcp_token//\\/\\\\}"
+escaped_mcp_token="${escaped_mcp_token//\"/\\\"}"
+printf 'header = "Authorization: Bearer %s"\n' "$escaped_mcp_token" >"$direct_mcp_auth"
+chmod 0600 "$direct_mcp_auth"
+
+fresh_session_direct_mcp_probe() {
+  local label="$1"
+  local tool_name="$2"
+  local arguments_json="$3"
+  local prefix="$workdir/direct-mcp-${label}"
+  local started_ms ended_ms duration_ms
+  local init_status init_rc session_id protocol_version
+  local notify_status notify_rc call_status call_rc outcome
+
+  started_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+  jq -n '{
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-11-25",
+      capabilities: {},
+      clientInfo: {name: "family-finance-direct-diagnostic", version: "1.0.0"}
+    }
+  }' >"${prefix}-initialize.json"
+
+  set +e
+  init_status="$(curl --config "$direct_mcp_auth" --silent --show-error \
+    --connect-timeout 5 --max-time 30 --proto '=https' --tlsv1.2 \
+    --cacert "$caddy_root" \
+    --request POST \
+    --header 'Content-Type: application/json' \
+    --header 'Accept: application/json, text/event-stream' \
+    --dump-header "${prefix}-initialize.headers" \
+    --data-binary @"${prefix}-initialize.json" \
+    --output "${prefix}-initialize.response" \
+    --write-out '%{http_code}' \
+    https://finance.localhost/mcp)"
+  init_rc=$?
+  set -e
+
+  outcome="protocol_error"
+  if [[ "$init_rc" -ne 0 ]]; then
+    if [[ "$init_rc" -eq 28 ]]; then
+      outcome="timeout"
+    else
+      outcome="transport_error"
+    fi
+    ended_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+    duration_ms=$((ended_ms - started_ms))
+    printf 'openclaw_direct_mcp_diag label=%s tool=%s outcome=%s stage=initialize http_status=%s duration_ms=%s\n' \
+      "$label" "$tool_name" "$outcome" "${init_status:-000}" "$duration_ms"
+    return 0
+  fi
+  if [[ ! "$init_status" =~ ^2[0-9][0-9]$ ]]; then
+    ended_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+    duration_ms=$((ended_ms - started_ms))
+    printf 'openclaw_direct_mcp_diag label=%s tool=%s outcome=protocol_error stage=initialize http_status=%s duration_ms=%s\n' \
+      "$label" "$tool_name" "$init_status" "$duration_ms"
+    return 0
+  fi
+
+  session_id="$(awk -F': *' 'tolower($1) == "mcp-session-id" {gsub("\r", "", $2); print $2; exit}' "${prefix}-initialize.headers")"
+  protocol_version="$(jq -r '.result.protocolVersion // empty' "${prefix}-initialize.response" 2>/dev/null || true)"
+  if [[ -z "$session_id" || -z "$protocol_version" ]]; then
+    ended_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+    duration_ms=$((ended_ms - started_ms))
+    printf 'openclaw_direct_mcp_diag label=%s tool=%s outcome=protocol_error stage=handshake http_status=%s duration_ms=%s\n' \
+      "$label" "$tool_name" "$init_status" "$duration_ms"
+    return 0
+  fi
+
+  jq -n '{jsonrpc:"2.0",method:"notifications/initialized",params:{}}' >"${prefix}-initialized.json"
+  set +e
+  notify_status="$(curl --config "$direct_mcp_auth" --silent --show-error \
+    --connect-timeout 5 --max-time 30 --proto '=https' --tlsv1.2 \
+    --cacert "$caddy_root" \
+    --request POST \
+    --header 'Content-Type: application/json' \
+    --header 'Accept: application/json, text/event-stream' \
+    --header "Mcp-Session-Id: $session_id" \
+    --header "MCP-Protocol-Version: $protocol_version" \
+    --data-binary @"${prefix}-initialized.json" \
+    --output "${prefix}-initialized.response" \
+    --write-out '%{http_code}' \
+    https://finance.localhost/mcp)"
+  notify_rc=$?
+  set -e
+  if [[ "$notify_rc" -ne 0 || ! "$notify_status" =~ ^2[0-9][0-9]$ ]]; then
+    if [[ "$notify_rc" -eq 28 ]]; then
+      outcome="timeout"
+    elif [[ "$notify_rc" -ne 0 ]]; then
+      outcome="transport_error"
+    else
+      outcome="protocol_error"
+    fi
+    ended_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+    duration_ms=$((ended_ms - started_ms))
+    printf 'openclaw_direct_mcp_diag label=%s tool=%s outcome=%s stage=initialized http_status=%s duration_ms=%s\n' \
+      "$label" "$tool_name" "$outcome" "${notify_status:-000}" "$duration_ms"
+    return 0
+  fi
+
+  jq -n --arg tool "$tool_name" --argjson arguments "$arguments_json" '{
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: {name: $tool, arguments: $arguments}
+  }' >"${prefix}-call.json"
+  set +e
+  call_status="$(curl --config "$direct_mcp_auth" --silent --show-error \
+    --connect-timeout 5 --max-time 30 --proto '=https' --tlsv1.2 \
+    --cacert "$caddy_root" \
+    --request POST \
+    --header 'Content-Type: application/json' \
+    --header 'Accept: application/json, text/event-stream' \
+    --header "Mcp-Session-Id: $session_id" \
+    --header "MCP-Protocol-Version: $protocol_version" \
+    --data-binary @"${prefix}-call.json" \
+    --output "${prefix}-call.response" \
+    --write-out '%{http_code}' \
+    https://finance.localhost/mcp)"
+  call_rc=$?
+  set -e
+
+  if [[ "$call_rc" -ne 0 ]]; then
+    if [[ "$call_rc" -eq 28 ]]; then
+      outcome="timeout"
+    else
+      outcome="transport_error"
+    fi
+  elif [[ ! "$call_status" =~ ^2[0-9][0-9]$ ]]; then
+    outcome="protocol_error"
+  elif ! jq -e 'type == "object"' "${prefix}-call.response" >/dev/null 2>&1; then
+    outcome="protocol_error"
+  elif jq -e '.error != null' "${prefix}-call.response" >/dev/null 2>&1; then
+    outcome="protocol_error"
+  elif jq -e '.result.isError == true' "${prefix}-call.response" >/dev/null 2>&1; then
+    outcome="tool_error"
+  elif jq -e '.result != null' "${prefix}-call.response" >/dev/null 2>&1; then
+    outcome="success"
+  else
+    outcome="protocol_error"
+  fi
+
+  curl --config "$direct_mcp_auth" --silent --show-error \
+    --connect-timeout 2 --max-time 5 --proto '=https' --tlsv1.2 \
+    --cacert "$caddy_root" \
+    --request DELETE \
+    --header "Mcp-Session-Id: $session_id" \
+    --header "MCP-Protocol-Version: $protocol_version" \
+    --output /dev/null \
+    https://finance.localhost/mcp >/dev/null 2>&1 || true
+
+  ended_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+  duration_ms=$((ended_ms - started_ms))
+  printf 'openclaw_direct_mcp_diag label=%s tool=%s outcome=%s stage=call http_status=%s duration_ms=%s\n' \
+    "$label" "$tool_name" "$outcome" "${call_status:-000}" "$duration_ms"
 }
 
 if bash "$live_smoke"; then
   :
 else
   live_smoke_status=$?
-  emit_agent_audit_diagnostics
+  emit_agent_audit_diagnostics agent_failure
+  fresh_session_direct_mcp_probe read get_household_overview '{}'
+  fresh_session_direct_mcp_probe simulation simulate_purchase '{"amount_minor":"100","currency":"CNY"}'
+  emit_agent_audit_diagnostics after_direct
   fail "OpenClaw MCP live smoke failed with exit code $live_smoke_status"
 fi
 
