@@ -55,7 +55,7 @@ grep -Fq 'toolSummary.tools' "$live_smoke" || fail "agent validation must verify
 grep -Fq 'toolSummary.calls' "$live_smoke" || fail "agent validation must require at least one tool call"
 grep -Fq 'toolSummary.failures' "$live_smoke" || fail "agent validation must reject tool failures"
 
-# Keep the local 4B model's active agent tool surface intentionally narrow. The
+# Keep the acceptance model's active agent tool surface intentionally narrow. The
 # separate MCP probe still verifies the full 12-tool server surface; these two are
 # the actual read/simulation tools exercised by agent turns and persisted audits.
 grep -Fq 'tools: {' "$provisioner" || fail "OpenClaw acceptance config must declare an agent tool policy"
@@ -82,7 +82,7 @@ grep -Fq '/healthz' "$provisioner" || fail "provisioner must verify Finance heal
 grep -Fq 'openclaw_version="2026.7.1-2"' "$provisioner" || fail "provisioner must pin the OpenClaw acceptance version"
 grep -Fq 'npm install --global "openclaw@${openclaw_version}"' "$provisioner" || fail "provisioner must install the pinned real OpenClaw CLI"
 grep -Fq 'ollama_image="ollama/ollama:0.32.5"' "$provisioner" || fail "provisioner must pin the Ollama runtime image"
-grep -Fq 'ollama_model="qwen3.5:4b"' "$provisioner" || fail "provisioner must pin the tool-capable local acceptance model"
+grep -Fq 'ollama_model="qwen3.5:9b"' "$provisioner" || fail "provisioner must pin the 9B tool-capable local acceptance model"
 
 # Before paying the cost of full OpenClaw turns, prove that the pinned model handles
 # the exact read tool surface used by acceptance on both native Ollama response modes.
