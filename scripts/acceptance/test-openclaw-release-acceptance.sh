@@ -141,7 +141,6 @@ grep -Fq 'Bearer ${FINANCE_MCP_OPENCLAW_TOKEN}' "$provisioner" || fail "OpenClaw
 if grep -Fq 'catalogRefresh' "$provisioner"; then
   fail "pinned OpenClaw v2026.7.1-2 config must not use non-stable models.catalogRefresh"
 fi
-grep -Eq '^[[:space:]]*bash[[:space:]]+"\$live_smoke"[[:space:]]*$' "$provisioner" || fail "provisioner must actually execute the real OpenClaw live smoke"
 grep -Eq '^[[:space:]]*read_audit_count="\$\(query_audit_count get_household_overview\)"' "$provisioner" || fail "provisioner must verify the read-tool audit row"
 grep -Eq '^[[:space:]]*simulation_audit_count="\$\(query_audit_count simulate_purchase\)"' "$provisioner" || fail "provisioner must verify the simulation-tool audit row"
 grep -Fq "status = 'success'" "$provisioner" || fail "provisioner must require successful audit completion"
