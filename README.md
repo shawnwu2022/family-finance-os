@@ -154,4 +154,4 @@ finance.example.com   -> Finance Core
 
 ## License
 
-当前仓库尚未提交仓库级 `LICENSE` 文件。正式对外分发或创建生产 release 前，项目所有者必须明确选择并提交许可证；第三方依赖继续遵循各自许可证，ezBookkeeping 为 MIT License。
+Family Finance OS 使用 [MIT License](LICENSE)。第三方依赖继续遵循各自许可证；ezBookkeeping 为 MIT License。
