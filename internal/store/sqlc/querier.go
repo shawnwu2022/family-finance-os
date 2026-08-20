@@ -25,6 +25,7 @@ type Querier interface {
 	CreateHousehold(ctx context.Context, arg CreateHouseholdParams) (CreateHouseholdRow, error)
 	CreateHouseholdMember(ctx context.Context, arg CreateHouseholdMemberParams) (CreateHouseholdMemberRow, error)
 	CreateIncomeSource(ctx context.Context, arg CreateIncomeSourceParams) (CreateIncomeSourceRow, error)
+	DeletePortfolioAssetSnapshot(ctx context.Context, arg DeletePortfolioAssetSnapshotParams) error
 	FinishJobRun(ctx context.Context, arg FinishJobRunParams) (int64, error)
 	GetAdviceAudit(ctx context.Context, id int64) (AdviceAudit, error)
 	GetAgentToolAudit(ctx context.Context, id int64) (AgentToolAudit, error)
@@ -42,10 +43,12 @@ type Querier interface {
 	ListHouseholdMembers(ctx context.Context, householdID int64) ([]ListHouseholdMembersRow, error)
 	ListIncomeSources(ctx context.Context, householdID int64) ([]ListIncomeSourcesRow, error)
 	ListJobRuns(ctx context.Context, arg ListJobRunsParams) ([]JobRun, error)
+	ListPortfolioAssetSnapshotsByHousehold(ctx context.Context, householdID int64) ([]ListPortfolioAssetSnapshotsByHouseholdRow, error)
 	ListSchedulerHouseholds(ctx context.Context) ([]ListSchedulerHouseholdsRow, error)
 	RecoverInterruptedJobRuns(ctx context.Context, recoveredAt pgtype.Timestamptz) (int64, error)
 	UpdateDebtBalance(ctx context.Context, arg UpdateDebtBalanceParams) (Debt, error)
 	UpsertHouseholdPolicy(ctx context.Context, arg UpsertHouseholdPolicyParams) (UpsertHouseholdPolicyRow, error)
+	UpsertPortfolioAssetSnapshot(ctx context.Context, arg UpsertPortfolioAssetSnapshotParams) (UpsertPortfolioAssetSnapshotRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

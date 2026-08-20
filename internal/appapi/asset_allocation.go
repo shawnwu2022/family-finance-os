@@ -18,15 +18,47 @@ func (a *API) AssetAllocation(ctx context.Context, householdID int64) (server.As
 	currency := profile.Household.BaseCurrency
 	asOf := a.now().UTC()
 
+	snapshots := []portfolio.AssetSnapshot(nil)
+	if a.assetSnapshots != nil {
+		snapshots, err = a.assetSnapshots.ListAssetSnapshots(ctx, householdID)
+		if err != nil {
+			return server.AssetAllocationResponse{}, fmt.Errorf("list portfolio asset snapshots: %w", err)
+		}
+	}
+
 	accounts, err := a.ledger.ListAccounts(ctx)
 	if err != nil {
 		return server.AssetAllocationResponse{}, fmt.Errorf("list ledger accounts: %w", err)
 	}
 
-	valuations := make([]portfolio.Valuation, 0, len(accounts))
+	valuations := make([]portfolio.Valuation, 0, len(snapshots)+len(accounts))
 	warnings := make([]string, 0)
 	partial := false
+	coveredAccounts := make(map[string]struct{}, len(snapshots))
+	for _, snapshot := range snapshots {
+		if snapshot.Value.Currency != currency {
+			partial = true
+			warnings = appendWarning(warnings, fmt.Sprintf("snapshot %s skipped: currency %s differs from household currency %s", snapshot.AssetRef, snapshot.Value.Currency, currency))
+			continue
+		}
+		valuations = append(valuations, portfolio.Valuation{
+			ID:             snapshot.AssetRef,
+			Name:           snapshot.Name,
+			Class:          snapshot.Class,
+			Value:          snapshot.Value,
+			SourceCurrency: snapshot.SourceCurrency,
+			ValuationAsOf:  snapshot.ValuationAsOf,
+			FXAsOf:         snapshot.FXAsOf,
+		})
+		if snapshot.SourceAccountRef != "" {
+			coveredAccounts[snapshot.SourceAccountRef] = struct{}{}
+		}
+	}
+
 	for _, account := range accounts {
+		if _, covered := coveredAccounts[account.ID]; covered {
+			continue
+		}
 		if account.Hidden || account.Structure == ledger.AccountStructureMultipleSubAccounts || !account.IsAsset || account.IsLiability {
 			continue
 		}
