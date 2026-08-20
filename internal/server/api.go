@@ -160,6 +160,7 @@ type FinanceAPI interface {
 type handlerConfig struct {
 	api FinanceAPI
 	web http.Handler
+	mcp http.Handler
 }
 
 type HandlerOption func(*handlerConfig)
@@ -167,6 +168,9 @@ type HandlerOption func(*handlerConfig)
 func WithAPI(api FinanceAPI) HandlerOption { return func(cfg *handlerConfig) { cfg.api = api } }
 func WithWeb(handler http.Handler) HandlerOption {
 	return func(cfg *handlerConfig) { cfg.web = handler }
+}
+func WithMCP(handler http.Handler) HandlerOption {
+	return func(cfg *handlerConfig) { cfg.mcp = handler }
 }
 
 func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {

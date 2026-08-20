@@ -32,6 +32,24 @@ type AdviceAuditTool struct {
 	ErrorCode     pgtype.Text `json:"error_code"`
 }
 
+type AgentToolAudit struct {
+	ID              int64              `json:"id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	PrincipalKind   string             `json:"principal_kind"`
+	HouseholdID     int64              `json:"household_id"`
+	Protocol        string             `json:"protocol"`
+	ProtocolVersion string             `json:"protocol_version"`
+	ClientName      pgtype.Text        `json:"client_name"`
+	ClientVersion   pgtype.Text        `json:"client_version"`
+	ToolName        string             `json:"tool_name"`
+	InputSha256     string             `json:"input_sha256"`
+	OutputSha256    pgtype.Text        `json:"output_sha256"`
+	DataAsOf        pgtype.Timestamptz `json:"data_as_of"`
+	Status          string             `json:"status"`
+	ErrorCode       pgtype.Text        `json:"error_code"`
+	DurationMs      pgtype.Int8        `json:"duration_ms"`
+}
+
 type BudgetLine struct {
 	ID                  int64              `json:"id"`
 	BudgetPlanID        int64              `json:"budget_plan_id"`
@@ -157,4 +175,20 @@ type JobRun struct {
 	StartedAt    pgtype.Timestamptz `json:"started_at"`
 	FinishedAt   pgtype.Timestamptz `json:"finished_at"`
 	ErrorCode    pgtype.Text        `json:"error_code"`
+}
+
+type PortfolioAssetSnapshot struct {
+	HouseholdID      int64              `json:"household_id"`
+	AssetRef         string             `json:"asset_ref"`
+	Name             string             `json:"name"`
+	AssetClass       string             `json:"asset_class"`
+	ValueMinor       int64              `json:"value_minor"`
+	Currency         string             `json:"currency"`
+	SourceCurrency   string             `json:"source_currency"`
+	ValuationAsOf    pgtype.Timestamptz `json:"valuation_as_of"`
+	FxAsOf           pgtype.Timestamptz `json:"fx_as_of"`
+	SourceAccountRef pgtype.Text        `json:"source_account_ref"`
+	SourceKind       string             `json:"source_kind"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }

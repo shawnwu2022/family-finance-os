@@ -76,13 +76,33 @@ Python 仅在后续本地 OCR/VLM/P40 Worker 中使用；Rust 不进入 V1。
 10. [`docs/11-research-baseline-2026-08-15.md`](docs/11-research-baseline-2026-08-15.md) — 本次规划核验过的一手资料。
 11. [`docs/12-model-strategy-2026-08-15.md`](docs/12-model-strategy-2026-08-15.md) — 当前模型角色、候选和项目自有 Eval 方法。
 
-## 本地验证当前骨架
+## 仓库原生验证
+
+完整质量门禁由仓库自身定义，不依赖 GitHub Actions。任意安装了 **Docker Engine + Docker Compose v2** 的 Linux 主机都可以执行：
 
 ```bash
-go test ./...
+make verify
 ```
 
-当前只实现最小 Go `/healthz` 运行骨架，业务功能按照实施计划以 TDD 逐项加入。
+该命令使用锁定的 Go 1.26.6、Node 24.19.0、PostgreSQL 18.6、sqlc 1.31.1、goose 3.27.3 和 govulncheck 1.7.0，执行迁移 up/down/up、备份恢复演练、Go 单元/集成/race/security 检查、Web 测试与构建、MCP Security、Edge Security、production-ops contract 和最终容器构建。
+
+快速检查验证架构本身、无需启动 Docker：
+
+```bash
+make verify-contract
+```
+
+也可以单独执行阶段：
+
+```bash
+make verify-go
+make verify-web
+make verify-mcp-security
+make verify-edge-security
+make verify-container
+```
+
+`.github/workflows/*.yml` 仅是可选的手动镜像入口；开发、候选版本验收和发布验证均不要求 GitHub-hosted runner 或 GitHub Actions 分钟。
 
 ## 部署前准备
 

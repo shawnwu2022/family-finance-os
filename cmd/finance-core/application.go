@@ -15,6 +15,7 @@ import (
 	"github.com/shawnwu2022/family-finance-os/internal/config"
 	"github.com/shawnwu2022/family-finance-os/internal/ledger/ezbookkeeping"
 	"github.com/shawnwu2022/family-finance-os/internal/llm"
+	"github.com/shawnwu2022/family-finance-os/internal/portfolio"
 	"github.com/shawnwu2022/family-finance-os/internal/report"
 	"github.com/shawnwu2022/family-finance-os/internal/requestscope"
 	"github.com/shawnwu2022/family-finance-os/internal/scheduler"
@@ -43,8 +44,9 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		return fail(fmt.Errorf("configure ezbookkeeping ledger: %w", err))
 	}
 	financeAPI, err := appapi.New(appapi.Dependencies{
-		Ledger:  ledgerClient,
-		Planner: appapi.NewPostgresPlanner(pool),
+		Ledger:    ledgerClient,
+		Planner:   appapi.NewPostgresPlanner(pool),
+		Portfolio: portfolio.NewPostgresStore(pool),
 	})
 	if err != nil {
 		return fail(fmt.Errorf("configure finance API: %w", err))
@@ -108,11 +110,19 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		jobs = append(jobs, job)
 	}
 
-	handler := server.NewHandler(
+	handlerOptions := []server.HandlerOption{
 		server.WithAPI(householdScopedAPI{FinanceAPI: reportingAPI, advisor: financeAPI}),
 		server.WithWeb(webassets.Handler()),
 		server.WithReady(pool.Ping),
-	)
+	}
+	if cfg.MCP.Enabled {
+		mcpHandler, err := buildMCPHandler(ctx, cfg.MCP, pool, financeAPI)
+		if err != nil {
+			return fail(fmt.Errorf("configure MCP handler: %w", err))
+		}
+		handlerOptions = append(handlerOptions, server.WithMCP(mcpHandler))
+	}
+	handler := server.NewHandler(handlerOptions...)
 	for _, job := range jobs {
 		job := job
 		go func() {
@@ -131,6 +141,18 @@ type householdScopedAPI struct {
 
 func (a householdScopedAPI) Advisor(ctx context.Context, request server.AdvisorRequest) (server.AdvisorResponse, error) {
 	return a.advisor.Advisor(requestscope.WithHouseholdID(ctx, request.HouseholdID), request)
+}
+
+func (a householdScopedAPI) ListPortfolioAssets(ctx context.Context, householdID int64) (server.PortfolioAssetsResponse, error) {
+	return a.advisor.ListPortfolioAssets(ctx, householdID)
+}
+
+func (a householdScopedAPI) UpsertPortfolioAsset(ctx context.Context, householdID int64, assetRef string, request server.PortfolioAssetUpsertRequest) (server.PortfolioAssetResponse, error) {
+	return a.advisor.UpsertPortfolioAsset(ctx, householdID, assetRef, request)
+}
+
+func (a householdScopedAPI) DeletePortfolioAsset(ctx context.Context, householdID int64, assetRef string) error {
+	return a.advisor.DeletePortfolioAsset(ctx, householdID, assetRef)
 }
 
 type monthlyReporter interface {

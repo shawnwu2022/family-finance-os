@@ -72,8 +72,18 @@ services:
       LLM_FAST_MODEL: ${LLM_FAST_MODEL:-}
       LLM_PLANNER_MODEL: ${LLM_PLANNER_MODEL:-}
       LLM_REVIEWER_MODEL: ${LLM_REVIEWER_MODEL:-}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_TOKEN_FILE: ${MCP_TOKEN_FILE:-/run/secrets/finance-mcp-token}
+      MCP_HOUSEHOLD_ID: ${MCP_HOUSEHOLD_ID:-}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      MCP_REQUEST_TIMEOUT: ${MCP_REQUEST_TIMEOUT:-15s}
+      MCP_MAX_CONCURRENT: ${MCP_MAX_CONCURRENT:-4}
+      MCP_REQUESTS_PER_MINUTE: ${MCP_REQUESTS_PER_MINUTE:-60}
+      MCP_MAX_BODY_BYTES: ${MCP_MAX_BODY_BYTES:-262144}
       FINANCE_LISTEN_ADDR: ${FINANCE_LISTEN_ADDR:-:8000}
       FINANCE_HEALTHCHECK_URL: ${FINANCE_HEALTHCHECK_URL:-http://127.0.0.1:8000/healthz}
+    volumes:
+      - ./secrets:/run/secrets:ro
     healthcheck:
       test: ["CMD", "/finance-core", "healthcheck"]
       interval: 15s

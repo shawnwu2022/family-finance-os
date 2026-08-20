@@ -54,7 +54,7 @@ func TestPostgresPlannerRoundTripIntegration(t *testing.T) {
 			minimum_payment_minor, scheduled_payment_minor, prepayment_fee_rate,
 			prepayment_restricted_months, revolving, active
 		) VALUES
-			($1, 'active card', 'credit_card', 300000, 200000, 'CNY', 0.18, 'fixed', 0, 20, 'revolving', 20000, 25000, 0, 0, TRUE, TRUE),
+			($1, 'active card', 'credit_card', 300000, 200000, 'CNY', 0.18, 'fixed', 0, 20, 'revolving', 20000, 25000, 0.015, 2, TRUE, TRUE),
 			($1, 'closed card', 'credit_card', 100000, 0, 'CNY', 0.20, 'fixed', 0, 5, 'revolving', 10000, 0, 0, 0, TRUE, FALSE)
 	`, householdID); err != nil {
 		t.Fatalf("insert debts: %v", err)
@@ -92,6 +92,16 @@ func TestPostgresPlannerRoundTripIntegration(t *testing.T) {
 	}
 	if len(debts) != 1 || debts[0].Name != "active card" || debts[0].APR != "0.18" || debts[0].ScheduledPayment.Minor != 25000 {
 		t.Fatalf("debts=%#v", debts)
+	}
+	contract, err := planner.DebtContract(ctx, householdID, debts[0].ID)
+	if err != nil {
+		t.Fatalf("DebtContract: %v", err)
+	}
+	if contract.ID != debts[0].ID || contract.OriginalPrincipal.Minor != 300000 || contract.Balance.Minor != 200000 || contract.Balance.Currency != "CNY" {
+		t.Fatalf("contract identity/balance=%#v", contract)
+	}
+	if contract.APR == nil || contract.APR.String() != "0.18" || string(contract.RateType) != "fixed" || contract.PrepaymentFeeRate == nil || contract.PrepaymentFeeRate.String() != "0.015" || contract.PrepaymentRestrictedMonths != 2 || !contract.Revolving {
+		t.Fatalf("contract simulation fields=%#v", contract)
 	}
 
 	goalList, err := planner.Goals(ctx, householdID)

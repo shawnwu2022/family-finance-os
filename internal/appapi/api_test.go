@@ -2,6 +2,7 @@ package appapi
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/shawnwu2022/family-finance-os/internal/goals"
 	"github.com/shawnwu2022/family-finance-os/internal/household"
 	"github.com/shawnwu2022/family-finance-os/internal/ledger"
+	"github.com/shawnwu2022/family-finance-os/internal/server"
 	"github.com/shawnwu2022/family-finance-os/pkg/money"
 )
 
@@ -93,6 +95,73 @@ func TestAPIComposesDeterministicHouseholdSnapshot(t *testing.T) {
 	}
 	if len(goalStatus.Items) != 1 || goalStatus.Items[0].RequiredMonthly.Minor != 10_000 || goalStatus.Items[0].Status != "behind" {
 		t.Fatalf("goals=%#v", goalStatus)
+	}
+}
+
+func TestScenarioHandlesZeroIncomeSavingsRate(t *testing.T) {
+	now := time.Date(2026, 8, 17, 3, 30, 0, 0, time.UTC)
+	planner := fakePlanner{
+		profile: household.Profile{
+			Household: household.Household{ID: 42, Name: "empty-income", BaseCurrency: "CNY", Timezone: "Asia/Shanghai"},
+			Policy:    household.HouseholdPolicy{HouseholdID: 42, LiquidityFloor: money.Money{Currency: "CNY"}},
+		},
+		plan: budget.BudgetPlan{ID: 1, HouseholdID: 42, Period: "2026-08", Currency: "CNY"},
+	}
+	book := fakeLedger{accounts: []ledger.Account{
+		{ID: "checking", Category: ledger.AccountCategoryChecking, Structure: ledger.AccountStructureSingle, Balance: money.Money{Minor: 10_000, Currency: "CNY"}, IsAsset: true},
+	}}
+	api, err := New(Dependencies{Ledger: book, Planner: planner, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	result, err := api.Scenario(context.Background(), server.ScenarioRequest{
+		HouseholdID: 42,
+		Kind:        "purchase",
+		Input:       json.RawMessage(`{"amount_minor":"100","currency":"CNY"}`),
+	})
+	if err != nil {
+		t.Fatalf("Scenario: %v", err)
+	}
+	if !json.Valid(result.Result) {
+		t.Fatalf("scenario result is not valid JSON: %q", result.Result)
+	}
+	if strings.Contains(string(result.Result), "savings_rate") {
+		t.Fatalf("zero-income savings rate should be omitted: %s", result.Result)
+	}
+}
+
+func TestBudgetHandlesZeroPlannedUtilization(t *testing.T) {
+	now := time.Date(2026, 8, 17, 3, 30, 0, 0, time.UTC)
+	planner := fakePlanner{
+		profile: household.Profile{
+			Household: household.Household{ID: 42, Name: "zero-budget", BaseCurrency: "CNY", Timezone: "Asia/Shanghai"},
+			Policy:    household.HouseholdPolicy{HouseholdID: 42, LiquidityFloor: money.Money{Currency: "CNY"}},
+		},
+		plan: budget.BudgetPlan{
+			ID: 1, HouseholdID: 42, Period: "2026-08", Currency: "CNY",
+			Lines: []budget.BudgetLine{
+				{ID: 1, BudgetPlanID: 1, ExternalCategoryRef: "food", Planned: money.Money{Currency: "CNY"}, Kind: budget.BudgetKindEssential},
+			},
+		},
+	}
+	book := fakeLedger{accounts: []ledger.Account{
+		{ID: "checking", Category: ledger.AccountCategoryChecking, Structure: ledger.AccountStructureSingle, Balance: money.Money{Minor: 10_000, Currency: "CNY"}, IsAsset: true},
+	}}
+	api, err := New(Dependencies{Ledger: book, Planner: planner, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	status, err := api.Budget(context.Background(), 42, "2026-08")
+	if err != nil {
+		t.Fatalf("Budget: %v", err)
+	}
+	if len(status.Lines) != 1 {
+		t.Fatalf("budget lines=%d want 1", len(status.Lines))
+	}
+	if status.Lines[0].Utilization != "" {
+		t.Fatalf("zero-planned utilization=%q want empty", status.Lines[0].Utilization)
 	}
 }
 

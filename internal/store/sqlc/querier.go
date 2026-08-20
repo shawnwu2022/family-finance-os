@@ -12,8 +12,11 @@ import (
 
 type Querier interface {
 	ClaimJobRun(ctx context.Context, arg ClaimJobRunParams) (int64, error)
+	CompleteAgentToolAuditFailure(ctx context.Context, arg CompleteAgentToolAuditFailureParams) (int64, error)
+	CompleteAgentToolAuditSuccess(ctx context.Context, arg CompleteAgentToolAuditSuccessParams) (int64, error)
 	CreateAdviceAudit(ctx context.Context, arg CreateAdviceAuditParams) (AdviceAudit, error)
 	CreateAdviceAuditTool(ctx context.Context, arg CreateAdviceAuditToolParams) (AdviceAuditTool, error)
+	CreateAgentToolAuditAttempt(ctx context.Context, arg CreateAgentToolAuditAttemptParams) (int64, error)
 	CreateBudgetLine(ctx context.Context, arg CreateBudgetLineParams) (CreateBudgetLineRow, error)
 	CreateBudgetPlan(ctx context.Context, arg CreateBudgetPlanParams) (CreateBudgetPlanRow, error)
 	CreateDebt(ctx context.Context, arg CreateDebtParams) (Debt, error)
@@ -22,8 +25,10 @@ type Querier interface {
 	CreateHousehold(ctx context.Context, arg CreateHouseholdParams) (CreateHouseholdRow, error)
 	CreateHouseholdMember(ctx context.Context, arg CreateHouseholdMemberParams) (CreateHouseholdMemberRow, error)
 	CreateIncomeSource(ctx context.Context, arg CreateIncomeSourceParams) (CreateIncomeSourceRow, error)
+	DeletePortfolioAssetSnapshot(ctx context.Context, arg DeletePortfolioAssetSnapshotParams) error
 	FinishJobRun(ctx context.Context, arg FinishJobRunParams) (int64, error)
 	GetAdviceAudit(ctx context.Context, id int64) (AdviceAudit, error)
+	GetAgentToolAudit(ctx context.Context, id int64) (AgentToolAudit, error)
 	GetBudgetPlan(ctx context.Context, id int64) (GetBudgetPlanRow, error)
 	GetBudgetPlanByHouseholdPeriod(ctx context.Context, arg GetBudgetPlanByHouseholdPeriodParams) (GetBudgetPlanByHouseholdPeriodRow, error)
 	GetDebt(ctx context.Context, id int64) (Debt, error)
@@ -38,10 +43,12 @@ type Querier interface {
 	ListHouseholdMembers(ctx context.Context, householdID int64) ([]ListHouseholdMembersRow, error)
 	ListIncomeSources(ctx context.Context, householdID int64) ([]ListIncomeSourcesRow, error)
 	ListJobRuns(ctx context.Context, arg ListJobRunsParams) ([]JobRun, error)
+	ListPortfolioAssetSnapshotsByHousehold(ctx context.Context, householdID int64) ([]ListPortfolioAssetSnapshotsByHouseholdRow, error)
 	ListSchedulerHouseholds(ctx context.Context) ([]ListSchedulerHouseholdsRow, error)
 	RecoverInterruptedJobRuns(ctx context.Context, recoveredAt pgtype.Timestamptz) (int64, error)
 	UpdateDebtBalance(ctx context.Context, arg UpdateDebtBalanceParams) (Debt, error)
 	UpsertHouseholdPolicy(ctx context.Context, arg UpsertHouseholdPolicyParams) (UpsertHouseholdPolicyRow, error)
+	UpsertPortfolioAssetSnapshot(ctx context.Context, arg UpsertPortfolioAssetSnapshotParams) (UpsertPortfolioAssetSnapshotRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -12,7 +12,12 @@ func WithScopedAPI(api FinanceAPI) HandlerOption {
 			cfg.api = nil
 			return
 		}
-		cfg.api = scopedFinanceAPI{next: api}
+		base := scopedFinanceAPI{next: api}
+		if portfolioAPI, ok := api.(PortfolioFinanceAPI); ok {
+			cfg.api = scopedPortfolioFinanceAPI{scopedFinanceAPI: base, portfolio: portfolioAPI}
+			return
+		}
+		cfg.api = base
 	}
 }
 
@@ -50,4 +55,21 @@ func (s scopedFinanceAPI) Advisor(ctx context.Context, request AdvisorRequest) (
 
 func (s scopedFinanceAPI) Reports(ctx context.Context, householdID int64) (ReportsResponse, error) {
 	return s.next.Reports(ctx, householdID)
+}
+
+type scopedPortfolioFinanceAPI struct {
+	scopedFinanceAPI
+	portfolio PortfolioFinanceAPI
+}
+
+func (s scopedPortfolioFinanceAPI) ListPortfolioAssets(ctx context.Context, householdID int64) (PortfolioAssetsResponse, error) {
+	return s.portfolio.ListPortfolioAssets(ctx, householdID)
+}
+
+func (s scopedPortfolioFinanceAPI) UpsertPortfolioAsset(ctx context.Context, householdID int64, assetRef string, request PortfolioAssetUpsertRequest) (PortfolioAssetResponse, error) {
+	return s.portfolio.UpsertPortfolioAsset(ctx, householdID, assetRef, request)
+}
+
+func (s scopedPortfolioFinanceAPI) DeletePortfolioAsset(ctx context.Context, householdID int64, assetRef string) error {
+	return s.portfolio.DeletePortfolioAsset(ctx, householdID, assetRef)
 }
