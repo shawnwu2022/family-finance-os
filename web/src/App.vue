@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { askAdvisor, loadDashboard } from './api'
 import CashflowChart from './components/CashflowChart.vue'
 import MetricCard from './components/MetricCard.vue'
+import PortfolioPanel from './components/PortfolioPanel.vue'
 import { chartValue, formatMoney, formatPercent } from './money'
 import type { AdvisorResponse, DashboardData } from './types'
 
@@ -232,6 +233,8 @@ onMounted(() => {
             <p v-else class="empty-state">还没有家庭财务目标。</p>
           </section>
         </div>
+
+        <PortfolioPanel :household-id="householdNumeric" :default-currency="data.overview.net_worth.currency" />
 
         <section class="panel advisor-panel">
           <div class="panel-heading">
