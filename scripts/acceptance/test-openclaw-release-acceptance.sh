@@ -55,6 +55,24 @@ grep -Fq 'toolSummary.tools' "$live_smoke" || fail "agent validation must verify
 grep -Fq 'toolSummary.calls' "$live_smoke" || fail "agent validation must require at least one tool call"
 grep -Fq 'toolSummary.failures' "$live_smoke" || fail "agent validation must reject tool failures"
 
+# Failed real-agent turns must leave enough sanitized metadata to distinguish
+# provider slowness, OpenClaw retries and context pressure without leaking prompts,
+# bearer values or Finance payloads. The same diagnostics must run for a non-zero
+# OpenClaw CLI exit as well as for a successful CLI result rejected by validation.
+grep -Fq 'timeoutPhase' "$live_smoke" || fail "agent diagnostics must report timeout attribution"
+grep -Fq 'providerStarted' "$live_smoke" || fail "agent diagnostics must report whether the provider started"
+grep -Fq 'executionTrace' "$live_smoke" || fail "agent diagnostics must report sanitized execution attempts"
+grep -Fq 'requestShaping' "$live_smoke" || fail "agent diagnostics must report request-shaping metadata"
+grep -Fq 'promptSegments' "$live_smoke" || fail "agent diagnostics must report prompt segment character counts"
+grep -Fq 'contextManagement' "$live_smoke" || fail "agent diagnostics must report context-management metadata"
+grep -Fq 'contextBudgetStatus' "$live_smoke" || fail "agent diagnostics must report context-budget counters"
+if [[ "$(grep -Fc 'emit_agent_diagnostics "$label" "$output"' "$live_smoke")" -lt 2 ]]; then
+  fail "agent diagnostics must run on both CLI failure and result-validation failure"
+fi
+if grep -Fq 'finalPromptText:' "$live_smoke" || grep -Fq 'finalAssistantRawText:' "$live_smoke"; then
+  fail "sanitized diagnostics must not print raw prompt or assistant text"
+fi
+
 # Keep the acceptance model's active agent tool surface intentionally narrow. The
 # separate MCP probe still verifies the full 12-tool server surface; these two are
 # the actual read/simulation tools exercised by agent turns and persisted audits.
