@@ -496,7 +496,7 @@ SQL
 direct_mcp_auth="$workdir/direct-mcp-auth.curl"
 escaped_mcp_token="${mcp_token//\\/\\\\}"
 escaped_mcp_token="${escaped_mcp_token//\"/\\\"}"
-printf 'header = "Authorization: Bearer %s"\n' "$escaped_mcp_token" >"$direct_mcp_auth"
+printf 'header = "Authorization: %s %s"\n' "Bearer" "$escaped_mcp_token" >"$direct_mcp_auth"
 chmod 0600 "$direct_mcp_auth"
 
 fresh_session_direct_mcp_probe() {
