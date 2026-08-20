@@ -14,6 +14,7 @@ import (
 )
 
 func TestStreamableHTTPToolExecutionUsesConfiguredSecurityTimeout(t *testing.T) {
+	const requestTimeout = 25 * time.Millisecond
 	backend := &timeoutProbeBackend{deadlineObserved: make(chan bool, 1)}
 	recorder := &recordingAuditRecorder{startID: 91}
 	service, err := agentadapter.New(backend)
@@ -25,9 +26,10 @@ func TestStreamableHTTPToolExecutionUsesConfiguredSecurityTimeout(t *testing.T) 
 		t.Fatalf("agentadapter.NewAudited: %v", err)
 	}
 	server, err := NewServer(audited, ServerOptions{
-		Name:      "family-finance-os",
-		Version:   "v2-timeout-test",
-		Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: 42},
+		Name:           "family-finance-os",
+		Version:        "v2-timeout-test",
+		Principal:      agentadapter.Principal{Kind: "mcp", HouseholdID: 42},
+		RequestTimeout: requestTimeout,
 	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
@@ -37,7 +39,7 @@ func TestStreamableHTTPToolExecutionUsesConfiguredSecurityTimeout(t *testing.T) 
 		t.Fatalf("NewHTTPHandler: %v", err)
 	}
 	security := testSecurityOptions()
-	security.RequestTimeout = 25 * time.Millisecond
+	security.RequestTimeout = requestTimeout
 	handler, err := NewSecureHTTPHandler(transport, security)
 	if err != nil {
 		t.Fatalf("NewSecureHTTPHandler: %v", err)

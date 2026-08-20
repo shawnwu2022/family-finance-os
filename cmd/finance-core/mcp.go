@@ -51,9 +51,10 @@ func buildMCPHandler(ctx context.Context, cfg config.MCPConfig, pool *pgxpool.Po
 		return nil, fmt.Errorf("configure MCP agent audit: %w", err)
 	}
 	mcpServer, err := mcpadapter.NewServer(audited, mcpadapter.ServerOptions{
-		Name:      "family-finance-os",
-		Version:   "v2",
-		Principal: agentadapter.Principal{Kind: "mcp", HouseholdID: cfg.HouseholdID},
+		Name:           "family-finance-os",
+		Version:        "v2",
+		Principal:      agentadapter.Principal{Kind: "mcp", HouseholdID: cfg.HouseholdID},
+		RequestTimeout: cfg.RequestTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure MCP server: %w", err)
