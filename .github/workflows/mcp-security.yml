@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,26 +14,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26.6'
-          cache: true
-      - name: Verify stable MCP SDK
-        shell: bash
-        run: |
-          set -euo pipefail
-          mcp_version="$(go list -m -f '{{.Version}}' github.com/modelcontextprotocol/go-sdk)"
-          if [[ "$mcp_version" != "v1.6.1" ]]; then
-            echo "expected stable MCP Go SDK v1.6.1, got $mcp_version" >&2
-            exit 1
-          fi
-          if [[ "$mcp_version" == *-* ]]; then
-            echo "pre-release MCP SDK versions are forbidden: $mcp_version" >&2
-            exit 1
-          fi
-      - name: MCP HTTP security contract
-        run: go test ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler|StreamableHTTPToolExecutionUsesConfiguredSecurityTimeout' -v
-      - name: Agent timeout and audit finalization
-        run: go test ./internal/agentadapter -run 'TestEncodeBackendResultMaps|TestAuditedCallPreservesTimeoutWhenRequestCancelsBeforeFailureAuditCompletion' -v
-      - name: MCP security race contract
-        run: go test -race ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler|StreamableHTTPToolExecutionUsesConfiguredSecurityTimeout' -v
+      - name: Run repository-native MCP security verification
+        run: make verify-mcp-security

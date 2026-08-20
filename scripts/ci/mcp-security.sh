@@ -31,8 +31,8 @@ if [[ "$mcp_version" == *-* ]]; then
   exit 1
 fi
 
-go test ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler' -v
+go test ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler|StreamableHTTPToolExecutionUsesConfiguredSecurityTimeout' -v
 go test ./internal/agentadapter -run 'TestEncodeBackendResultMaps|TestAuditedCallPreservesTimeoutWhenRequestCancelsBeforeFailureAuditCompletion' -v
-go test -race ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler' -v
+go test -race ./internal/mcpadapter -run 'NewSecureHTTPHandler|SecureHTTPHandler|StreamableHTTPToolExecutionUsesConfiguredSecurityTimeout' -v
 
 echo "MCP security verification OK"
