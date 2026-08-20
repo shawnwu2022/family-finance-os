@@ -27,6 +27,9 @@ jobs:
       - name: Verify retry-aware agent result validator
         shell: bash
         run: bash scripts/acceptance/test-openclaw-agent-result-validator.sh
+      - name: Verify deterministic simulation prompt contract
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-simulation-prompt.sh
       - name: Verify sanitized Ollama boundary proxy contract
         shell: bash
         run: bash scripts/acceptance/test-ollama-boundary-proxy.sh
