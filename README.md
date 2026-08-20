@@ -154,4 +154,4 @@ finance.example.com   -> Finance Core
 
 ## License
 
-本初始化仓库建议在首次提交业务代码前由项目所有者选择许可证。依赖项目各自遵循其许可证；ezBookkeeping 为 MIT License。
+当前仓库尚未提交仓库级 `LICENSE` 文件。正式对外分发或创建生产 release 前，项目所有者必须明确选择并提交许可证；第三方依赖继续遵循各自许可证，ezBookkeeping 为 MIT License。
