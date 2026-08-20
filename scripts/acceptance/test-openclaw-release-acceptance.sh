@@ -88,6 +88,26 @@ if grep -Eq 'openclaw_finance_audit_diag.*(amount_minor|currency|arguments|outpu
   fail "Finance audit diagnostics must not print raw tool arguments or Finance output hashes"
 fi
 
+# A failed agent turn must be isolated from Finance Core and the MCP transport with
+# fresh-session direct calls. These probes run only after live_smoke already failed;
+# they must not change the success path or expose raw Finance payloads/arguments.
+grep -Fq 'fresh_session_direct_mcp_probe()' "$provisioner" || fail "provisioner must define fresh-session direct MCP diagnostics"
+grep -Fq 'fresh_session_direct_mcp_probe read get_household_overview' "$provisioner" || fail "direct MCP diagnostics must probe the read tool in a fresh session"
+grep -Fq 'fresh_session_direct_mcp_probe simulation simulate_purchase' "$provisioner" || fail "direct MCP diagnostics must probe the simulation tool in a fresh session"
+grep -Fq 'openclaw_direct_mcp_diag' "$provisioner" || fail "direct MCP diagnostics must emit a stable sanitized marker"
+grep -Fq -- '--max-time 30' "$provisioner" || fail "direct MCP diagnostics must cap each network request at 30 seconds"
+grep -Fq 'Mcp-Session-Id' "$provisioner" || fail "direct MCP diagnostics must use explicit fresh Streamable HTTP sessions"
+grep -Fq 'MCP-Protocol-Version' "$provisioner" || fail "direct MCP diagnostics must send the negotiated MCP protocol version"
+grep -Fq 'notifications/initialized' "$provisioner" || fail "direct MCP diagnostics must complete the MCP initialization handshake"
+grep -Fq 'tools/call' "$provisioner" || fail "direct MCP diagnostics must execute a real MCP tool call"
+if grep -Eq 'openclaw_direct_mcp_diag.*(amount_minor|currency|arguments|content|structuredContent)' "$provisioner"; then
+  fail "direct MCP diagnostics must not print raw tool arguments or Finance results"
+fi
+live_smoke_failure_line="$(grep -nF 'live_smoke_status=$?' "$provisioner" | head -n 1 | cut -d: -f1)"
+direct_probe_line="$(grep -nF 'fresh_session_direct_mcp_probe read get_household_overview' "$provisioner" | head -n 1 | cut -d: -f1)"
+[[ "$live_smoke_failure_line" =~ ^[0-9]+$ && "$direct_probe_line" =~ ^[0-9]+$ && "$direct_probe_line" -gt "$live_smoke_failure_line" ]] \
+  || fail "fresh-session direct MCP probes must execute only after the real agent path has failed"
+
 # Keep the acceptance model's active agent tool surface intentionally narrow. The
 # separate MCP probe still verifies the full 12-tool server surface; these two are
 # the actual read/simulation tools exercised by agent turns and persisted audits.
