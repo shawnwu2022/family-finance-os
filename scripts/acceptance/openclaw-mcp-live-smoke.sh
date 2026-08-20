@@ -165,6 +165,34 @@ const runtimeToolNames = Array.isArray(reportTools.entries)
       .map((entry) => (entry && typeof entry.name === 'string' ? entry.name : ''))
       .filter(Boolean)
   : [];
+const executionTrace = meta && typeof meta.executionTrace === 'object' && meta.executionTrace !== null
+  ? meta.executionTrace
+  : {};
+const executionAttempts = Array.isArray(executionTrace.attempts)
+  ? executionTrace.attempts.map((attempt) => ({
+      provider: attempt && typeof attempt.provider === 'string' ? attempt.provider : undefined,
+      model: attempt && typeof attempt.model === 'string' ? attempt.model : undefined,
+      result: attempt && typeof attempt.result === 'string' ? attempt.result : undefined,
+      stage: attempt && typeof attempt.stage === 'string' ? attempt.stage : undefined,
+      elapsedMs: attempt && typeof attempt.elapsedMs === 'number' ? attempt.elapsedMs : undefined,
+      status: attempt && typeof attempt.status === 'number' ? attempt.status : undefined,
+    }))
+  : [];
+const requestShaping = meta && typeof meta.requestShaping === 'object' && meta.requestShaping !== null
+  ? meta.requestShaping
+  : {};
+const promptSegments = Array.isArray(meta.promptSegments)
+  ? meta.promptSegments.map((segment) => ({
+      key: segment && typeof segment.key === 'string' ? segment.key : undefined,
+      chars: segment && typeof segment.chars === 'number' ? segment.chars : undefined,
+    }))
+  : [];
+const contextManagement = meta && typeof meta.contextManagement === 'object' && meta.contextManagement !== null
+  ? meta.contextManagement
+  : {};
+const contextBudgetStatus = agentMeta && typeof agentMeta.contextBudgetStatus === 'object' && agentMeta.contextBudgetStatus !== null
+  ? agentMeta.contextBudgetStatus
+  : {};
 const safe = {
   label,
   payloadCount: payloads.length,
@@ -174,7 +202,10 @@ const safe = {
   agentMetaKeys: Object.keys(agentMeta).sort(),
   provider: typeof agentMeta.provider === 'string' ? agentMeta.provider : undefined,
   model: typeof agentMeta.model === 'string' ? agentMeta.model : undefined,
+  promptTokens: typeof agentMeta.promptTokens === 'number' ? agentMeta.promptTokens : undefined,
   stopReason: typeof meta.stopReason === 'string' ? meta.stopReason : undefined,
+  timeoutPhase: typeof meta.timeoutPhase === 'string' ? meta.timeoutPhase : undefined,
+  providerStarted: typeof meta.providerStarted === 'boolean' ? meta.providerStarted : undefined,
   aborted: typeof meta.aborted === 'boolean' ? meta.aborted : undefined,
   hasError: Boolean(meta.error),
   hasFinalAssistantVisibleText: typeof meta.finalAssistantVisibleText === 'string' && Boolean(meta.finalAssistantVisibleText.trim()),
@@ -184,6 +215,42 @@ const safe = {
   toolNames: Array.isArray(toolSummary.tools) ? toolSummary.tools : undefined,
   toolFailures: typeof toolSummary.failures === 'number' ? toolSummary.failures : undefined,
   durationMs: typeof meta.durationMs === 'number' ? meta.durationMs : undefined,
+  executionTrace: {
+    winnerProvider: typeof executionTrace.winnerProvider === 'string' ? executionTrace.winnerProvider : undefined,
+    winnerModel: typeof executionTrace.winnerModel === 'string' ? executionTrace.winnerModel : undefined,
+    fallbackUsed: typeof executionTrace.fallbackUsed === 'boolean' ? executionTrace.fallbackUsed : undefined,
+    runner: typeof executionTrace.runner === 'string' ? executionTrace.runner : undefined,
+    attempts: executionAttempts,
+  },
+  requestShaping: {
+    thinking: typeof requestShaping.thinking === 'string' ? requestShaping.thinking : undefined,
+    reasoning: typeof requestShaping.reasoning === 'string' ? requestShaping.reasoning : undefined,
+    verbose: typeof requestShaping.verbose === 'string' ? requestShaping.verbose : undefined,
+    trace: typeof requestShaping.trace === 'string' ? requestShaping.trace : undefined,
+    fallbackEligible: typeof requestShaping.fallbackEligible === 'boolean' ? requestShaping.fallbackEligible : undefined,
+    blockStreaming: typeof requestShaping.blockStreaming === 'string' ? requestShaping.blockStreaming : undefined,
+  },
+  promptSegments,
+  contextManagement: {
+    sessionCompactions: typeof contextManagement.sessionCompactions === 'number' ? contextManagement.sessionCompactions : undefined,
+    lastTurnCompactions: typeof contextManagement.lastTurnCompactions === 'number' ? contextManagement.lastTurnCompactions : undefined,
+    preflightCompactionApplied: typeof contextManagement.preflightCompactionApplied === 'boolean' ? contextManagement.preflightCompactionApplied : undefined,
+    postCompactionContextInjected: typeof contextManagement.postCompactionContextInjected === 'boolean' ? contextManagement.postCompactionContextInjected : undefined,
+  },
+  contextBudgetStatus: {
+    route: typeof contextBudgetStatus.route === 'string' ? contextBudgetStatus.route : undefined,
+    shouldCompact: typeof contextBudgetStatus.shouldCompact === 'boolean' ? contextBudgetStatus.shouldCompact : undefined,
+    estimatedPromptTokens: typeof contextBudgetStatus.estimatedPromptTokens === 'number' ? contextBudgetStatus.estimatedPromptTokens : undefined,
+    contextTokenBudget: typeof contextBudgetStatus.contextTokenBudget === 'number' ? contextBudgetStatus.contextTokenBudget : undefined,
+    promptBudgetBeforeReserve: typeof contextBudgetStatus.promptBudgetBeforeReserve === 'number' ? contextBudgetStatus.promptBudgetBeforeReserve : undefined,
+    reserveTokens: typeof contextBudgetStatus.reserveTokens === 'number' ? contextBudgetStatus.reserveTokens : undefined,
+    effectiveReserveTokens: typeof contextBudgetStatus.effectiveReserveTokens === 'number' ? contextBudgetStatus.effectiveReserveTokens : undefined,
+    remainingPromptBudgetTokens: typeof contextBudgetStatus.remainingPromptBudgetTokens === 'number' ? contextBudgetStatus.remainingPromptBudgetTokens : undefined,
+    overflowTokens: typeof contextBudgetStatus.overflowTokens === 'number' ? contextBudgetStatus.overflowTokens : undefined,
+    toolResultReducibleChars: typeof contextBudgetStatus.toolResultReducibleChars === 'number' ? contextBudgetStatus.toolResultReducibleChars : undefined,
+    messageCount: typeof contextBudgetStatus.messageCount === 'number' ? contextBudgetStatus.messageCount : undefined,
+    unwindowedMessageCount: typeof contextBudgetStatus.unwindowedMessageCount === 'number' ? contextBudgetStatus.unwindowedMessageCount : undefined,
+  },
 };
 console.error(`openclaw_agent_diag ${JSON.stringify(safe)}`);
 NODE
@@ -202,9 +269,11 @@ run_agent_check() {
 
   if [[ -n "$turn_config" ]]; then
     if ! OPENCLAW_CONFIG_PATH="$turn_config" openclaw agent --local --agent main --session-id "$session_id" --message "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
+      emit_agent_diagnostics "$label" "$output"
       fail "OpenClaw agent $label turn failed"
     fi
   elif ! openclaw agent --local --agent main --session-id "$session_id" --message "$prompt" "${agent_args[@]}" >"$output" 2>"$workdir/${label}.stderr"; then
+    emit_agent_diagnostics "$label" "$output"
     fail "OpenClaw agent $label turn failed"
   fi
 
