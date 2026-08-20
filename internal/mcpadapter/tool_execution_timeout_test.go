@@ -104,11 +104,16 @@ func (b *timeoutProbeBackend) Overview(ctx context.Context, _ int64) (appserver.
 	case b.deadlineObserved <- hasDeadline:
 	default:
 	}
-	<-ctx.Done()
-	if !errors.Is(ctx.Err(), context.DeadlineExceeded) && !errors.Is(ctx.Err(), context.Canceled) {
-		return appserver.OverviewResponse{}, errors.New("tool context ended without cancellation")
+
+	select {
+	case <-ctx.Done():
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) && !errors.Is(ctx.Err(), context.Canceled) {
+			return appserver.OverviewResponse{}, errors.New("tool context ended without cancellation")
+		}
+		return appserver.OverviewResponse{}, ctx.Err()
+	case <-time.After(350 * time.Millisecond):
+		return appserver.OverviewResponse{}, errors.New("backend safety timeout: tool context was not cancelled")
 	}
-	return appserver.OverviewResponse{}, ctx.Err()
 }
 
 type bearerRoundTripper struct {
