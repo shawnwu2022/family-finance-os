@@ -22,7 +22,7 @@ audit_table="agent_tool_audits"
 
 openclaw_version="2026.7.1-2"
 ollama_image="ollama/ollama:0.32.5"
-ollama_model="qwen3.5:9b"
+ollama_model="qwen3.5:4b"
 
 workdir="$(mktemp -d /tmp/family-finance-openclaw-acceptance.XXXXXX)"
 chmod 0700 "$workdir"
@@ -385,10 +385,13 @@ write_openclaw_agent_config() {
 {
   agents: {
     defaults: {
-      model: { primary: "ollama/qwen3.5:9b" },
+      model: { primary: "ollama/qwen3.5:4b" },
       models: {
-        "ollama/qwen3.5:9b": {
-          params: { num_ctx: 32768 }
+        "ollama/qwen3.5:4b": {
+          params: {
+            num_ctx: 32768,
+            temperature: 0
+          }
         }
       }
     }
