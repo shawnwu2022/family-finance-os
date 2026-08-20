@@ -25,4 +25,13 @@ awk '
   END { exit(found ? 0 : 1) }
 ' "$provisioner" || fail "qwen3.5:4b must declare per-model params.num_ctx=32768"
 
+# The pinned stable runtime applies an implicit 120s LLM idle watchdog when the
+# CLI supplies a bounded run timeout. Slow local/self-hosted providers can opt
+# into a larger provider request timeout; keep the whole agent run larger so the
+# provider budget does not consume the entire tool-call + final-answer turn.
+grep -Fq 'timeoutSeconds: 300' "$provisioner" \
+  || fail "Ollama provider must declare timeoutSeconds=300 for slow local inference"
+grep -Fq 'OPENCLAW_FINANCE_SMOKE_AGENT_TIMEOUT="600"' "$provisioner" \
+  || fail "release acceptance agent run timeout must be 600 seconds"
+
 echo "OpenClaw runtime model params contract OK"
