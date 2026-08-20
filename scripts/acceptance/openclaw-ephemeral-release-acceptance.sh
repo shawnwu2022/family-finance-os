@@ -675,7 +675,7 @@ FROM agent_tool_audits
 WHERE household_id = :'household_id'
   AND tool_name = :'tool_name'
   AND status = 'success'
-  AND completed_at IS NOT NULL
+  AND duration_ms IS NOT NULL
   AND output_sha256 IS NOT NULL;
 SQL
 }
