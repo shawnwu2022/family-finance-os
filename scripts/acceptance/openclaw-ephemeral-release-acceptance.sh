@@ -387,7 +387,11 @@ write_openclaw_agent_config() {
   agents: {
     defaults: {
       model: { primary: "ollama/qwen3.5:4b" },
-      params: { num_ctx: 32768 }
+      models: {
+        "ollama/qwen3.5:4b": {
+          params: { num_ctx: 32768 }
+        }
+      }
     }
   },
   models: {
