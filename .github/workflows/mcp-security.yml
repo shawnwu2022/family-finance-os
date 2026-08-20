@@ -3,22 +3,21 @@ name: MCP Security
 on:
   pull_request:
   push:
-    branches:
-      - feature/v2-openclaw-release-acceptance
-  workflow_dispatch:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
   security:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.6'
-      - name: Verify stable MCP Go SDK
+          cache: true
+      - name: Verify stable MCP SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -28,7 +27,7 @@ jobs:
             exit 1
           fi
           if [[ "$mcp_version" == *-* ]]; then
-            echo "pre-release MCP SDK versions are forbidden in the production dependency graph: $mcp_version" >&2
+            echo "pre-release MCP SDK versions are forbidden: $mcp_version" >&2
             exit 1
           fi
       - name: MCP HTTP security contract
