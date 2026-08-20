@@ -22,6 +22,9 @@ for command_name in openclaw curl sha256sum node; do
   command -v "$command_name" >/dev/null || fail "$command_name is required"
 done
 
+agent_result_validator="scripts/acceptance/openclaw-agent-result-validator.mjs"
+[[ -f "$agent_result_validator" ]] || fail "OpenClaw agent result validator is missing"
+
 server_name="${OPENCLAW_FINANCE_MCP_SERVER:-finance}"
 [[ "$server_name" =~ ^[A-Za-z0-9._-]+$ ]] || fail "OPENCLAW_FINANCE_MCP_SERVER contains unsupported characters"
 
@@ -205,43 +208,7 @@ run_agent_check() {
     fail "OpenClaw agent $label turn failed"
   fi
 
-  if ! node - "$output" "$server_name" "$tool_name" "$marker" <<'NODE'
-const fs = require('fs');
-const [path, serverName, toolName, marker] = process.argv.slice(2);
-const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
-const meta = payload && typeof payload.meta === 'object' && payload.meta !== null ? payload.meta : {};
-const expectedToolName = `${serverName}__${toolName}`;
-const systemPromptReport = meta && typeof meta.systemPromptReport === 'object' && meta.systemPromptReport !== null
-  ? meta.systemPromptReport
-  : {};
-const reportTools = systemPromptReport && typeof systemPromptReport.tools === 'object' && systemPromptReport.tools !== null
-  ? systemPromptReport.tools
-  : {};
-const runtimeToolNames = Array.isArray(reportTools.entries)
-  ? reportTools.entries
-      .map((entry) => (entry && typeof entry.name === 'string' ? entry.name : ''))
-      .filter(Boolean)
-  : [];
-if (runtimeToolNames.length !== 1 || runtimeToolNames[0] !== expectedToolName) {
-  throw new Error(`model-facing tool surface is not exactly ${expectedToolName}`);
-}
-const finalAssistantVisibleText = typeof meta.finalAssistantVisibleText === 'string'
-  ? meta.finalAssistantVisibleText.trim()
-  : '';
-if (finalAssistantVisibleText !== marker) {
-  throw new Error('stable meta.finalAssistantVisibleText does not match the acceptance marker');
-}
-const toolSummary = meta && typeof meta.toolSummary === 'object' && meta.toolSummary !== null
-  ? meta.toolSummary
-  : null;
-if (!toolSummary) throw new Error('stable meta.toolSummary is missing');
-if (toolSummary.calls !== 1) throw new Error(`toolSummary.calls ${toolSummary.calls} != 1`);
-if (!Array.isArray(toolSummary.tools) || toolSummary.tools.length !== 1 || toolSummary.tools[0] !== expectedToolName) {
-  throw new Error(`toolSummary.tools does not contain only ${expectedToolName}`);
-}
-if (Number(toolSummary.failures ?? 0) !== 0) throw new Error('toolSummary.failures is non-zero');
-NODE
-  then
+  if ! node "$agent_result_validator" "$output" "$server_name" "$tool_name" "$marker" 2 >/dev/null; then
     emit_agent_diagnostics "$label" "$output"
     fail "OpenClaw agent $label result validation failed"
   fi
