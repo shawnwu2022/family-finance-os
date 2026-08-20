@@ -100,7 +100,7 @@ grep -Fq '/healthz' "$provisioner" || fail "provisioner must verify Finance heal
 grep -Fq 'openclaw_version="2026.7.1-2"' "$provisioner" || fail "provisioner must pin the OpenClaw acceptance version"
 grep -Fq 'npm install --global "openclaw@${openclaw_version}"' "$provisioner" || fail "provisioner must install the pinned real OpenClaw CLI"
 grep -Fq 'ollama_image="ollama/ollama:0.32.5"' "$provisioner" || fail "provisioner must pin the Ollama runtime image"
-grep -Fq 'ollama_model="qwen3.5:9b"' "$provisioner" || fail "provisioner must pin the 9B tool-capable local acceptance model"
+grep -Fq 'ollama_model="qwen3.5:4b"' "$provisioner" || fail "provisioner must pin the 4B tool-capable local acceptance model"
 
 # Before paying the cost of full OpenClaw turns, prove that the pinned model handles
 # the exact read tool surface used by acceptance on both native Ollama response modes.
