@@ -25,6 +25,7 @@ grep -Fq 'toolNames' "$proxy" || fail "proxy must record model-facing tool names
 grep -Fq 'toolSchemaSha256' "$proxy" || fail "proxy must hash tool schemas rather than logging raw definitions"
 grep -Fq 'responseToolCallCount' "$proxy" || fail "proxy must record whether raw Ollama responses contain tool calls"
 grep -Fq 'responseToolNames' "$proxy" || fail "proxy must record raw Ollama tool names"
+grep -Fq 'responseToolArgumentTypes' "$proxy" || fail "proxy must record tool argument keys/types without values"
 
 # Keep the opt-in shadow implementation available for targeted diagnostics, but
 # never enable it in the real release gate: a shadow inference competes with the
