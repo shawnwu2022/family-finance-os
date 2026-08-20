@@ -358,6 +358,7 @@ func (a *API) snapshot(ctx context.Context, profile household.Profile, period st
 			if err != nil {
 				return snapshot{}, err
 			}
+		}
 	}
 	netWorth, err := analytics.CalculateNetWorth(valuations, currency)
 	if err != nil {
