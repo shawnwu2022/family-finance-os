@@ -21,6 +21,9 @@ jobs:
       - name: Verify release acceptance contract
         shell: bash
         run: bash scripts/acceptance/test-openclaw-release-acceptance.sh
+      - name: Verify Ollama runtime model params contract
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-runtime-model-params.sh
       - name: Verify sanitized Ollama boundary proxy contract
         shell: bash
         run: bash scripts/acceptance/test-ollama-boundary-proxy.sh
