@@ -7,8 +7,14 @@ fail() {
 }
 
 validator="scripts/acceptance/openclaw-agent-result-validator.mjs"
+live_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
 [[ -f "$validator" ]] || fail "agent result validator is missing"
+[[ -f "$live_smoke" ]] || fail "live smoke helper is missing"
 node --check "$validator" >/dev/null || fail "agent result validator JavaScript syntax is invalid"
+grep -Fq 'agent_result_validator="scripts/acceptance/openclaw-agent-result-validator.mjs"' "$live_smoke" \
+  || fail "live smoke must declare the retry-aware agent result validator"
+grep -Fq 'node "$agent_result_validator" "$output" "$server_name" "$tool_name" "$marker" 2' "$live_smoke" \
+  || fail "live smoke must validate agent results with the bounded retry contract"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
@@ -29,6 +35,7 @@ const failures = Number(failuresRaw);
 const payload = {
   payloads: [{ text: visibleText }],
   meta: {
+    aborted: false,
     finalAssistantVisibleText: visibleText,
     systemPromptReport: {
       tools: {
