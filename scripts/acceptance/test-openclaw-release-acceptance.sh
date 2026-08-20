@@ -73,6 +73,21 @@ if grep -Fq 'finalPromptText:' "$live_smoke" || grep -Fq 'finalAssistantRawText:
   fail "sanitized diagnostics must not print raw prompt or assistant text"
 fi
 
+# When the real agent fails after tool execution, correlate the failure with the
+# persisted Finance audit boundary. Emit only aggregate counts, expected-input hash
+# matching and safe error codes; raw tool arguments and Finance payloads are forbidden.
+grep -Fq 'emit_agent_audit_diagnostics()' "$provisioner" || fail "provisioner must define sanitized Finance audit diagnostics"
+grep -Fq 'expected_simulation_input_sha256=' "$provisioner" || fail "Finance audit diagnostics must bind the exact expected simulation input hash"
+grep -Fq 'input_sha256' "$provisioner" || fail "Finance audit diagnostics must compare persisted input hashes"
+grep -Fq 'error_code' "$provisioner" || fail "Finance audit diagnostics must expose safe persisted error codes"
+grep -Fq 'expected_input_calls' "$provisioner" || fail "Finance audit diagnostics must count expected-input calls"
+grep -Fq 'different_input_calls' "$provisioner" || fail "Finance audit diagnostics must count parameter-drift calls"
+grep -Fq 'openclaw_finance_audit_diag' "$provisioner" || fail "Finance audit diagnostics must emit a stable sanitized marker"
+grep -Fq 'if bash "$live_smoke"; then' "$provisioner" || fail "provisioner must diagnose real live-smoke failure without masking its status"
+if grep -Eq 'openclaw_finance_audit_diag.*(amount_minor|currency|arguments|output_sha256)' "$provisioner"; then
+  fail "Finance audit diagnostics must not print raw tool arguments or Finance output hashes"
+fi
+
 # Keep the acceptance model's active agent tool surface intentionally narrow. The
 # separate MCP probe still verifies the full 12-tool server surface; these two are
 # the actual read/simulation tools exercised by agent turns and persisted audits.
