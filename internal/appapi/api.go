@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/shawnwu2022/family-finance-os/internal/advisor"
 	"github.com/shawnwu2022/family-finance-os/internal/analytics"
 	"github.com/shawnwu2022/family-finance-os/internal/budget"
@@ -357,7 +358,6 @@ func (a *API) snapshot(ctx context.Context, profile household.Profile, period st
 			if err != nil {
 				return snapshot{}, err
 			}
-		}
 	}
 	netWorth, err := analytics.CalculateNetWorth(valuations, currency)
 	if err != nil {
@@ -704,7 +704,7 @@ func ratString(value *big.Rat, precision int) string {
 	return text
 }
 
-func decimalString(value interface{ String() string }) string {
+func decimalString(value *apd.Decimal) string {
 	if value == nil {
 		return ""
 	}
