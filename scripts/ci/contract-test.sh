@@ -40,11 +40,16 @@ grep -Fq 'make verify' .github/workflows/ci.yml || fail "CI workflow must delega
 grep -Fq 'make verify-mcp-security' .github/workflows/mcp-security.yml || fail "MCP Security workflow must delegate to make verify-mcp-security"
 grep -Fq 'make verify-edge-security' .github/workflows/edge-security.yml || fail "Edge Security workflow must delegate to make verify-edge-security"
 
-if grep -REq 'actions/setup-(go|node)|go test|npm (ci|test|run)|^[[:space:]]+services:[[:space:]]*$' .github/workflows; then
-  fail "verification logic leaked back into GitHub Actions"
+canonical_workflows=(
+  .github/workflows/ci.yml
+  .github/workflows/mcp-security.yml
+  .github/workflows/edge-security.yml
+)
+if grep -Eq 'actions/setup-(go|node)|go test|npm (ci|test|run)|^[[:space:]]+services:[[:space:]]*$' "${canonical_workflows[@]}"; then
+  fail "verification logic leaked back into canonical GitHub Actions workflows"
 fi
 
-for workflow in .github/workflows/ci.yml .github/workflows/mcp-security.yml .github/workflows/edge-security.yml; do
+for workflow in "${canonical_workflows[@]}"; do
   grep -Eq '^[[:space:]]*pull_request:' "$workflow" || fail "$workflow must run automatically for pull requests"
   grep -Eq '^[[:space:]]*push:' "$workflow" || fail "$workflow must run automatically for main pushes"
   grep -Eq '^[[:space:]]*workflow_dispatch:' "$workflow" || fail "$workflow must support manual workflow_dispatch"
