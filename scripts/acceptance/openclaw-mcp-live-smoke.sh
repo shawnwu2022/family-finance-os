@@ -298,7 +298,7 @@ ollama_native_finance_tool_probe
 run_agent_check read get_household_overview FINANCE_MCP_READ_OK "$read_prompt" "$workdir/read.digest" "$read_agent_config"
 read_digest="$(cat "$workdir/read.digest")"
 
-simulation_prompt="Acceptance check. You MUST call the only available tool, ${server_name}__simulate_purchase, exactly once with amount_minor=100 and currency=CNY. Do not answer from memory or prior knowledge. Only after that tool succeeds, reply exactly FINANCE_MCP_SIM_OK. If the tool is unavailable or fails, do not output that marker."
+simulation_prompt='Acceptance check. You MUST call the only available tool, '"${server_name}"'__simulate_purchase, exactly once with the exact JSON object {"amount_minor":"100","currency":"CNY"}. Do not transform, scale, convert, or otherwise reinterpret these values. Do not answer from memory or prior knowledge. Only after that tool succeeds, reply exactly FINANCE_MCP_SIM_OK. If the tool is unavailable or fails, do not output that marker.'
 run_agent_check simulation simulate_purchase FINANCE_MCP_SIM_OK "$simulation_prompt" "$workdir/simulation.digest" "$simulation_agent_config"
 simulation_digest="$(cat "$workdir/simulation.digest")"
 
