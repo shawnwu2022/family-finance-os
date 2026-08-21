@@ -74,12 +74,17 @@ grep -Fq "TRIVY_IMAGE='ghcr.io/aquasecurity/trivy:0.73.0@sha256:7cced7cae583819f
   || fail "runtime verifier must pin the Trivy scanner image"
 grep -Fq -- '--severity HIGH,CRITICAL' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must scan HIGH and CRITICAL vulnerabilities"
+grep -Fq '$ROOT_DIR/Caddyfile:/etc/caddy/Caddyfile:ro' scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier must validate the repository Caddyfile with the custom binary"
 grep -Fq 'scripts/ci/runtime-images-security.sh' .github/workflows/runtime-images-security.yml \
   || fail "runtime security workflow must delegate to the repository-native verifier"
 for trigger in pull_request push workflow_dispatch schedule; do
   grep -Eq "^[[:space:]]*${trigger}:" .github/workflows/runtime-images-security.yml \
     || fail "runtime security workflow must support ${trigger}"
 done
+if (( $(grep -Fc '      - Caddyfile' .github/workflows/runtime-images-security.yml) < 2 )); then
+  fail "runtime security workflow must run when Caddyfile changes on PRs and main pushes"
+fi
 
 # Do not reintroduce mutable action tags in the new workflow.
 if grep -Eq 'uses:[[:space:]]+[^#[:space:]]+@(v[0-9]+|main|master)([[:space:]]|$)' .github/workflows/runtime-images-security.yml; then
