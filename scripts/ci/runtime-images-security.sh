@@ -11,13 +11,15 @@ EZBOOKKEEPING_IMAGE="family-finance/ezbookkeeping-hardened:${SUFFIX}"
 CADDY_IMAGE="family-finance/caddy-hardened:${SUFFIX}"
 POSTGRES_CONTAINER="ffos-postgres-security-${SUFFIX}"
 CADDY_CONTAINER="ffos-caddy-security-${SUFFIX}"
+CADDY_DATA_VOLUME="ffos-caddy-data-${SUFFIX}"
+CADDY_CONFIG_VOLUME="ffos-caddy-config-${SUFFIX}"
 TRIVY_CACHE_VOLUME="ffos-trivy-cache-${SUFFIX}"
 WORK_DIR="$(mktemp -d)"
 
 cleanup() {
   docker rm -f "$POSTGRES_CONTAINER" "$CADDY_CONTAINER" >/dev/null 2>&1 || true
   docker image rm -f "$POSTGRES_IMAGE" "$EZBOOKKEEPING_IMAGE" "$CADDY_IMAGE" >/dev/null 2>&1 || true
-  docker volume rm -f "$TRIVY_CACHE_VOLUME" >/dev/null 2>&1 || true
+  docker volume rm -f "$CADDY_DATA_VOLUME" "$CADDY_CONFIG_VOLUME" "$TRIVY_CACHE_VOLUME" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -103,14 +105,35 @@ echo "$ez_version"
 grep -Fq 'ezBookkeeping version 1.6.1' <<<"$ez_version"
 grep -Fq 'commit 6ccd0c4' <<<"$ez_version"
 
-echo 'Validating repository Caddy configuration...'
-auth_hash="$(docker run --rm "$CADDY_IMAGE" hash-password --plaintext runtime-security-probe)"
+echo 'Preparing legacy root-owned Caddy state for migration verification...'
+docker volume create "$CADDY_DATA_VOLUME" >/dev/null
+docker volume create "$CADDY_CONFIG_VOLUME" >/dev/null
+docker run --rm \
+  --entrypoint /bin/sh \
+  -v "$CADDY_DATA_VOLUME:/data" \
+  -v "$CADDY_CONFIG_VOLUME:/config" \
+  "$CADDY_IMAGE" \
+  -c 'mkdir -p /data/caddy /config/caddy; touch /data/caddy/legacy-root-state /config/caddy/legacy-root-state; chown 0:0 /data/caddy/legacy-root-state /config/caddy/legacy-root-state'
+
+echo 'Validating repository Caddy configuration and legacy-volume migration...'
+auth_hash="$(docker run --rm \
+  -v "$CADDY_DATA_VOLUME:/data" \
+  -v "$CADDY_CONFIG_VOLUME:/config" \
+  "$CADDY_IMAGE" hash-password --plaintext runtime-security-probe)"
+docker run --rm \
+  --entrypoint /bin/sh \
+  -v "$CADDY_DATA_VOLUME:/data" \
+  -v "$CADDY_CONFIG_VOLUME:/config" \
+  "$CADDY_IMAGE" \
+  -c 'test "$(stat -c "%u:%g" /data/caddy/legacy-root-state)" = "1000:1000"; test "$(stat -c "%u:%g" /config/caddy/legacy-root-state)" = "1000:1000"'
 docker run --rm \
   -e EBK_DOMAIN=ebk.example.test \
   -e FINANCE_DOMAIN=finance.example.test \
   -e FINANCE_AUTH_USER=probe \
   -e FINANCE_AUTH_HASH="$auth_hash" \
   -v "$ROOT_DIR/Caddyfile:/etc/caddy/Caddyfile:ro" \
+  -v "$CADDY_DATA_VOLUME:/data" \
+  -v "$CADDY_CONFIG_VOLUME:/config" \
   "$CADDY_IMAGE" validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 cat >"$WORK_DIR/Caddyfile.smoke" <<'EOF'
@@ -119,14 +142,17 @@ cat >"$WORK_DIR/Caddyfile.smoke" <<'EOF'
 }
 EOF
 
-echo 'Smoke-testing non-root Caddy on the production HTTP port...'
+echo 'Smoke-testing privilege-dropped Caddy on the production HTTP port...'
 docker run -d --rm \
   --name "$CADDY_CONTAINER" \
   -p 127.0.0.1:18080:80 \
   -v "$WORK_DIR/Caddyfile.smoke:/etc/caddy/Caddyfile:ro" \
+  -v "$CADDY_DATA_VOLUME:/data" \
+  -v "$CADDY_CONFIG_VOLUME:/config" \
   "$CADDY_IMAGE" >/dev/null
 wait_for_http 'http://127.0.0.1:18080/'
 test "$(curl -fsS http://127.0.0.1:18080/)" = 'runtime-security-ok'
+test "$(docker exec "$CADDY_CONTAINER" awk '/^Uid:/ {print $2}' /proc/1/status)" = '1000'
 docker stop "$CADDY_CONTAINER" >/dev/null
 
 echo 'Scanning hardened runtime images for HIGH/CRITICAL vulnerabilities...'
