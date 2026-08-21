@@ -7,6 +7,7 @@ on:
       - Dockerfile.postgres
       - Dockerfile.caddy
       - Dockerfile.ezbookkeeping
+      - infra/caddy/**
       - infra/ezbookkeeping/patches/**
       - compose.yaml
       - scripts/ci/runtime-images-security.sh
@@ -20,6 +21,7 @@ on:
       - Dockerfile.postgres
       - Dockerfile.caddy
       - Dockerfile.ezbookkeeping
+      - infra/caddy/**
       - infra/ezbookkeeping/patches/**
       - compose.yaml
       - scripts/ci/runtime-images-security.sh
@@ -40,6 +42,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build, smoke-test, and scan hardened runtime images
+      - name: Build hardened runtime images
         shell: bash
-        run: bash scripts/ci/runtime-images-security.sh
+        run: bash scripts/ci/runtime-images-security.sh build
+      - name: Smoke-test hardened runtime images
+        shell: bash
+        run: bash scripts/ci/runtime-images-security.sh smoke
+      - name: Scan hardened runtime images
+        shell: bash
+        run: bash scripts/ci/runtime-images-security.sh scan
+      - name: Cleanup runtime image verification
+        if: always()
+        shell: bash
+        run: bash scripts/ci/runtime-images-security.sh cleanup
