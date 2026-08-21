@@ -100,6 +100,17 @@ grep -Fq '6ccd0c462100828c78e203792a5b2feb8d569039' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping v1.6.1 source commit pin is missing"
 grep -Fq '8b1b2a02d59a5901b7eac6491df0c2a82127bc43' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping upstream Go dependency patch pin is missing"
+grep -Fq 'ENV GOFLAGS=-mod=readonly' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping backend dependency graph must be module-readonly"
+grep -Fq 'RUN go mod download' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping backend must download the locked module graph before building"
+grep -Fq 'CGO_ENABLED=1 go build -a -trimpath' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping backend must use the release-equivalent direct Go build"
+grep -Fq '-X main.Version=1.6.1 -X main.CommitHash=6ccd0c4' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping backend build metadata must remain anchored to v1.6.1"
+if grep -Fq './build.sh backend' Dockerfile.ezbookkeeping || grep -Fq 'go get .' Dockerfile.ezbookkeeping; then
+  fail "ezBookkeeping backend build must not mutate the locked module graph"
+fi
 grep -Fq 'infra/ezbookkeeping/patches/frontend-security.patch' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping frontend security patch must be applied from the repository"
 expected_patch_sha='7a4be217daeec79591c08ea08bc1d733ff5538157ceb87ee58bf86f941ac5444'
