@@ -30,9 +30,9 @@ if grep -Fq '"$postgres_cid"' <<<"$query_block"; then
   fail "final audit verification must not use the startup PostgreSQL container id"
 fi
 
-grep -Fq 'unavailable=no-postgres-container' "$diagnostic_block" \
+grep -Fq 'unavailable=no-postgres-container' <<<"$diagnostic_block" \
   || fail "diagnostics must degrade safely if the current PostgreSQL container cannot be resolved"
-grep -Fq 'current PostgreSQL container id is unavailable' "$query_block" \
+grep -Fq 'current PostgreSQL container id is unavailable' <<<"$query_block" \
   || fail "final audit verification must fail closed if PostgreSQL cannot be resolved"
 
 echo "OpenClaw compose container refresh contract OK"
