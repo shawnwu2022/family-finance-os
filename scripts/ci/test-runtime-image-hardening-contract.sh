@@ -10,6 +10,7 @@ fail() {
 }
 
 required=(
+  .dockerignore
   Dockerfile.postgres
   Dockerfile.caddy
   Dockerfile.ezbookkeeping
@@ -25,6 +26,13 @@ done
 
 bash -n scripts/ci/runtime-images-security.sh || fail "runtime image verifier has invalid shell syntax"
 sh -n infra/caddy/docker-entrypoint.sh || fail "Caddy entrypoint has invalid shell syntax"
+
+# The repository root is the Docker build context. Keep local credentials, finance data,
+# backups and VCS metadata out of the context before anything is sent to the daemon.
+for ignored in '.git' '.env' '.env.*' 'secrets' '*.pem' '*.key' '*.sqlite' '*.db' 'backups'; do
+  grep -Fxq "$ignored" .dockerignore \
+    || fail ".dockerignore must exclude $ignored from the production build context"
+done
 
 # Every external base image used by the hardened images must be immutable.
 grep -Eq '^FROM postgres:18\.6-alpine@sha256:[0-9a-f]{64}$' Dockerfile.postgres \
