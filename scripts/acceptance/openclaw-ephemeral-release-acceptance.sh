@@ -49,6 +49,13 @@ compose=(
   -f compose.openclaw-acceptance.yaml
 )
 
+resolve_postgres_cid() {
+  local current_cid
+  current_cid="$("${compose[@]}" ps -q postgres 2>/dev/null || true)"
+  [[ -n "$current_cid" ]] || return 1
+  printf '%s\n' "$current_cid"
+}
+
 cleanup() {
   set +e
   if [[ -n "$ollama_proxy_pid" ]]; then
@@ -125,7 +132,7 @@ fi
 
 "${compose[@]}" config >/dev/null
 "${compose[@]}" up -d --wait postgres
-postgres_cid="$("${compose[@]}" ps -q postgres)"
+postgres_cid="$(resolve_postgres_cid)"
 [[ -n "$postgres_cid" ]] || fail "PostgreSQL container id is unavailable"
 
 goose_version="3.27.3"
@@ -454,11 +461,16 @@ expected_simulation_input_sha256="$(printf '%s' '{"amount_minor":"100","currency
 
 emit_agent_audit_diagnostics() {
   local phase="${1:-unspecified}"
-  local row
+  local row current_postgres_cid
   local calls expected_input_calls different_input_calls success_count error_count running_count error_codes
 
+  if ! current_postgres_cid="$(resolve_postgres_cid)"; then
+    printf 'openclaw_finance_audit_diag tool=simulate_purchase phase=%s unavailable=no-postgres-container\n' "$phase"
+    return 0
+  fi
+
   if ! row="$(
-    docker exec -i -e PGPASSWORD="$finance_db_password" "$postgres_cid" \
+    docker exec -i -e PGPASSWORD="$finance_db_password" "$current_postgres_cid" \
       psql -X -q -A -t -F '|' -v ON_ERROR_STOP=1 -U finance_app -d finance \
       -v household_id="$household_id" \
       -v expected_input_sha256="$expected_simulation_input_sha256" <<'SQL'
@@ -667,7 +679,10 @@ fi
 
 query_audit_count() {
   local tool_name="$1"
-  docker exec -i -e PGPASSWORD="$finance_db_password" "$postgres_cid" \
+  local current_postgres_cid
+  current_postgres_cid="$(resolve_postgres_cid)" \
+    || fail "current PostgreSQL container id is unavailable"
+  docker exec -i -e PGPASSWORD="$finance_db_password" "$current_postgres_cid" \
     psql -X -q -A -t -v ON_ERROR_STOP=1 -U finance_app -d finance \
     -v household_id="$household_id" -v tool_name="$tool_name" <<'SQL' | tr -d '[:space:]'
 SELECT count(*)
