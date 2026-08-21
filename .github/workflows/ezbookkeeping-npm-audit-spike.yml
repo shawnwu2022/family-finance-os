@@ -56,10 +56,11 @@ jobs:
               audit_summary BASELINE_ALL /tmp/baseline-all.json
 
               npm install --package-lock-only --ignore-scripts --save-exact axios@1.19.0
-              npm install --package-lock-only --ignore-scripts --save-dev --save-exact vite@8.2.0
+              npm install --package-lock-only --ignore-scripts --save-dev --save-exact vite@8.2.2
+              npm audit fix --package-lock-only --ignore-scripts
 
               test "$(node -p "require(\"./package.json\").dependencies.axios")" = "1.19.0"
-              test "$(node -p "require(\"./package.json\").devDependencies.vite")" = "8.2.0"
+              test "$(node -p "require(\"./package.json\").devDependencies.vite")" = "8.2.2"
 
               npm audit --json --omit=dev > /tmp/patched-prod.json || true
               npm audit --json > /tmp/patched-all.json || true
@@ -74,9 +75,11 @@ jobs:
               '\'')"
               test "$high_critical" = "0"
 
+              npm ls axios vite immutable nanoid postcss brace-expansion fast-uri js-yaml || true
               npm ci
               npm test
               npm run build
+              echo EZBOOKKEEPING_FRONTEND_AUDIT_STATUS=PASS
               echo EZBOOKKEEPING_FRONTEND_TEST_STATUS=PASS
               echo EZBOOKKEEPING_FRONTEND_BUILD_STATUS=PASS
             '
