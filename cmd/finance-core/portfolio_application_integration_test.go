@@ -63,8 +63,9 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 	}))
 	defer ledgerServer.Close()
 
+	const mcpToken = "portfolio-mcp-token-high-entropy-fixture-2026"
 	tokenPath := filepath.Join(t.TempDir(), "mcp-token")
-	if err := os.WriteFile(tokenPath, []byte("portfolio-mcp-token"), 0o600); err != nil {
+	if err := os.WriteFile(tokenPath, []byte(mcpToken), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	cfg := applicationMCPTestConfig(t)
@@ -111,7 +112,7 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: httpServer.URL + "/mcp",
 		HTTPClient: &http.Client{Transport: bearerRoundTripper{
-			token: "portfolio-mcp-token",
+			token: mcpToken,
 			base:  http.DefaultTransport,
 		}},
 	}, nil)
