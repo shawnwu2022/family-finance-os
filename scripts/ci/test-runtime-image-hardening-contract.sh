@@ -13,6 +13,7 @@ required=(
   Dockerfile.postgres
   Dockerfile.caddy
   Dockerfile.ezbookkeeping
+  infra/caddy/docker-entrypoint.sh
   infra/ezbookkeeping/patches/frontend-security.patch
   scripts/ci/runtime-images-security.sh
   .github/workflows/runtime-images-security.yml
@@ -22,6 +23,7 @@ for path in "${required[@]}"; do
 done
 
 bash -n scripts/ci/runtime-images-security.sh || fail "runtime image security verifier has invalid shell syntax"
+sh -n infra/caddy/docker-entrypoint.sh || fail "Caddy entrypoint has invalid shell syntax"
 
 # Every external base image used by the hardened images must be immutable.
 grep -Eq '^FROM postgres:18\.6-alpine@sha256:[0-9a-f]{64}$' Dockerfile.postgres \
@@ -51,8 +53,14 @@ grep -Fq 'e2eee6a7fce366321294c9c2a79f3146891dcbdf' Dockerfile.caddy \
   || fail "Caddy v2.11.4 source commit pin is missing"
 grep -Fq 'golang.org/x/crypto@v0.54.0' Dockerfile.caddy \
   || fail "Caddy crypto dependency hardening is missing"
-grep -Fq 'USER 1000:1000' Dockerfile.caddy \
-  || fail "Caddy runtime must run as a non-root user"
+grep -Fq 'setcap cap_net_bind_service=+ep /usr/bin/caddy' Dockerfile.caddy \
+  || fail "Caddy binary must retain low-port bind capability after privilege drop"
+grep -Fq 'COPY infra/caddy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh' Dockerfile.caddy \
+  || fail "Caddy runtime must use the repository migration entrypoint"
+grep -Fq 'find "$state_dir" -xdev -exec chown 1000:1000 {} +' infra/caddy/docker-entrypoint.sh \
+  || fail "Caddy entrypoint must migrate legacy volume ownership without following filesystems"
+grep -Fq 'exec su-exec 1000:1000 /usr/bin/caddy "$@"' infra/caddy/docker-entrypoint.sh \
+  || fail "Caddy entrypoint must drop privileges before starting the server"
 
 # The customized ezBookkeeping build must remain anchored to the exact v1.6.1 source,
 # the audited upstream Go dependency update, and the exact frontend patch that passed
@@ -102,6 +110,10 @@ grep -Fq -- '--severity HIGH,CRITICAL' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must scan HIGH and CRITICAL vulnerabilities"
 grep -Fq '$ROOT_DIR/Caddyfile:/etc/caddy/Caddyfile:ro' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must validate the repository Caddyfile with the custom binary"
+grep -Fq 'legacy-root-state' scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier must exercise legacy root-owned Caddy state migration"
+grep -Fq "/^Uid:/ {print \$2}" scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier must assert the running Caddy process UID"
 grep -Fq 'scripts/ci/runtime-images-security.sh' .github/workflows/runtime-images-security.yml \
   || fail "runtime security workflow must delegate to the repository-native verifier"
 for trigger in pull_request push workflow_dispatch schedule; do
