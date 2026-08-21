@@ -1,0 +1,48 @@
+name: ezBookkeeping npm Audit Spike
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Audit exact v1.6.1 frontend lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ezb-audit
+          curl -fsSL https://raw.githubusercontent.com/mayswind/ezbookkeeping/6ccd0c462100828c78e203792a5b2feb8d569039/package.json -o /tmp/ezb-audit/package.json
+          curl -fsSL https://raw.githubusercontent.com/mayswind/ezbookkeeping/6ccd0c462100828c78e203792a5b2feb8d569039/package-lock.json -o /tmp/ezb-audit/package-lock.json
+
+          docker run --rm \
+            -v /tmp/ezb-audit:/work \
+            -w /work \
+            node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 \
+            sh -lc '
+              set -eu
+              npm audit --json --omit=dev > /work/prod-audit.json || true
+              npm audit --json > /work/all-audit.json || true
+              node - <<"NODE"
+              const fs = require("fs");
+              for (const [label, file] of [["PROD", "prod-audit.json"], ["ALL", "all-audit.json"]]) {
+                const data = JSON.parse(fs.readFileSync(file, "utf8"));
+                const m = data.metadata?.vulnerabilities ?? {};
+                console.log(`${label}_AUDIT_TOTAL=${m.total ?? "unknown"}`);
+                console.log(`${label}_AUDIT_HIGH=${m.high ?? "unknown"}`);
+                console.log(`${label}_AUDIT_CRITICAL=${m.critical ?? "unknown"}`);
+                const findings = Object.entries(data.vulnerabilities ?? {})
+                  .filter(([, v]) => v.severity === "high" || v.severity === "critical")
+                  .map(([name, v]) => `${name}\t${v.severity}\tdirect=${v.isDirect}\trange=${v.range}`)
+                  .sort();
+                console.log(`=== ${label} HIGH/CRITICAL ===`);
+                console.log(findings.length ? findings.join("\n") : "none");
+              }
+              NODE
+            '
