@@ -57,8 +57,8 @@ grep -Fq 'setcap cap_net_bind_service=+ep /usr/bin/caddy' Dockerfile.caddy \
   || fail "Caddy binary must retain low-port bind capability after privilege drop"
 grep -Fq 'COPY infra/caddy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh' Dockerfile.caddy \
   || fail "Caddy runtime must use the repository migration entrypoint"
-grep -Fq 'find "$state_dir" -xdev -exec chown 1000:1000 {} +' infra/caddy/docker-entrypoint.sh \
-  || fail "Caddy entrypoint must migrate legacy volume ownership without following filesystems"
+grep -Fq 'find "$state_dir" -xdev -exec chown -h 1000:1000 {} +' infra/caddy/docker-entrypoint.sh \
+  || fail "Caddy entrypoint must migrate legacy volume ownership without following symlinks or filesystems"
 grep -Fq 'exec su-exec 1000:1000 /usr/bin/caddy "$@"' infra/caddy/docker-entrypoint.sh \
   || fail "Caddy entrypoint must drop privileges before starting the server"
 
@@ -103,25 +103,35 @@ if grep -Eq '^[[:space:]]*image:[[:space:]]*(postgres:18\.6|mayswind/ezbookkeepi
 fi
 
 # Runtime scanning is a separate release-boundary gate so pinned images are rescanned
-# as vulnerability intelligence changes.
+# as vulnerability intelligence changes. The workflow deliberately exposes build,
+# smoke, and scan as separate steps so a failed gate is diagnosable without raw logs.
 grep -Fq "TRIVY_IMAGE='ghcr.io/aquasecurity/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c'" scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must pin the Trivy scanner image"
+grep -Fq 'SUFFIX="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"' scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier phases must share stable image and volume names"
 grep -Fq -- '--severity HIGH,CRITICAL' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must scan HIGH and CRITICAL vulnerabilities"
 grep -Fq '$ROOT_DIR/Caddyfile:/etc/caddy/Caddyfile:ro' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must validate the repository Caddyfile with the custom binary"
 grep -Fq 'legacy-root-state' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must exercise legacy root-owned Caddy state migration"
-grep -Fq "/^Uid:/ {print \$2}" scripts/ci/runtime-images-security.sh \
+grep -Fq '/^Uid:/ {print $2}' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must assert the running Caddy process UID"
-grep -Fq 'scripts/ci/runtime-images-security.sh' .github/workflows/runtime-images-security.yml \
-  || fail "runtime security workflow must delegate to the repository-native verifier"
+for phase in build smoke scan cleanup; do
+  grep -Fq "bash scripts/ci/runtime-images-security.sh ${phase}" .github/workflows/runtime-images-security.yml \
+    || fail "runtime security workflow must expose the ${phase} phase"
+done
+grep -Fq 'if: always()' .github/workflows/runtime-images-security.yml \
+  || fail "runtime security cleanup must run even when an earlier phase fails"
 for trigger in pull_request push workflow_dispatch schedule; do
   grep -Eq "^[[:space:]]*${trigger}:" .github/workflows/runtime-images-security.yml \
     || fail "runtime security workflow must support ${trigger}"
 done
 if (( $(grep -Fc '      - Caddyfile' .github/workflows/runtime-images-security.yml) < 2 )); then
   fail "runtime security workflow must run when Caddyfile changes on PRs and main pushes"
+fi
+if (( $(grep -Fc '      - infra/caddy/**' .github/workflows/runtime-images-security.yml) < 2 )); then
+  fail "runtime security workflow must run when the Caddy migration entrypoint changes"
 fi
 
 # Do not reintroduce mutable action tags in the new workflow.
