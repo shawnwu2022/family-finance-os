@@ -1,0 +1,40 @@
+name: Hardened Runtime Image Probe v2
+
+on:
+  push:
+    branches:
+      - spike/runtime-images-hardening-v2
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  probe-ezbookkeeping:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build, test, and scan hardened ezBookkeeping image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/ci/probe-ezbookkeeping-hardened-v2.sh 2>&1 | tee /tmp/ezbookkeeping-hardened-v2.log
+          rc=${PIPESTATUS[0]}
+          set -e
+
+          summary="$(grep -E '^(EZBOOKKEEPING_TEST_STATUS|COMPONENT|SCAN_TOTAL|SCAN_FIXABLE)=' /tmp/ezbookkeeping-hardened-v2.log || true)"
+          diagnostics="$(tail -n 220 /tmp/ezbookkeeping-hardened-v2.log)"
+          body="Hardened runtime v2 probe: component=ezbookkeeping, head=${GITHUB_SHA}, exit=${rc}.\n\nSummary:\n\`\`\`text\n${summary}\n\`\`\`\n\nDiagnostics:\n\`\`\`text\n${diagnostics}\n\`\`\`"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            --data "$(jq -nc --arg body "$body" '{body:$body}')" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/26/comments" >/dev/null
+          exit "$rc"
