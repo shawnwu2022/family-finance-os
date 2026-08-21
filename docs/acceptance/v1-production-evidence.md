@@ -145,7 +145,7 @@ Automated PASS proves the repository-defined contracts on the exact validated ru
 | Runtime-image hardening | PASS | PR #31 merged exact validated head `bec6d2354f72c319f3fadb40a5732ed7c841c638`; unchanged by PR #33 |
 | Runtime security remediation | PASS | PR #33 merged exact validated head `7f01fd69b00312830b7dedabd235a1b0141b1896` as `cbfba3268a9c747d874d84845910dca1f2c5657d` after RED→GREEN tests, required checks and resolved review findings |
 | `main` branch protection / ruleset | PASS | Repository Ruleset active; GitHub API reports `main` as `protected: true` |
-| Repository hygiene | PASS | Open PR count 0 and remote branches contain only `main` after stale branch cleanup |
+| Repository hygiene | PASS | Runtime/spike PR count is 0 and stale runtime/work/spike branches were removed. Evidence-only governance PR/branches are transient and removed after merge |
 | Final first-party repository/security review | PASS | Repository-wide security review + PR #33 remediation/review follow-up; no unresolved review thread; exact-head CI/MCP/Edge/OpenClaw gates PASS |
 | Known high-severity reachable vulnerabilities | PASS | No unresolved known reachable HIGH/CRITICAL finding is carried in the current release ledger; if one becomes known through any source, release returns to BLOCKED until handled |
 
