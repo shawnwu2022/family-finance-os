@@ -1,0 +1,43 @@
+name: Security Hardening RED-GREEN
+
+on:
+  push:
+    branches:
+      - security/release-hardening
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [llm-timeout, mcp-token, secret-permissions, action-pins]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Run focused security regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.check }}" in
+            llm-timeout)
+              docker run --rm -v "$PWD:/src" -w /src \
+                golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
+                go test ./internal/llm -run '^TestOpenAICompatibleProviderUsesBoundedDefaultHTTPClient$' -count=1
+              ;;
+            mcp-token)
+              docker run --rm -v "$PWD:/src" -w /src \
+                golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
+                go test ./cmd/finance-core -run '^TestLoadMCPToken(ReadsTrimmedSecretFile|RejectsWeakBearer)$' -count=1
+              ;;
+            secret-permissions)
+              bash scripts/ci/test-preflight-secret-permissions.sh
+              ;;
+            action-pins)
+              bash scripts/ci/test-workflow-action-pins.sh
+              ;;
+          esac
