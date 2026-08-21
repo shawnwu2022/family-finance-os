@@ -30,5 +30,5 @@ func NewHandler(options ...HandlerOption) http.Handler {
 	if cfg.web != nil {
 		mux.Handle("/", cfg.web)
 	}
-	return mux
+	return secureAPIRequests(mux)
 }
