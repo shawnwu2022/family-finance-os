@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   focused:
@@ -21,23 +22,36 @@ jobs:
           persist-credentials: false
       - name: Run focused security regression
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          set -u -o pipefail
+          rc=0
           case "${{ matrix.check }}" in
             llm-timeout)
               docker run --rm -v "$PWD:/src" -w /src \
                 golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
-                go test ./internal/llm -run '^TestOpenAICompatibleProviderUsesBoundedDefaultHTTPClient$' -count=1
+                go test ./internal/llm -run '^TestOpenAICompatibleProviderUsesBoundedDefaultHTTPClient$' -count=1 || rc=$?
               ;;
             mcp-token)
               docker run --rm -v "$PWD:/src" -w /src \
                 golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
-                go test ./cmd/finance-core -run '^TestLoadMCPToken(ReadsTrimmedSecretFile|RejectsWeakBearer)$' -count=1
+                go test ./cmd/finance-core -run '^TestLoadMCPToken(ReadsTrimmedSecretFile|RejectsWeakBearer)$' -count=1 || rc=$?
               ;;
             secret-permissions)
-              bash scripts/ci/test-preflight-secret-permissions.sh
+              bash scripts/ci/test-preflight-secret-permissions.sh || rc=$?
               ;;
             action-pins)
-              bash scripts/ci/test-workflow-action-pins.sh
+              bash scripts/ci/test-workflow-action-pins.sh || rc=$?
               ;;
           esac
+
+          body="Security hardening focused probe: check=\`${{ matrix.check }}\`, head=\`${GITHUB_SHA}\`, exit=\`${rc}\`."
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            --data "$(jq -nc --arg body "$body" '{body:$body}')" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/26/comments" >/dev/null
+          exit "$rc"
