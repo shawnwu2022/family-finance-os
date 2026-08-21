@@ -31,7 +31,7 @@ func isUnsafeAPIRequest(r *http.Request) bool {
 		return false
 	}
 	switch r.Method {
-	case http.MethodPost, http.MethodPut, http.MethodPatch:
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 		return true
 	default:
 		return false
