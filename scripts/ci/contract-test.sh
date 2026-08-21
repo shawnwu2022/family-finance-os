@@ -24,6 +24,7 @@ required=(
   scripts/ci/test-workflow-action-pins.sh
   scripts/ci/test-workflow-action-pins-regression.sh
   scripts/ci/test-production-supply-chain.sh
+  scripts/ci/test-runtime-image-hardening-contract.sh
 )
 for path in "${required[@]}"; do
   [[ -f "$path" ]] || fail "missing repository-native CI file: $path"
@@ -87,5 +88,6 @@ bash scripts/ci/test-preflight-secret-permissions.sh
 bash scripts/ci/test-workflow-action-pins.sh
 bash scripts/ci/test-workflow-action-pins-regression.sh
 bash scripts/ci/test-production-supply-chain.sh
+bash scripts/ci/test-runtime-image-hardening-contract.sh
 
 echo "Repository-native CI contract OK"

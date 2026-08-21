@@ -1,0 +1,52 @@
+name: Runtime Images Security
+
+on:
+  pull_request:
+    paths:
+      - Caddyfile
+      - Dockerfile.postgres
+      - Dockerfile.caddy
+      - Dockerfile.ezbookkeeping
+      - infra/caddy/**
+      - infra/ezbookkeeping/patches/**
+      - compose.yaml
+      - scripts/ci/runtime-images-security.sh
+      - scripts/ci/test-runtime-image-hardening-contract.sh
+      - .github/workflows/runtime-images-security.yml
+  push:
+    branches:
+      - main
+    paths:
+      - Caddyfile
+      - Dockerfile.postgres
+      - Dockerfile.caddy
+      - Dockerfile.ezbookkeeping
+      - infra/caddy/**
+      - infra/ezbookkeeping/patches/**
+      - compose.yaml
+      - scripts/ci/runtime-images-security.sh
+      - scripts/ci/test-runtime-image-hardening-contract.sh
+      - .github/workflows/runtime-images-security.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build hardened runtime images
+        shell: bash
+        run: bash scripts/ci/runtime-images-security.sh build
+      - name: Smoke-test hardened runtime images
+        shell: bash
+        run: bash scripts/ci/runtime-images-security.sh smoke
+      - name: Cleanup runtime image verification
+        if: always()
+        shell: bash
+        run: bash scripts/ci/runtime-images-security.sh cleanup
