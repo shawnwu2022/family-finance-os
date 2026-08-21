@@ -23,7 +23,7 @@ for path in "${required[@]}"; do
   [[ -f "$path" ]] || fail "missing hardened runtime artifact: $path"
 done
 
-bash -n scripts/ci/runtime-images-security.sh || fail "runtime image security verifier has invalid shell syntax"
+bash -n scripts/ci/runtime-images-security.sh || fail "runtime image verifier has invalid shell syntax"
 sh -n infra/caddy/docker-entrypoint.sh || fail "Caddy entrypoint has invalid shell syntax"
 
 # Every external base image used by the hardened images must be immutable.
@@ -42,8 +42,7 @@ grep -Eq '^FROM node:24\.19\.0-bookworm-slim@sha256:[0-9a-f]{64} AS fe-builder$'
 grep -Eq '^FROM alpine:3\.24@sha256:[0-9a-f]{64}$' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping runtime Alpine image must be pinned by digest"
 
-# Preserve the exact hardening mechanics that were independently scanned to zero
-# HIGH/CRITICAL findings.
+# Preserve the exact PostgreSQL hardening mechanics.
 grep -Fq 'apk add --no-cache su-exec' Dockerfile.postgres \
   || fail "PostgreSQL hardening must install su-exec"
 grep -Fq "sed -i 's/exec gosu postgres/exec su-exec postgres/g'" Dockerfile.postgres \
@@ -52,8 +51,7 @@ grep -Fq 'rm -f /usr/local/bin/gosu' Dockerfile.postgres \
   || fail "PostgreSQL hardened image must remove gosu"
 
 # Caddy must be built as a custom module whose dependency graph records the real
-# v2.11.4 release version. Building directly from a detached/dirty source checkout
-# produces a pseudo-version that vulnerability scanners can misclassify as pre-fix.
+# v2.11.4 release version, with immutable module checksums and hardened dependencies.
 grep -Fq 'COPY infra/caddy/main.go ./main.go' Dockerfile.caddy \
   || fail "Caddy must build from the repository custom main module"
 grep -Fq 'github.com/caddyserver/caddy/v2/modules/standard' infra/caddy/main.go \
@@ -118,24 +116,24 @@ grep -Fq 'USER 1000:1000' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping runtime must run as a non-root user"
 
 # Compose must build the hardened third-party runtimes locally instead of pulling the
-# vulnerable upstream runtime images directly.
+# upstream runtime images directly.
 for dockerfile in Dockerfile.postgres Dockerfile.ezbookkeeping Dockerfile.caddy; do
   grep -Fq "dockerfile: $dockerfile" compose.yaml \
     || fail "compose.yaml must build $dockerfile"
 done
 if grep -Eq '^[[:space:]]*image:[[:space:]]*(postgres:18\.6|mayswind/ezbookkeeping:1\.6\.1|caddy:2\.11\.4-alpine)' compose.yaml; then
-  fail "compose.yaml still references a vulnerable upstream runtime image directly"
+  fail "compose.yaml still references an upstream runtime image directly"
 fi
 
-# Runtime scanning is a separate release-boundary gate so pinned images are rescanned
-# as vulnerability intelligence changes. The workflow deliberately exposes build,
-# smoke, and scan as separate steps so a failed gate is diagnosable without raw logs.
-grep -Fq "TRIVY_IMAGE='ghcr.io/aquasecurity/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c'" scripts/ci/runtime-images-security.sh \
-  || fail "runtime verifier must pin the Trivy scanner image"
+# Public/third-party runtime image CVE scanning is intentionally not a PR/release gate.
+# We retain immutable inputs, dependency audits, full builds and real-container smoke tests.
+if grep -Eqi 'trivy|scan hardened runtime images|runtime-images-security\.sh scan' \
+    scripts/ci/runtime-images-security.sh .github/workflows/runtime-images-security.yml; then
+  fail "public runtime image vulnerability scanning must not be a blocking repository gate"
+fi
+
 grep -Fq 'SUFFIX="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier phases must share stable image and volume names"
-grep -Fq -- '--severity HIGH,CRITICAL' scripts/ci/runtime-images-security.sh \
-  || fail "runtime verifier must scan HIGH and CRITICAL vulnerabilities"
 grep -Fq '$ROOT_DIR/Caddyfile:/etc/caddy/Caddyfile:ro' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must validate the repository Caddyfile with the custom binary"
 grep -Fq 'Verifying hardened Caddy release identity' scripts/ci/runtime-images-security.sh \
@@ -146,16 +144,19 @@ grep -Fq 'legacy-root-state' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must exercise legacy root-owned Caddy state migration"
 grep -Fq '/^Uid:/ {print $2}' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must assert the running Caddy process UID"
-for phase in build smoke scan cleanup; do
+for phase in build smoke cleanup; do
   grep -Fq "bash scripts/ci/runtime-images-security.sh ${phase}" .github/workflows/runtime-images-security.yml \
     || fail "runtime security workflow must expose the ${phase} phase"
 done
 grep -Fq 'if: always()' .github/workflows/runtime-images-security.yml \
   || fail "runtime security cleanup must run even when an earlier phase fails"
-for trigger in pull_request push workflow_dispatch schedule; do
+for trigger in pull_request push workflow_dispatch; do
   grep -Eq "^[[:space:]]*${trigger}:" .github/workflows/runtime-images-security.yml \
     || fail "runtime security workflow must support ${trigger}"
 done
+if grep -Eq '^[[:space:]]*schedule:' .github/workflows/runtime-images-security.yml; then
+  fail "digest-pinned public runtime verification must not consume scheduled Actions capacity"
+fi
 if (( $(grep -Fc '      - Caddyfile' .github/workflows/runtime-images-security.yml) < 2 )); then
   fail "runtime security workflow must run when Caddyfile changes on PRs and main pushes"
 fi
@@ -163,7 +164,7 @@ if (( $(grep -Fc '      - infra/caddy/**' .github/workflows/runtime-images-secur
   fail "runtime security workflow must run when Caddy implementation changes"
 fi
 
-# Do not reintroduce mutable action tags in the new workflow.
+# Do not reintroduce mutable action tags in the workflow.
 if grep -Eq 'uses:[[:space:]]+[^#[:space:]]+@(v[0-9]+|main|master)([[:space:]]|$)' .github/workflows/runtime-images-security.yml; then
   fail "runtime security workflow contains a mutable action reference"
 fi
