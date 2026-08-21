@@ -99,7 +99,6 @@ build_images() {
 smoke_images() {
   local work_dir auth_hash ez_version
   work_dir="$(mktemp -d)"
-  trap 'rm -rf "$work_dir"' RETURN
 
   echo 'Smoke-testing hardened PostgreSQL...'
   docker run -d --rm \
@@ -167,6 +166,7 @@ EOF
   test "$(curl -fsS http://127.0.0.1:18080/)" = 'runtime-security-ok'
   test "$(docker exec "$CADDY_CONTAINER" awk '/^Uid:/ {print $2}' /proc/1/status)" = '1000'
   docker stop "$CADDY_CONTAINER" >/dev/null
+  rm -rf "$work_dir"
 
   echo 'Runtime image smoke phase OK'
 }
