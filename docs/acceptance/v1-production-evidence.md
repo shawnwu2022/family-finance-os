@@ -6,19 +6,23 @@
 
 ## Evidence model
 
-- **Runtime target commit** 是实际被自动化与真实环境验收的应用/部署 payload。当前固定为 `c297c206c1a57ba997c81c2f2c51e3152982c9e9`。
+- **Runtime target commit** 是当前 `main` 上准备进入真实生产验收的应用/部署 payload。当前固定为 `c1ef3e30c8c8692b75b134d478a08e972dfcff66`。
+- PR #31 的 exact validated runtime tree/head 为 `bec6d2354f72c319f3fadb40a5732ed7c841c638`；该 head 的全部适用自动化 gate 通过后，以 exact-head guard 合并为上述 `main` runtime target。
 - 只修改本证据文件、README、LICENSE 或其它纯治理元数据的后续 commit **不重新定义 runtime target**；否则记录证据本身会造成无限 SHA 递归。
 - 任何影响应用代码、依赖、数据库 schema、Docker/Compose/Caddy、CI/acceptance 逻辑或运行时配置契约的变更，都必须选择新的 runtime target，并重新执行适用 gate。
+- 公共/第三方 runtime image 的 CVE 扫描按项目策略**不作为 blocking PR/release gate**。不可变镜像/模块输入、依赖审计、repository-native 测试、真实容器 smoke、first-party security gate 与真实生产验收仍是必要证据。
 - Issue #26 是当前 production acceptance 执行清单；本文件是最终 release decision 的证据总账。
 
 ## Release Candidate
 
 | 字段 | 值 |
 |---|---|
-| Runtime target commit | `c297c206c1a57ba997c81c2f2c51e3152982c9e9` |
+| Runtime target commit (`main`) | `c1ef3e30c8c8692b75b134d478a08e972dfcff66` |
+| Validated PR exact head | `bec6d2354f72c319f3fadb40a5732ed7c841c638` |
 | Finance Core version/tag | `pre-release / not tagged` |
 | ezBookkeeping version | `1.6.1` |
 | PostgreSQL major | `18` |
+| Caddy version | `2.11.4` |
 | Production host | `REDACTED / NOT RUN` |
 | Acceptance operator | `NOT RUN` |
 | Acceptance completed at | `NOT RUN` |
@@ -26,28 +30,36 @@
 
 ## A. CI / Reproducible Gates
 
-所有自动化结果均来自同一个 runtime target `c297c206c1a57ba997c81c2f2c51e3152982c9e9` 的 `main` push。完整 repository-native gate 由 CI run `32396818970` 执行；独立安全/Agent gate 分别为 MCP Security `32396818913`、Edge Security `32396818948`、OpenClaw Release Acceptance `32396818874`。
+本节自动化证据来自 PR #31 exact head `bec6d2354f72c319f3fadb40a5732ed7c841c638`。该 exact head 在五个适用 workflow 均 PASS 后，以 exact-head guard 合并为 `main` runtime target `c1ef3e30c8c8692b75b134d478a08e972dfcff66`。
+
+- CI `32470277959`: PASS
+- Runtime Images Security `32470278120`: PASS — hardened third-party runtime **build + real-container smoke**；按项目策略不执行 blocking public-image CVE scan
+- MCP Security `32470278085`: PASS
+- Edge Security `32470277961`: PASS
+- OpenClaw Release Acceptance `32470277945`: PASS
 
 | Gate | Status | Evidence |
 |---|---|---|
-| migration up/down/up | PASS | CI `32396818970` / `make verify` |
-| sqlc generated source clean | PASS | CI `32396818970` / `make verify` |
-| gofmt / go vet / go test | PASS | CI `32396818970` / `make verify` |
-| govulncheck | PASS | CI `32396818970` / `make verify` |
-| PostgreSQL + domain integrations | PASS | CI `32396818970` / `make verify` |
-| scheduler restart/idempotency integration | PASS | CI `32396818970` / `make verify` automated integration |
-| backup restore drill | PASS | CI `32396818970` / disposable restore drill; **not** real off-host recovery |
-| go race | PASS | CI `32396818970` / `make verify` |
-| Go binary build | PASS | CI `32396818970` / `make verify` |
-| frontend npm ci + unit | PASS | CI `32396818970` / `make verify` |
-| PWA contract + typecheck + build | PASS | CI `32396818970` / `make verify` |
-| container build | PASS | CI `32396818970` / `make verify` |
-| production operations contract | PASS | CI `32396818970` / `make verify` |
-| edge exposure/security workflow | PASS | Edge Security `32396818948` |
-| MCP security workflow | PASS | MCP Security `32396818913` |
-| Real OpenClaw ephemeral acceptance | PASS | OpenClaw `32396818874`; `openclaw_mcp_live_smoke=PASS`, exactly 12 tools, 401/403 negative probes, read+simulation audit count = 1 each, `openclaw_release_acceptance=PASS` |
+| migration up/down/up | PASS | CI `32470277959` / `make verify` |
+| sqlc generated source clean | PASS | CI `32470277959` / `make verify` |
+| gofmt / go vet / go test | PASS | CI `32470277959` / `make verify` |
+| govulncheck (first-party Go dependency/code gate) | PASS | CI `32470277959` / `make verify` |
+| PostgreSQL + domain integrations | PASS | CI `32470277959` / `make verify` |
+| scheduler restart/idempotency integration | PASS | CI `32470277959` / `make verify` automated integration |
+| backup restore drill | PASS | CI `32470277959` / disposable restore drill; **not** real off-host recovery |
+| go race | PASS | CI `32470277959` / `make verify` |
+| Go binary build | PASS | CI `32470277959` / `make verify` |
+| frontend npm ci + unit | PASS | CI `32470277959` / `make verify` |
+| PWA contract + typecheck + build | PASS | CI `32470277959` / `make verify` |
+| Finance Core container build | PASS | CI `32470277959` / `make verify` |
+| production operations contract | PASS | CI `32470277959` / `make verify` |
+| third-party hardened runtime build + smoke | PASS | Runtime Images Security `32470278120`; PostgreSQL query, ezBookkeeping v1.6.1, Caddy v2.11.4/config/legacy-volume migration/non-root port-80 smoke |
+| public/third-party runtime image CVE scan | NOT RUN | Intentionally non-blocking by project policy; not part of release decision |
+| edge exposure/security workflow | PASS | Edge Security `32470277961` |
+| MCP security workflow | PASS | MCP Security `32470278085` |
+| Real OpenClaw ephemeral acceptance | PASS | OpenClaw `32470277945`; static acceptance contracts + real Ollama/OpenClaw/MCP run completed successfully; final audit assertions are enforced by the strict acceptance script |
 
-Automated PASS proves the repository-defined contracts on the exact runtime target. It does **not** replace the real production host, real ledger, off-host disaster recovery, real external Advisor provider, or real-phone acceptance below.
+Automated PASS proves the repository-defined contracts on the exact validated runtime tree. It does **not** replace the real production host, real ledger, off-host disaster recovery, real external Advisor provider, or real-phone acceptance below。
 
 ## B. Real Ledger / Complete Month
 
@@ -112,18 +124,19 @@ Automated PASS proves the repository-defined contracts on the exact runtime targ
 | Finance Caddy Basic Auth checked on production edge | NOT RUN | PASS/FAIL only |
 | ezBookkeeping 2FA enabled | NOT RUN | PASS/FAIL only |
 | Only Caddy exposes host 80/443 on production host | NOT RUN | `docker compose ps` / socket summary, sanitized |
-| `.env`/tokens/keys/statements absent from Git | NOT RUN | final secret-hygiene review reference; automated repository checks are supporting evidence only |
+| `.env`/tokens/keys/statements absent from Git | NOT RUN | final real-environment secret-hygiene review reference; repository `.dockerignore`/security contracts are supporting evidence only |
 | Logs/evidence contain no plaintext secrets | NOT RUN | final review reference |
 
 ## H. Release Governance
 
 | Gate | Status | Evidence / Notes |
 |---|---|---|
-| Production acceptance tracker exists | PASS | GitHub Issue #26 |
-| Repository license selected | PASS | MIT; governance PR adds top-level `LICENSE` |
-| `main` branch protection / ruleset | BLOCKED | Current connector exposes repository admin rights but no branch-protection/ruleset mutation action; must be configured in repository settings before final release |
-| Final security review | NOT RUN | Perform after release-governance changes settle; remediate validated P0/P1 findings before release |
+| Production acceptance tracker exists | PASS | GitHub Issue #26, updated to current runtime target |
+| Repository license selected | PASS | MIT; PR #27 merged |
+| Runtime hardening PR | PASS | PR #31 merged exact validated head `bec6d2354f72c319f3fadb40a5732ed7c841c638` as `c1ef3e30c8c8692b75b134d478a08e972dfcff66` |
+| `main` branch protection / ruleset | BLOCKED | Current connector cannot mutate branch-protection/ruleset settings; must be configured in repository settings before final release |
+| Final first-party repository/security review | PASS | PR #28 + PR #31 security review, no unresolved review threads, and exact-head CI/MCP/Edge/Runtime/OpenClaw gates PASS; public/third-party image CVE scanning intentionally non-blocking by project policy |
 
 ## Final Decision
 
-Production release remains **BLOCKED** until every required real-environment gate above is `PASS`, branch protection is configured, the final security review has no unresolved P0/P1 finding, there are no P0/P1 data-correctness defects, and no unexplained financial delta exceeds 0.01 CNY.
+Production release remains **BLOCKED** until every required real-environment gate above is `PASS`, branch protection is configured, there are no unresolved first-party P0/P1 security or data-correctness defects, and no unexplained financial delta exceeds 0.01 CNY。公共/第三方 runtime image CVE 扫描不属于 blocking release decision。
