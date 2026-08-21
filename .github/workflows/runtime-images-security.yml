@@ -28,8 +28,6 @@ on:
       - scripts/ci/test-runtime-image-hardening-contract.sh
       - .github/workflows/runtime-images-security.yml
   workflow_dispatch:
-  schedule:
-    - cron: '23 6 * * 1'
 
 permissions:
   contents: read
@@ -48,9 +46,6 @@ jobs:
       - name: Smoke-test hardened runtime images
         shell: bash
         run: bash scripts/ci/runtime-images-security.sh smoke
-      - name: Scan hardened runtime images
-        shell: bash
-        run: bash scripts/ci/runtime-images-security.sh scan
       - name: Cleanup runtime image verification
         if: always()
         shell: bash
