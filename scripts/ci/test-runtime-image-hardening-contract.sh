@@ -14,7 +14,7 @@ required=(
   Dockerfile.postgres
   Dockerfile.caddy
   Dockerfile.ezbookkeeping
-  infra/caddy/main.go
+  infra/caddy/main.go.tmpl
   infra/caddy/docker-entrypoint.sh
   infra/ezbookkeeping/patches/frontend-security.patch
   scripts/ci/runtime-images-security.sh
@@ -58,11 +58,14 @@ grep -Fq "sed -i 's/exec gosu postgres/exec su-exec postgres/g'" Dockerfile.post
 grep -Fq 'rm -f /usr/local/bin/gosu' Dockerfile.postgres \
   || fail "PostgreSQL hardened image must remove gosu"
 
-# Caddy must be built as a custom module whose dependency graph records the real
-# v2.11.4 release version, with immutable module checksums and hardened dependencies.
-grep -Fq 'COPY infra/caddy/main.go ./main.go' Dockerfile.caddy \
-  || fail "Caddy must build from the repository custom main module"
-grep -Fq 'github.com/caddyserver/caddy/v2/modules/standard' infra/caddy/main.go \
+# Caddy is a separate build module. Store the custom main as a non-Go template so the
+# repository's root `go mod tidy` never absorbs Caddy's large transitive dependency graph.
+if find infra/caddy -maxdepth 1 -type f -name '*.go' -print -quit | grep -q .; then
+  fail "Caddy custom build sources must not participate in the root Go module"
+fi
+grep -Fq 'COPY infra/caddy/main.go.tmpl ./main.go' Dockerfile.caddy \
+  || fail "Caddy must materialize the repository custom main only inside the Docker build"
+grep -Fq 'github.com/caddyserver/caddy/v2/modules/standard' infra/caddy/main.go.tmpl \
   || fail "Caddy custom main must include the standard module set"
 grep -Fq 'ENV GOPROXY=https://proxy.golang.org' Dockerfile.caddy \
   || fail "Caddy module downloads must use the Go module proxy without direct fallback"
