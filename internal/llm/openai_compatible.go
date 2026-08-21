@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -182,6 +183,12 @@ func responsesEndpoint(raw string) (*url.URL, error) {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return nil, errorsInvalidBaseURL()
+	}
+	if parsed.Scheme != "https" {
+		ip := net.ParseIP(parsed.Hostname())
+		if parsed.Scheme != "http" || ip == nil || !ip.IsLoopback() {
+			return nil, errorsInvalidBaseURL()
+		}
 	}
 	path := strings.TrimSuffix(parsed.Path, "/")
 	switch {
