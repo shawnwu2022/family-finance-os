@@ -27,9 +27,9 @@ RUN git fetch --depth=2 origin 8b1b2a02d59a5901b7eac6491df0c2a82127bc43 \
  && grep -Fq 'github.com/xuri/excelize/v2 v2.11.0' go.mod \
  && grep -Fq 'golang.org/x/text v0.40.0' go.mod
 RUN docker/backend-build-pre-setup.sh
-RUN RELEASE_BUILD=1 ./build.sh backend --release --no-lint --no-test
+RUN BUILD_PIPELINE=1 CHECK_3RD_API=0 RELEASE_BUILD=1 ./build.sh backend --release --no-lint --no-test
 RUN set +e; \
-    go test -json ./... -count=1 > /tmp/go-test.json 2>&1; rc=$?; \
+    BUILD_PIPELINE=1 CHECK_3RD_API=0 go test -json ./... -count=1 > /tmp/go-test.json 2>&1; rc=$?; \
     set -e; \
     if [ "$rc" -ne 0 ]; then \
       echo 'EZBOOKKEEPING_TEST_STATUS=FAIL'; \
@@ -50,7 +50,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 RUN docker/frontend-build-pre-setup.sh
-RUN RELEASE_BUILD=1 ./build.sh frontend --release --no-lint --no-test
+RUN BUILD_PIPELINE=1 RELEASE_BUILD=1 ./build.sh frontend --release --no-lint --no-test
 
 FROM alpine:3.24
 RUN apk upgrade --no-cache \
