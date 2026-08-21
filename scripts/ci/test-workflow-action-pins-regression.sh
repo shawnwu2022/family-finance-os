@@ -16,8 +16,8 @@ run_checker() {
   (cd "$workdir" && bash scripts/ci/test-workflow-action-pins.sh)
 }
 
-cat >"$workdir/.github/workflows/test.yml" <<'EOF_INSECURE'
-name: insecure-checkout-fixture
+cat >"$workdir/.github/workflows/test.yml" <<'EOF_DECOY'
+name: insecure-checkout-decoy-fixture
 on:
   workflow_dispatch:
 jobs:
@@ -29,10 +29,29 @@ jobs:
         with:
           node-version: '24.19.0'
           persist-credentials: false
-EOF_INSECURE
+EOF_DECOY
 
-if run_checker >"$workdir/insecure.out" 2>&1; then
+if run_checker >"$workdir/decoy.out" 2>&1; then
   fail "checker accepted checkout without step-local persist-credentials:false because another action supplied a decoy value"
+fi
+
+cat >"$workdir/.github/workflows/test.yml" <<'EOF_NAMED'
+name: insecure-named-step-fixture
+on:
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Mutable second checkout must not be ignored
+        uses: actions/checkout@v4
+EOF_NAMED
+
+if run_checker >"$workdir/named.out" 2>&1; then
+  fail "checker ignored a mutable remote action when uses: was a property of a named step"
 fi
 
 cat >"$workdir/.github/workflows/test.yml" <<'EOF_SECURE'
@@ -43,14 +62,16 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.19.0'
 EOF_SECURE
 
-run_checker >"$workdir/secure.out" 2>&1 || fail "checker rejected a checkout step with its own persist-credentials:false"
+run_checker >"$workdir/secure.out" 2>&1 || fail "checker rejected secure named action steps"
 
-echo "Workflow action pin step-binding regression OK"
+echo "Workflow action pin parser regressions OK"
