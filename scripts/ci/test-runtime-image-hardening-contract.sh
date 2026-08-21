@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+fail() {
+  echo "runtime image hardening contract failed: $*" >&2
+  exit 1
+}
+
+required=(
+  Dockerfile.postgres
+  Dockerfile.caddy
+  Dockerfile.ezbookkeeping
+  infra/ezbookkeeping/patches/frontend-security.patch
+  scripts/ci/runtime-images-security.sh
+  .github/workflows/runtime-images-security.yml
+)
+for path in "${required[@]}"; do
+  [[ -f "$path" ]] || fail "missing hardened runtime artifact: $path"
+done
+
+bash -n scripts/ci/runtime-images-security.sh || fail "runtime image security verifier has invalid shell syntax"
+
+# Every external base image used by the hardened images must be immutable.
+grep -Eq '^FROM postgres:18\.6-alpine@sha256:[0-9a-f]{64}$' Dockerfile.postgres \
+  || fail "PostgreSQL base image must be pinned by digest"
+grep -Eq '^FROM golang:1\.26\.6-alpine@sha256:[0-9a-f]{64} AS build$' Dockerfile.caddy \
+  || fail "Caddy Go builder must be pinned by digest"
+grep -Eq '^FROM alpine:3\.24@sha256:[0-9a-f]{64}$' Dockerfile.caddy \
+  || fail "Caddy runtime Alpine image must be pinned by digest"
+grep -Eq '^FROM alpine:3\.24@sha256:[0-9a-f]{64} AS source$' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping source stage must be pinned by digest"
+grep -Eq '^FROM golang:1\.26\.6-alpine@sha256:[0-9a-f]{64} AS be-builder$' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping Go builder must be pinned by digest"
+grep -Eq '^FROM node:24\.19\.0-bookworm-slim@sha256:[0-9a-f]{64} AS fe-builder$' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping Node builder must be pinned by digest"
+grep -Eq '^FROM alpine:3\.24@sha256:[0-9a-f]{64}$' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping runtime Alpine image must be pinned by digest"
+
+# The customized ezBookkeeping build must remain anchored to the exact v1.6.1 source
+# and to the audited upstream Go dependency update.
+grep -Fq '6ccd0c462100828c78e203792a5b2feb8d569039' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping v1.6.1 source commit pin is missing"
+grep -Fq '8b1b2a02d59a5901b7eac6491df0c2a82127bc43' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping upstream Go dependency patch pin is missing"
+grep -Fq 'infra/ezbookkeeping/patches/frontend-security.patch' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping frontend security patch must be applied from the repository"
+grep -Fq 'BUILD_PIPELINE=1 CHECK_3RD_API=0 go test' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping backend tests must isolate real third-party exchange-rate APIs"
+grep -Fq 'npm ci' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping frontend install must be lockfile-driven"
+grep -Fq 'npm audit --audit-level=high' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping frontend build must fail on HIGH/CRITICAL npm findings"
+grep -Fq 'npm test' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping frontend unit tests must run in the hardened build"
+grep -Fq 'npm run build' Dockerfile.ezbookkeeping \
+  || fail "ezBookkeeping production frontend build must run in the hardened build"
+
+# Compose must build the hardened third-party runtimes locally instead of pulling the
+# vulnerable upstream runtime images directly.
+for dockerfile in Dockerfile.postgres Dockerfile.ezbookkeeping Dockerfile.caddy; do
+  grep -Fq "dockerfile: $dockerfile" compose.yaml \
+    || fail "compose.yaml must build $dockerfile"
+done
+if grep -Eq '^[[:space:]]*image:[[:space:]]*(postgres:18\.6|mayswind/ezbookkeeping:1\.6\.1|caddy:2\.11\.4-alpine)' compose.yaml; then
+  fail "compose.yaml still references a vulnerable upstream runtime image directly"
+fi
+
+# Runtime scanning is a separate release-boundary gate so pinned images are rescanned
+# as vulnerability intelligence changes.
+grep -Fq "TRIVY_IMAGE='ghcr.io/aquasecurity/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c'" scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier must pin the Trivy scanner image"
+grep -Fq -- '--severity HIGH,CRITICAL' scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier must scan HIGH and CRITICAL vulnerabilities"
+grep -Fq 'scripts/ci/runtime-images-security.sh' .github/workflows/runtime-images-security.yml \
+  || fail "runtime security workflow must delegate to the repository-native verifier"
+for trigger in pull_request push workflow_dispatch schedule; do
+  grep -Eq "^[[:space:]]*${trigger}:" .github/workflows/runtime-images-security.yml \
+    || fail "runtime security workflow must support ${trigger}"
+done
+
+# Do not reintroduce mutable action tags in the new workflow.
+if grep -Eq 'uses:[[:space:]]+[^#[:space:]]+@(v[0-9]+|main|master)([[:space:]]|$)' .github/workflows/runtime-images-security.yml; then
+  fail "runtime security workflow contains a mutable action reference"
+fi
+
+echo "Runtime image hardening contract OK"
