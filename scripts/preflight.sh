@@ -76,6 +76,26 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   esac
 fi
 
+case "${MCP_ENABLED:-false}" in
+  true|TRUE|True|1|t|T)
+    mcp_container_token="${MCP_TOKEN_FILE:-/run/secrets/finance-mcp-token}"
+    case "$mcp_container_token" in
+      /run/secrets/*)
+        mcp_token_name="${mcp_container_token#/run/secrets/}"
+        ;;
+      *)
+        echo "ERROR: MCP_TOKEN_FILE must reference the Compose-mounted /run/secrets directory." >&2
+        exit 1
+        ;;
+    esac
+    if [[ -z "$mcp_token_name" || "$mcp_token_name" == "." || "$mcp_token_name" == ".." || "$mcp_token_name" == */* ]]; then
+      echo "ERROR: MCP_TOKEN_FILE must reference one file directly under /run/secrets." >&2
+      exit 1
+    fi
+    require_private_file "$ROOT_DIR/secrets/$mcp_token_name" "MCP bearer host file"
+    ;;
+esac
+
 docker compose config >/dev/null
 
 echo "Preflight OK"
