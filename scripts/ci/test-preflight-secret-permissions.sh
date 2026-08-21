@@ -37,6 +37,8 @@ FINANCE_AUTH_USER=acceptance
 FINANCE_AUTH_HASH='hash'
 RESTIC_REPOSITORY=${1:-}
 RESTIC_PASSWORD_FILE=${2:-}
+MCP_ENABLED=${3:-false}
+MCP_TOKEN_FILE=${4:-/run/secrets/finance-mcp-token}
 EOF_ENV
 }
 
@@ -68,5 +70,20 @@ grep -qiE 'permission|mode|group|world' "$workdir/restic-public.out" || fail "in
 
 chmod 0600 "$restic_password"
 run_preflight >"$workdir/restic-private.out" 2>&1 || fail "preflight rejected private RESTIC_PASSWORD_FILE"
+
+mkdir -p "$repo/secrets"
+mcp_token="$repo/secrets/finance-mcp-token"
+printf '%s' '0123456789abcdef0123456789abcdef' >"$mcp_token"
+chmod 0644 "$mcp_token"
+write_env '' '' true /run/secrets/finance-mcp-token
+chmod 0600 "$repo/.env"
+if run_preflight >"$workdir/mcp-public.out" 2>&1; then
+  fail "preflight accepted MCP bearer file with group/world permissions"
+fi
+
+grep -qiE 'MCP|permission|mode|group|world' "$workdir/mcp-public.out" || fail "insecure MCP bearer failure did not explain secret permissions"
+
+chmod 0600 "$mcp_token"
+run_preflight >"$workdir/mcp-private.out" 2>&1 || fail "preflight rejected private MCP bearer file"
 
 echo "Preflight secret permission contract OK"
