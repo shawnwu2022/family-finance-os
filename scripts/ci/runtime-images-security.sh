@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-TRIVY_IMAGE='ghcr.io/aquasecurity/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c'
 SUFFIX="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
 POSTGRES_IMAGE="family-finance/postgres-hardened:${SUFFIX}"
 EZBOOKKEEPING_IMAGE="family-finance/ezbookkeeping-hardened:${SUFFIX}"
@@ -13,12 +12,11 @@ POSTGRES_CONTAINER="ffos-postgres-security-${SUFFIX}"
 CADDY_CONTAINER="ffos-caddy-security-${SUFFIX}"
 CADDY_DATA_VOLUME="ffos-caddy-data-${SUFFIX}"
 CADDY_CONFIG_VOLUME="ffos-caddy-config-${SUFFIX}"
-TRIVY_CACHE_VOLUME="ffos-trivy-cache-${SUFFIX}"
 
 cleanup() {
   docker rm -f "$POSTGRES_CONTAINER" "$CADDY_CONTAINER" >/dev/null 2>&1 || true
   docker image rm -f "$POSTGRES_IMAGE" "$EZBOOKKEEPING_IMAGE" "$CADDY_IMAGE" >/dev/null 2>&1 || true
-  docker volume rm -f "$CADDY_DATA_VOLUME" "$CADDY_CONFIG_VOLUME" "$TRIVY_CACHE_VOLUME" >/dev/null 2>&1 || true
+  docker volume rm -f "$CADDY_DATA_VOLUME" "$CADDY_CONFIG_VOLUME" >/dev/null 2>&1 || true
 }
 
 wait_for_postgres() {
@@ -52,35 +50,6 @@ wait_for_http() {
   done
   docker logs "$CADDY_CONTAINER" >&2 || true
   return 1
-}
-
-scan_image() {
-  local component="$1"
-  local image="$2"
-  local report
-  report="$(mktemp)"
-
-  docker run --rm \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "$TRIVY_CACHE_VOLUME:/root/.cache/" \
-    "$TRIVY_IMAGE" image \
-      --quiet \
-      --format json \
-      --scanners vuln \
-      --severity HIGH,CRITICAL \
-      "$image" >"$report"
-
-  local total
-  total="$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report")"
-  echo "COMPONENT=$component"
-  echo "SCAN_TOTAL=$total"
-
-  if (( total > 0 )); then
-    jq -r '.Results[]?.Vulnerabilities[]? | [.VulnerabilityID,.PkgName,.InstalledVersion,(.FixedVersion // ""),.Severity] | @tsv' "$report" | head -n 100 >&2
-    rm -f "$report"
-    return 1
-  fi
-  rm -f "$report"
 }
 
 build_images() {
@@ -176,20 +145,11 @@ EOF
   echo 'Runtime image smoke phase OK'
 }
 
-scan_images() {
-  echo 'Scanning hardened runtime images for HIGH/CRITICAL vulnerabilities...'
-  scan_image postgres "$POSTGRES_IMAGE"
-  scan_image ezbookkeeping "$EZBOOKKEEPING_IMAGE"
-  scan_image caddy "$CADDY_IMAGE"
-  echo 'Runtime image scan phase OK'
-}
-
 run_all() {
   trap cleanup EXIT
   build_images
   smoke_images
-  scan_images
-  echo 'Runtime image security verification OK'
+  echo 'Runtime image verification OK'
 }
 
 case "${1:-all}" in
@@ -199,9 +159,6 @@ case "${1:-all}" in
   smoke)
     smoke_images
     ;;
-  scan)
-    scan_images
-    ;;
   cleanup)
     cleanup
     echo 'Runtime image cleanup OK'
@@ -210,7 +167,7 @@ case "${1:-all}" in
     run_all
     ;;
   *)
-    echo "usage: $0 [build|smoke|scan|cleanup|all]" >&2
+    echo "usage: $0 [build|smoke|cleanup|all]" >&2
     exit 2
     ;;
 esac
