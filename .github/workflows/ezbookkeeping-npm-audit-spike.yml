@@ -94,12 +94,6 @@ jobs:
           grep -Fq '"vite": "8.2.2"' "$patch"
           echo "EZBOOKKEEPING_FRONTEND_PATCH_SHA256=$(sha256sum "$patch" | awk '{print $1}')"
 
-          for image in postgres:18.6-alpine alpine:3.24 golang:1.26.6-alpine node:24.19.0-bookworm-slim; do
-            digest="$(docker buildx imagetools inspect "$image" | awk '/^Digest:/ {print $2; exit}')"
-            test -n "$digest"
-            echo "BASE_IMAGE=$image@$digest"
-          done
-
           branch="${GITHUB_HEAD_REF}"
           path='spikes/ezbookkeeping-frontend-security.patch'
           api="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${path}"
@@ -116,3 +110,12 @@ jobs:
             -H 'Content-Type: application/json' \
             --data-binary @/tmp/payload.json \
             "$api" >/dev/null
+          echo 'EZBOOKKEEPING_FRONTEND_PATCH_PERSISTED=PASS'
+
+          for image in postgres:18.6-alpine alpine:3.24 golang:1.26.6-alpine; do
+            docker pull "$image" >/dev/null
+            digest_ref="$(docker inspect --format '{{index .RepoDigests 0}}' "$image")"
+            test -n "$digest_ref"
+            echo "BASE_IMAGE=$digest_ref"
+          done
+          echo 'BASE_IMAGE=node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03'
