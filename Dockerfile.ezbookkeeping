@@ -1,0 +1,59 @@
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS source
+RUN apk add --no-cache git
+WORKDIR /src
+RUN git init \
+ && git remote add origin https://github.com/mayswind/ezbookkeeping.git \
+ && git fetch --depth=1 origin 6ccd0c462100828c78e203792a5b2feb8d569039 \
+ && git checkout --detach FETCH_HEAD \
+ && test "$(git rev-parse HEAD)" = "6ccd0c462100828c78e203792a5b2feb8d569039"
+
+FROM golang:1.26.6-alpine@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83 AS be-builder
+WORKDIR /src
+COPY --from=source /src /src
+RUN apk add --no-cache git gcc g++ libc-dev
+RUN git fetch --depth=2 origin 8b1b2a02d59a5901b7eac6491df0c2a82127bc43 \
+ && git diff '8b1b2a02d59a5901b7eac6491df0c2a82127bc43^' 8b1b2a02d59a5901b7eac6491df0c2a82127bc43 -- go.mod go.sum > /tmp/backend-dependency-security.patch \
+ && test -s /tmp/backend-dependency-security.patch \
+ && git apply --check /tmp/backend-dependency-security.patch \
+ && git apply /tmp/backend-dependency-security.patch \
+ && grep -Fq 'github.com/xuri/excelize/v2 v2.11.0' go.mod \
+ && grep -Fq 'golang.org/x/text v0.40.0' go.mod
+RUN docker/backend-build-pre-setup.sh
+RUN BUILD_PIPELINE=1 CHECK_3RD_API=0 RELEASE_BUILD=1 ./build.sh backend --release --no-lint --no-test
+RUN BUILD_PIPELINE=1 CHECK_3RD_API=0 go test ./... -count=1
+
+FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS fe-builder
+WORKDIR /src
+COPY --from=source /src /src
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+COPY infra/ezbookkeeping/patches/frontend-security.patch /tmp/frontend-security.patch
+RUN git apply --check /tmp/frontend-security.patch \
+ && git apply /tmp/frontend-security.patch \
+ && grep -Fq '"axios": "1.19.0"' package.json \
+ && grep -Fq '"vite": "8.2.2"' package.json
+RUN docker/frontend-build-pre-setup.sh
+RUN npm ci
+RUN npm audit --audit-level=high
+RUN BUILD_PIPELINE=1 npm test
+RUN BUILD_PIPELINE=1 npm run build
+
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+RUN apk upgrade --no-cache \
+ && addgroup -S -g 1000 ezbookkeeping \
+ && adduser -S -G ezbookkeeping -u 1000 ezbookkeeping \
+ && apk --no-cache add tzdata
+COPY --from=source /src/docker/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod 0755 /docker-entrypoint.sh \
+ && mkdir -p /ezbookkeeping/data /ezbookkeeping/log /ezbookkeeping/storage \
+ && chown -R 1000:1000 /ezbookkeeping
+WORKDIR /ezbookkeeping
+COPY --from=be-builder --chown=1000:1000 /src/ezbookkeeping /ezbookkeeping/ezbookkeeping
+COPY --from=fe-builder --chown=1000:1000 /src/dist /ezbookkeeping/public
+COPY --from=source --chown=1000:1000 /src/conf /ezbookkeeping/conf
+COPY --from=source --chown=1000:1000 /src/templates /ezbookkeeping/templates
+COPY --from=source --chown=1000:1000 /src/LICENSE /ezbookkeeping/LICENSE
+USER 1000:1000
+EXPOSE 8080
+ENTRYPOINT ["/docker-entrypoint.sh"]
