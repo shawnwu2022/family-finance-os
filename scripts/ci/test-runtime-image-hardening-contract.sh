@@ -13,6 +13,7 @@ required=(
   Dockerfile.postgres
   Dockerfile.caddy
   Dockerfile.ezbookkeeping
+  infra/caddy/main.go
   infra/caddy/docker-entrypoint.sh
   infra/ezbookkeeping/patches/frontend-security.patch
   scripts/ci/runtime-images-security.sh
@@ -49,10 +50,34 @@ grep -Fq "sed -i 's/exec gosu postgres/exec su-exec postgres/g'" Dockerfile.post
   || fail "PostgreSQL entrypoint must replace gosu with su-exec"
 grep -Fq 'rm -f /usr/local/bin/gosu' Dockerfile.postgres \
   || fail "PostgreSQL hardened image must remove gosu"
-grep -Fq 'e2eee6a7fce366321294c9c2a79f3146891dcbdf' Dockerfile.caddy \
-  || fail "Caddy v2.11.4 source commit pin is missing"
+
+# Caddy must be built as a custom module whose dependency graph records the real
+# v2.11.4 release version. Building directly from a detached/dirty source checkout
+# produces a pseudo-version that vulnerability scanners can misclassify as pre-fix.
+grep -Fq 'COPY infra/caddy/main.go ./main.go' Dockerfile.caddy \
+  || fail "Caddy must build from the repository custom main module"
+grep -Fq 'github.com/caddyserver/caddy/v2/modules/standard' infra/caddy/main.go \
+  || fail "Caddy custom main must include the standard module set"
+grep -Fq 'ENV GOPROXY=https://proxy.golang.org' Dockerfile.caddy \
+  || fail "Caddy module downloads must use the Go module proxy without direct fallback"
+grep -Fq 'ENV GOSUMDB=sum.golang.org' Dockerfile.caddy \
+  || fail "Caddy module downloads must use the Go checksum database"
+grep -Fq 'github.com/caddyserver/caddy/v2@v2.11.4' Dockerfile.caddy \
+  || fail "Caddy v2.11.4 module version pin is missing"
+grep -Fq 'h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=' Dockerfile.caddy \
+  || fail "Caddy v2.11.4 module zip checksum pin is missing"
+grep -Fq 'h1:zXCl032uTaF5/TpgU38axqFD41jqzxomTDNqK7BzMeI=' Dockerfile.caddy \
+  || fail "Caddy v2.11.4 go.mod checksum pin is missing"
+grep -Fq "go list -m -f '{{.Version}}' github.com/caddyserver/caddy/v2" Dockerfile.caddy \
+  || fail "Caddy build must assert the resolved release version"
 grep -Fq 'golang.org/x/crypto@v0.54.0' Dockerfile.caddy \
   || fail "Caddy crypto dependency hardening is missing"
+grep -Fq 'golang.org/x/net@v0.57.0' Dockerfile.caddy \
+  || fail "Caddy network dependency hardening is missing"
+grep -Fq 'golang.org/x/text@v0.40.0' Dockerfile.caddy \
+  || fail "Caddy text dependency hardening is missing"
+grep -Fq 'google.golang.org/grpc@v1.82.1' Dockerfile.caddy \
+  || fail "Caddy gRPC dependency hardening is missing"
 grep -Fq 'setcap cap_net_bind_service=+ep /usr/bin/caddy' Dockerfile.caddy \
   || fail "Caddy binary must retain low-port bind capability after privilege drop"
 grep -Fq 'COPY infra/caddy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh' Dockerfile.caddy \
@@ -113,6 +138,10 @@ grep -Fq -- '--severity HIGH,CRITICAL' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must scan HIGH and CRITICAL vulnerabilities"
 grep -Fq '$ROOT_DIR/Caddyfile:/etc/caddy/Caddyfile:ro' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must validate the repository Caddyfile with the custom binary"
+grep -Fq 'Verifying hardened Caddy release identity' scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier must check Caddy release identity"
+grep -Fq "grep -Eq '^v2\\.11\\.4([[:space:]]|$)' <<<\"\$caddy_version\"" scripts/ci/runtime-images-security.sh \
+  || fail "runtime verifier must require Caddy v2.11.4 build metadata"
 grep -Fq 'legacy-root-state' scripts/ci/runtime-images-security.sh \
   || fail "runtime verifier must exercise legacy root-owned Caddy state migration"
 grep -Fq '/^Uid:/ {print $2}' scripts/ci/runtime-images-security.sh \
@@ -131,7 +160,7 @@ if (( $(grep -Fc '      - Caddyfile' .github/workflows/runtime-images-security.y
   fail "runtime security workflow must run when Caddyfile changes on PRs and main pushes"
 fi
 if (( $(grep -Fc '      - infra/caddy/**' .github/workflows/runtime-images-security.yml) < 2 )); then
-  fail "runtime security workflow must run when the Caddy migration entrypoint changes"
+  fail "runtime security workflow must run when Caddy implementation changes"
 fi
 
 # Do not reintroduce mutable action tags in the new workflow.
