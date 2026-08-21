@@ -163,7 +163,23 @@ func (p *OpenAICompatibleProvider) do(ctx context.Context, body []byte) (*http.R
 	if p.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+p.apiKey)
 	}
-	resp, err := p.client.Do(req)
+
+	client := *p.client
+	originalCheckRedirect := client.CheckRedirect
+	client.CheckRedirect = func(redirected *http.Request, via []*http.Request) error {
+		if redirected == nil || !allowedProviderRedirect(p.endpoint, redirected.URL) {
+			return fmt.Errorf("%w: insecure provider redirect", ErrProviderResponse)
+		}
+		if originalCheckRedirect != nil {
+			return originalCheckRedirect(redirected, via)
+		}
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		return nil
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Responses request: %w", err)
 	}
@@ -181,14 +197,8 @@ func responsesEndpoint(raw string) (*url.URL, error) {
 		return nil, errorsInvalidBaseURL()
 	}
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || !allowedProviderEndpoint(parsed) {
 		return nil, errorsInvalidBaseURL()
-	}
-	if parsed.Scheme != "https" {
-		ip := net.ParseIP(parsed.Hostname())
-		if parsed.Scheme != "http" || ip == nil || !ip.IsLoopback() {
-			return nil, errorsInvalidBaseURL()
-		}
 	}
 	path := strings.TrimSuffix(parsed.Path, "/")
 	switch {
@@ -202,6 +212,34 @@ func responsesEndpoint(raw string) (*url.URL, error) {
 	}
 	parsed.Path = path
 	return parsed, nil
+}
+
+func allowedProviderEndpoint(endpoint *url.URL) bool {
+	if endpoint == nil || endpoint.Host == "" {
+		return false
+	}
+	if strings.EqualFold(endpoint.Scheme, "https") {
+		return true
+	}
+	return isLoopbackHTTPProviderURL(endpoint)
+}
+
+func allowedProviderRedirect(origin, target *url.URL) bool {
+	if target == nil || target.Host == "" {
+		return false
+	}
+	if strings.EqualFold(target.Scheme, "https") {
+		return true
+	}
+	return isLoopbackHTTPProviderURL(origin) && isLoopbackHTTPProviderURL(target)
+}
+
+func isLoopbackHTTPProviderURL(endpoint *url.URL) bool {
+	if endpoint == nil || !strings.EqualFold(endpoint.Scheme, "http") {
+		return false
+	}
+	ip := net.ParseIP(endpoint.Hostname())
+	return ip != nil && ip.IsLoopback()
 }
 
 func parseResponse(wire responsesResponse) (Response, error) {
