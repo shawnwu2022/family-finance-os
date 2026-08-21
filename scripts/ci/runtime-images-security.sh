@@ -97,7 +97,7 @@ build_images() {
 }
 
 smoke_images() {
-  local work_dir auth_hash ez_version
+  local work_dir auth_hash ez_version caddy_version
   work_dir="$(mktemp -d)"
 
   echo 'Smoke-testing hardened PostgreSQL...'
@@ -116,6 +116,11 @@ smoke_images() {
   echo "$ez_version"
   grep -Fq 'ezBookkeeping version 1.6.1' <<<"$ez_version"
   grep -Fq 'commit 6ccd0c4' <<<"$ez_version"
+
+  echo 'Verifying hardened Caddy release identity...'
+  caddy_version="$(docker run --rm "$CADDY_IMAGE" version)"
+  echo "$caddy_version"
+  grep -Eq '^v2\.11\.4([[:space:]]|$)' <<<"$caddy_version"
 
   echo 'Preparing legacy root-owned Caddy state for migration verification...'
   docker volume create "$CADDY_DATA_VOLUME" >/dev/null
