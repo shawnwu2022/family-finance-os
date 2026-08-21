@@ -10,7 +10,8 @@
 - PR #31 的 exact validated runtime tree/head 为 `bec6d2354f72c319f3fadb40a5732ed7c841c638`；该 head 的全部适用自动化 gate 通过后，以 exact-head guard 合并为上述 `main` runtime target。
 - 只修改本证据文件、README、LICENSE 或其它纯治理元数据的后续 commit **不重新定义 runtime target**；否则记录证据本身会造成无限 SHA 递归。
 - 任何影响应用代码、依赖、数据库 schema、Docker/Compose/Caddy、CI/acceptance 逻辑或运行时配置契约的变更，都必须选择新的 runtime target，并重新执行适用 gate。
-- 公共/第三方 runtime image 的 CVE 扫描按项目策略**不作为 blocking PR/release gate**。不可变镜像/模块输入、依赖审计、repository-native 测试、真实容器 smoke、first-party security gate 与真实生产验收仍是必要证据。
+- 公共/第三方 runtime image 的 CVE 扫描按项目策略**不作为 mandatory blocking PR/release gate**。但若通过任何渠道已经发现并确认存在**未处理的高严重度可达漏洞**，无论来源是 first-party 还是 third-party，仍必须阻塞 V1 release，直到完成修复或形成符合项目安全标准的处置结论。
+- 不强制公共镜像扫描不等于忽略已知漏洞；不可变镜像/模块输入、依赖审计、repository-native 测试、真实容器 smoke、first-party security gate 与真实生产验收仍是必要证据。
 - Issue #26 是当前 production acceptance 执行清单；本文件是最终 release decision 的证据总账。
 
 ## Release Candidate
@@ -33,7 +34,7 @@
 本节自动化证据来自 PR #31 exact head `bec6d2354f72c319f3fadb40a5732ed7c841c638`。该 exact head 在五个适用 workflow 均 PASS 后，以 exact-head guard 合并为 `main` runtime target `c1ef3e30c8c8692b75b134d478a08e972dfcff66`。
 
 - CI `32470277959`: PASS
-- Runtime Images Security `32470278120`: PASS — hardened third-party runtime **build + real-container smoke**；按项目策略不执行 blocking public-image CVE scan
+- Runtime Images Security `32470278120`: PASS — hardened third-party runtime **build + real-container smoke**；按项目策略不执行 mandatory blocking public-image CVE scan
 - MCP Security `32470278085`: PASS
 - Edge Security `32470277961`: PASS
 - OpenClaw Release Acceptance `32470277945`: PASS
@@ -54,7 +55,7 @@
 | Finance Core container build | PASS | CI `32470277959` / `make verify` |
 | production operations contract | PASS | CI `32470277959` / `make verify` |
 | third-party hardened runtime build + smoke | PASS | Runtime Images Security `32470278120`; PostgreSQL query, ezBookkeeping v1.6.1, Caddy v2.11.4/config/legacy-volume migration/non-root port-80 smoke |
-| public/third-party runtime image CVE scan | NOT RUN | Intentionally non-blocking by project policy; not part of release decision |
+| public/third-party runtime image CVE scan | NOT RUN | Not mandatory by project policy. If a HIGH/CRITICAL vulnerability is nevertheless discovered and confirmed reachable, it remains release-blocking until handled |
 | edge exposure/security workflow | PASS | Edge Security `32470277961` |
 | MCP security workflow | PASS | MCP Security `32470278085` |
 | Real OpenClaw ephemeral acceptance | PASS | OpenClaw `32470277945`; static acceptance contracts + real Ollama/OpenClaw/MCP run completed successfully; final audit assertions are enforced by the strict acceptance script |
@@ -135,8 +136,9 @@ Automated PASS proves the repository-defined contracts on the exact validated ru
 | Repository license selected | PASS | MIT; PR #27 merged |
 | Runtime hardening PR | PASS | PR #31 merged exact validated head `bec6d2354f72c319f3fadb40a5732ed7c841c638` as `c1ef3e30c8c8692b75b134d478a08e972dfcff66` |
 | `main` branch protection / ruleset | BLOCKED | Current connector cannot mutate branch-protection/ruleset settings; must be configured in repository settings before final release |
-| Final first-party repository/security review | PASS | PR #28 + PR #31 security review, no unresolved review threads, and exact-head CI/MCP/Edge/Runtime/OpenClaw gates PASS; public/third-party image CVE scanning intentionally non-blocking by project policy |
+| Final first-party repository/security review | PASS | PR #28 + PR #31 security review, no unresolved review threads, and exact-head CI/MCP/Edge/Runtime/OpenClaw gates PASS |
+| Known high-severity reachable vulnerabilities | PASS | No unresolved known reachable HIGH/CRITICAL finding is carried in the current release ledger; if one becomes known through any source, release returns to BLOCKED until handled |
 
 ## Final Decision
 
-Production release remains **BLOCKED** until every required real-environment gate above is `PASS`, branch protection is configured, there are no unresolved first-party P0/P1 security or data-correctness defects, and no unexplained financial delta exceeds 0.01 CNY。公共/第三方 runtime image CVE 扫描不属于 blocking release decision。
+Production release remains **BLOCKED** until every required real-environment gate above is `PASS`, branch protection is configured, there are no unresolved P0/P1 security or data-correctness defects, no known unhandled high-severity reachable vulnerability remains, and no unexplained financial delta exceeds 0.01 CNY。公共/第三方 runtime image CVE 扫描本身不是 mandatory blocking gate，但已知且确认可达的高严重度漏洞仍然是 release blocker。
