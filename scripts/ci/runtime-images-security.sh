@@ -11,13 +11,13 @@ EZBOOKKEEPING_IMAGE="family-finance/ezbookkeeping-hardened:${SUFFIX}"
 CADDY_IMAGE="family-finance/caddy-hardened:${SUFFIX}"
 POSTGRES_CONTAINER="ffos-postgres-security-${SUFFIX}"
 CADDY_CONTAINER="ffos-caddy-security-${SUFFIX}"
+TRIVY_CACHE_VOLUME="ffos-trivy-cache-${SUFFIX}"
 WORK_DIR="$(mktemp -d)"
-TRIVY_CACHE="$WORK_DIR/trivy-cache"
-mkdir -p "$TRIVY_CACHE"
 
 cleanup() {
   docker rm -f "$POSTGRES_CONTAINER" "$CADDY_CONTAINER" >/dev/null 2>&1 || true
   docker image rm -f "$POSTGRES_IMAGE" "$EZBOOKKEEPING_IMAGE" "$CADDY_IMAGE" >/dev/null 2>&1 || true
+  docker volume rm -f "$TRIVY_CACHE_VOLUME" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -62,7 +62,7 @@ scan_image() {
 
   docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "$TRIVY_CACHE:/root/.cache/" \
+    -v "$TRIVY_CACHE_VOLUME:/root/.cache/" \
     "$TRIVY_IMAGE" image \
       --quiet \
       --format json \
