@@ -8,6 +8,7 @@ RUN git init \
  && test "$(git rev-parse HEAD)" = "6ccd0c462100828c78e203792a5b2feb8d569039"
 
 FROM golang:1.26.6-alpine@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83 AS be-builder
+ENV GOFLAGS=-mod=readonly
 WORKDIR /src
 COPY --from=source /src /src
 RUN apk add --no-cache git gcc g++ libc-dev
@@ -19,7 +20,11 @@ RUN git fetch --depth=2 origin 8b1b2a02d59a5901b7eac6491df0c2a82127bc43 \
  && grep -Fq 'github.com/xuri/excelize/v2 v2.11.0' go.mod \
  && grep -Fq 'golang.org/x/text v0.40.0' go.mod
 RUN docker/backend-build-pre-setup.sh
-RUN BUILD_PIPELINE=1 CHECK_3RD_API=0 RELEASE_BUILD=1 ./build.sh backend --release --no-lint --no-test
+RUN go mod download
+RUN CGO_ENABLED=1 go build -a -trimpath \
+      -ldflags="-w -s -linkmode external -extldflags '-static' -X main.Version=1.6.1 -X main.CommitHash=6ccd0c4" \
+      -o ezbookkeeping ezbookkeeping.go \
+ && chmod 0755 ezbookkeeping
 RUN BUILD_PIPELINE=1 CHECK_3RD_API=0 go test ./... -count=1
 
 FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS fe-builder
