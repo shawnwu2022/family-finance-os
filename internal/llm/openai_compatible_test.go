@@ -10,6 +10,32 @@ import (
 	"testing"
 )
 
+func TestOpenAICompatibleProviderUsesBoundedDefaultHTTPClient(t *testing.T) {
+	provider, err := NewOpenAICompatibleProvider(OpenAICompatibleConfig{
+		BaseURL: "https://example.com/v1",
+		Models:  ModelSet{Fast: "fast-model"},
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAICompatibleProvider: %v", err)
+	}
+	if provider.client == nil || provider.client.Timeout <= 0 {
+		t.Fatalf("default HTTP client timeout = %v, want positive bounded timeout", provider.client.Timeout)
+	}
+
+	custom := &http.Client{}
+	provider, err = NewOpenAICompatibleProvider(OpenAICompatibleConfig{
+		BaseURL:    "https://example.com/v1",
+		Models:     ModelSet{Fast: "fast-model"},
+		HTTPClient: custom,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAICompatibleProvider custom client: %v", err)
+	}
+	if provider.client != custom {
+		t.Fatal("explicit HTTP client was not preserved")
+	}
+}
+
 func TestOpenAICompatibleRespondUsesRoleModelAndTypedTools(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/responses" {
