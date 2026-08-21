@@ -46,6 +46,25 @@ func TestFinanceAPIRejectsCrossOriginUnsafeRequestBeforeBackend(t *testing.T) {
 	}
 }
 
+func TestFinanceAPIRejectsCrossOriginDeleteBeforeBackend(t *testing.T) {
+	fake := &portfolioHTTPFake{}
+	handler := NewHandler(WithAPI(fake))
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/portfolio/assets/property:home?household_id=42", nil)
+	req.Host = "finance.example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("Origin", "https://evil.example")
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("status=%d body=%s want %d", resp.Code, resp.Body.String(), http.StatusForbidden)
+	}
+	if fake.deleteCalls != 0 {
+		t.Fatalf("delete backend calls=%d want 0", fake.deleteCalls)
+	}
+}
+
 func TestFinanceAPIAcceptsSameOriginJSONRequest(t *testing.T) {
 	fake := &fakeFinanceAPI{advisor: AdvisorResponse{Text: "ok"}}
 	handler := NewHandler(WithAPI(fake))
