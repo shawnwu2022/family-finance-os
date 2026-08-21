@@ -23,6 +23,9 @@ jobs:
       - name: Verify release acceptance contract
         shell: bash
         run: bash scripts/acceptance/test-openclaw-release-acceptance.sh
+      - name: Verify untrusted PR execution gate
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-untrusted-pr-gate.sh
       - name: Verify audit completion schema contract
         shell: bash
         run: bash scripts/acceptance/test-openclaw-audit-completion-schema.sh
