@@ -33,8 +33,9 @@ func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T
 		_, _ = pool.Exec(context.Background(), `DELETE FROM households WHERE id = $1`, household.ID)
 	})
 
+	const token = "application-mcp-token-high-entropy-fixture-2026"
 	tokenPath := filepath.Join(t.TempDir(), "mcp-token")
-	if err := os.WriteFile(tokenPath, []byte("application-mcp-token"), 0o600); err != nil {
+	if err := os.WriteFile(tokenPath, []byte(token), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -65,7 +66,7 @@ func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: httpServer.URL + "/mcp",
 		HTTPClient: &http.Client{Transport: bearerRoundTripper{
-			token: "application-mcp-token",
+			token: token,
 			base:  http.DefaultTransport,
 		}},
 	}, nil)
