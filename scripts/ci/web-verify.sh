@@ -22,6 +22,7 @@ cd "$WORK_ROOT/web"
 }
 
 npm ci --ignore-scripts
+npm audit --audit-level=high
 npm test
 npm run check:pwa
 npm run typecheck

@@ -9,7 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+const defaultProviderHTTPTimeout = 2 * time.Minute
 
 type OpenAICompatibleConfig struct {
 	BaseURL    string
@@ -32,7 +35,7 @@ func NewOpenAICompatibleProvider(cfg OpenAICompatibleConfig) (*OpenAICompatibleP
 	}
 	client := cfg.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: defaultProviderHTTPTimeout}
 	}
 	return &OpenAICompatibleProvider{
 		endpoint: endpoint,

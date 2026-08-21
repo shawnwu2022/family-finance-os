@@ -4,16 +4,34 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT_DIR"
 
-for cmd in docker openssl; do
+for cmd in docker openssl stat; do
   command -v "$cmd" >/dev/null || { echo "Missing command: $cmd" >&2; exit 1; }
 done
 
 docker compose version >/dev/null
 
+require_private_file() {
+  local path="$1"
+  local label="$2"
+  [[ -f "$path" ]] || { echo "ERROR: ${label} must be a regular file." >&2; exit 1; }
+
+  local mode
+  mode="$(stat -Lc '%a' "$path")" || { echo "ERROR: could not inspect ${label} file mode." >&2; exit 1; }
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || { echo "ERROR: invalid ${label} file mode: ${mode}." >&2; exit 1; }
+  local permissions="${mode: -3}"
+  local group_digit="${permissions:1:1}"
+  local other_digit="${permissions:2:1}"
+  if [[ "$group_digit" != "0" || "$other_digit" != "0" ]]; then
+    echo "ERROR: ${label} permissions are too broad (mode ${mode}); group and other access must be disabled." >&2
+    exit 1
+  fi
+}
+
 if [[ ! -f .env ]]; then
   echo "Create .env from .env.example before deployment." >&2
   exit 1
 fi
+require_private_file .env ".env"
 
 if grep -Eq 'REPLACE_WITH|example\.com' .env; then
   echo "ERROR: .env still contains deployment placeholders." >&2
@@ -47,6 +65,7 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   [[ "$RESTIC_REPOSITORY" == sftp:* ]] || { echo "ERROR: RESTIC_REPOSITORY must use restic SFTP syntax for V1." >&2; exit 1; }
   [[ -n "${RESTIC_PASSWORD_FILE:-}" ]] || { echo "ERROR: RESTIC_PASSWORD_FILE is required with RESTIC_REPOSITORY." >&2; exit 1; }
   [[ -r "$RESTIC_PASSWORD_FILE" ]] || { echo "ERROR: RESTIC_PASSWORD_FILE is not readable." >&2; exit 1; }
+  require_private_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
 
   password_path="$(cd "$(dirname "$RESTIC_PASSWORD_FILE")" && pwd -P)/$(basename "$RESTIC_PASSWORD_FILE")"
   case "$password_path" in
@@ -56,6 +75,26 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
       ;;
   esac
 fi
+
+case "${MCP_ENABLED:-false}" in
+  true|TRUE|True|1|t|T)
+    mcp_container_token="${MCP_TOKEN_FILE:-/run/secrets/finance-mcp-token}"
+    case "$mcp_container_token" in
+      /run/secrets/*)
+        mcp_token_name="${mcp_container_token#/run/secrets/}"
+        ;;
+      *)
+        echo "ERROR: MCP_TOKEN_FILE must reference the Compose-mounted /run/secrets directory." >&2
+        exit 1
+        ;;
+    esac
+    if [[ -z "$mcp_token_name" || "$mcp_token_name" == "." || "$mcp_token_name" == ".." || "$mcp_token_name" == */* ]]; then
+      echo "ERROR: MCP_TOKEN_FILE must reference one file directly under /run/secrets." >&2
+      exit 1
+    fi
+    require_private_file "$ROOT_DIR/secrets/$mcp_token_name" "MCP bearer host file"
+    ;;
+esac
 
 docker compose config >/dev/null
 

@@ -6,6 +6,11 @@
 {$FINANCE_DOMAIN} {
     encode zstd gzip
 
+    header {
+        X-Frame-Options "DENY"
+        Content-Security-Policy "frame-ancestors 'none'"
+    }
+
     @mcp path /mcp
     handle @mcp {
         reverse_proxy finance-core:8000

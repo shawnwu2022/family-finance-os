@@ -11,7 +11,8 @@ import (
 func TestLoadMCPTokenReadsTrimmedSecretFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mcp-token")
-	if err := os.WriteFile(path, []byte("correct-horse-battery-staple\n"), 0o600); err != nil {
+	want := []byte("correct-horse-battery-staple-2026\n")
+	if err := os.WriteFile(path, want, 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -19,8 +20,19 @@ func TestLoadMCPTokenReadsTrimmedSecretFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadMCPToken: %v", err)
 	}
-	if !bytes.Equal(token, []byte("correct-horse-battery-staple")) {
+	if !bytes.Equal(token, bytes.TrimSpace(want)) {
 		t.Fatalf("token=%q", token)
+	}
+}
+
+func TestLoadMCPTokenRejectsWeakBearer(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "weak-token")
+	if err := os.WriteFile(path, []byte("short-but-valid-syntax"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, err := loadMCPToken(path); err == nil {
+		t.Fatal("loadMCPToken accepted bearer shorter than the minimum security boundary")
 	}
 }
 

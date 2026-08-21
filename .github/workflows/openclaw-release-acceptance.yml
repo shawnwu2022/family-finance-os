@@ -17,10 +17,15 @@ jobs:
     name: OpenClaw acceptance contracts
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Verify release acceptance contract
         shell: bash
         run: bash scripts/acceptance/test-openclaw-release-acceptance.sh
+      - name: Verify untrusted PR execution gate
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-untrusted-pr-gate.sh
       - name: Verify audit completion schema contract
         shell: bash
         run: bash scripts/acceptance/test-openclaw-audit-completion-schema.sh
@@ -40,12 +45,14 @@ jobs:
   acceptance:
     name: Real OpenClaw acceptance
     needs: contracts
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[openclaw-full]'))
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[openclaw-full]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24.19.0'
       - name: Run real OpenClaw release acceptance

@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 bash scripts/check-edge-security.sh
+bash scripts/ci/test-finance-frame-protection.sh
 
 docker compose version >/dev/null
 

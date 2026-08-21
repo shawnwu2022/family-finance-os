@@ -20,6 +20,8 @@ import (
 	storesqlc "github.com/shawnwu2022/family-finance-os/internal/store/sqlc"
 )
 
+const mcpIntegrationToken = "integration-mcp-token-high-entropy-fixture-2026"
+
 func TestBuildMCPHandlerIntegration(t *testing.T) {
 	pool := openMCPIntegrationPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -40,7 +42,7 @@ func TestBuildMCPHandlerIntegration(t *testing.T) {
 	})
 
 	tokenPath := filepath.Join(t.TempDir(), "mcp-token")
-	if err := os.WriteFile(tokenPath, []byte("integration-mcp-token\n"), 0o600); err != nil {
+	if err := os.WriteFile(tokenPath, []byte(mcpIntegrationToken+"\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -67,7 +69,7 @@ func TestBuildMCPHandlerIntegration(t *testing.T) {
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: httpServer.URL,
 		HTTPClient: &http.Client{Transport: bearerRoundTripper{
-			token: "integration-mcp-token",
+			token: mcpIntegrationToken,
 			base:  http.DefaultTransport,
 		}},
 	}, nil)
@@ -116,7 +118,7 @@ func TestBuildMCPHandlerRejectsMissingHouseholdIntegration(t *testing.T) {
 	defer cancel()
 
 	tokenPath := filepath.Join(t.TempDir(), "mcp-token")
-	if err := os.WriteFile(tokenPath, []byte("integration-mcp-token"), 0o600); err != nil {
+	if err := os.WriteFile(tokenPath, []byte(mcpIntegrationToken), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	_, err := buildMCPHandler(ctx, config.MCPConfig{
