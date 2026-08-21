@@ -20,6 +20,8 @@ required=(
   scripts/ci/edge-security.sh
   scripts/ci/restore-verify.sh
   scripts/ci/container-verify.sh
+  scripts/ci/test-preflight-secret-permissions.sh
+  scripts/ci/test-workflow-action-pins.sh
 )
 for path in "${required[@]}"; do
   [[ -f "$path" ]] || fail "missing repository-native CI file: $path"
@@ -78,5 +80,8 @@ if grep -Fq '.git' scripts/ci/mcp-security.sh; then
   fail "MCP security verifier must not require Git metadata"
 fi
 grep -Fq '[[ -f "$SOURCE_ROOT/go.mod" ]]' scripts/ci/mcp-security.sh || fail "MCP security verifier must validate the mounted source tree by go.mod"
+
+bash scripts/ci/test-preflight-secret-permissions.sh
+bash scripts/ci/test-workflow-action-pins.sh
 
 echo "Repository-native CI contract OK"
