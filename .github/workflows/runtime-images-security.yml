@@ -3,6 +3,7 @@ name: Runtime Images Security
 on:
   pull_request:
     paths:
+      - Caddyfile
       - Dockerfile.postgres
       - Dockerfile.caddy
       - Dockerfile.ezbookkeeping
@@ -15,6 +16,7 @@ on:
     branches:
       - main
     paths:
+      - Caddyfile
       - Dockerfile.postgres
       - Dockerfile.caddy
       - Dockerfile.ezbookkeeping
