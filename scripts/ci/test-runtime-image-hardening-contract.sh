@@ -106,7 +106,7 @@ grep -Fq 'RUN go mod download' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping backend must download the locked module graph before building"
 grep -Fq 'CGO_ENABLED=1 go build -a -trimpath' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping backend must use the release-equivalent direct Go build"
-grep -Fq '-X main.Version=1.6.1 -X main.CommitHash=6ccd0c4' Dockerfile.ezbookkeeping \
+grep -Fq -- '-X main.Version=1.6.1 -X main.CommitHash=6ccd0c4' Dockerfile.ezbookkeeping \
   || fail "ezBookkeeping backend build metadata must remain anchored to v1.6.1"
 if grep -Fq './build.sh backend' Dockerfile.ezbookkeeping || grep -Fq 'go get .' Dockerfile.ezbookkeeping; then
   fail "ezBookkeeping backend build must not mutate the locked module graph"
