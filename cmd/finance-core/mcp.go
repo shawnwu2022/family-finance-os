@@ -19,7 +19,10 @@ import (
 	storesqlc "github.com/shawnwu2022/family-finance-os/internal/store/sqlc"
 )
 
-const maxMCPTokenFileBytes = 4096
+const (
+	minMCPTokenBytes     = 32
+	maxMCPTokenFileBytes = 4096
+)
 
 func buildMCPHandler(ctx context.Context, cfg config.MCPConfig, pool *pgxpool.Pool, backend agentadapter.FinanceBackend) (http.Handler, error) {
 	if !cfg.Enabled {
@@ -114,6 +117,9 @@ func loadMCPToken(path string) ([]byte, error) {
 	}
 	if strings.IndexFunc(string(token), unicode.IsSpace) >= 0 {
 		return nil, fmt.Errorf("MCP token file %q contains whitespace", path)
+	}
+	if len(token) < minMCPTokenBytes {
+		return nil, fmt.Errorf("MCP token file %q must contain at least %d bytes", path, minMCPTokenBytes)
 	}
 	return append([]byte(nil), token...), nil
 }
