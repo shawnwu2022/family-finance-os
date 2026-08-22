@@ -62,6 +62,25 @@ grep -qiE 'permission|mode|group|world' "$workdir/env-public.out" || fail "insec
 chmod 0600 "$repo/.env"
 run_preflight >"$workdir/env-private.out" 2>&1 || fail "preflight rejected private .env because a commented example looked like an active placeholder"
 
+# A placeholder near the start of a large active .env must never be hidden by
+# grep -q closing a pipeline early under `set -o pipefail`.
+write_env
+sed -i "s/FINANCE_AUTH_HASH='hash'/FINANCE_AUTH_HASH='REPLACE_WITH_FINANCE_AUTH_BCRYPT_HASH'/" "$repo/.env"
+i=0
+while [[ "$i" -lt 20000 ]]; do
+  printf 'FILLER_%05d=value\n' "$i" >>"$repo/.env"
+  i=$((i + 1))
+done
+chmod 0600 "$repo/.env"
+if run_preflight >"$workdir/large-placeholder.out" 2>&1; then
+  fail "preflight accepted an active placeholder in a large .env"
+fi
+grep -qi 'placeholder' "$workdir/large-placeholder.out" || fail "large-env placeholder rejection was unclear"
+
+# Restore a valid environment for the remaining cases.
+write_env
+chmod 0600 "$repo/.env"
+
 # Effective readability differs for privileged UID 0. Keep this contract UID-independent:
 # production preflight must explicitly check readability, while mode behavior is exercised below.
 grep -Fq '[[ -r "$path" ]]' "$repo/scripts/preflight.sh" || fail "preflight must explicitly require secret readability"
