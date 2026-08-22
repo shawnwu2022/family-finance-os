@@ -14,8 +14,9 @@ live_smoke="scripts/acceptance/ezbookkeeping-live-smoke.sh"
 openclaw_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
 ollama_schema_contract="scripts/acceptance/test-ollama-schema-probe.sh"
 openclaw_release_contract="scripts/acceptance/test-openclaw-release-acceptance.sh"
+backup_append_only_contract="scripts/ci/test-backup-append-only-contract.sh"
 
-for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw_smoke" "$ollama_schema_contract" "$openclaw_release_contract"; do
+for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw_smoke" "$ollama_schema_contract" "$openclaw_release_contract" "$backup_append_only_contract"; do
   [[ -f "$script" ]] || fail "required script is missing: $script"
   bash -n "$script" || fail "shell syntax is invalid: $script"
 done
@@ -61,5 +62,6 @@ fi
 
 bash "$ollama_schema_contract"
 bash "$openclaw_release_contract"
+bash "$backup_append_only_contract"
 
 echo "Production operations contract OK"
