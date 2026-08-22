@@ -76,6 +76,12 @@ if ! run_preflight >"$workdir/rest-producer-valid.out" 2>&1; then
   fail "preflight rejected valid HTTPS REST producer configuration"
 fi
 
+write_env 'rest:https://backup.test.invalid/family-finance-typo/' "$restic_password" family-finance-prod "$rest_server_password"
+if run_preflight >"$workdir/private-repo-mismatch.out" 2>&1; then
+  fail "preflight accepted a private repository path that does not match RESTIC_REST_USERNAME"
+fi
+grep -qiE 'private|repository|username|RESTIC_REST_USERNAME' "$workdir/private-repo-mismatch.out" || fail "private repository username/path mismatch failure was unclear"
+
 chmod 0200 "$restic_password"
 write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
 if run_preflight >"$workdir/restic-unreadable.out" 2>&1; then
