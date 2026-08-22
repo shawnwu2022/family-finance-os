@@ -51,29 +51,41 @@ source .env
 set +a
 
 if [[ -n "${BACKUP_REMOTE:-}" ]]; then
-  echo "ERROR: BACKUP_REMOTE is deprecated; use RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE." >&2
+  echo "ERROR: BACKUP_REMOTE is deprecated; use RESTIC_REPOSITORY and backup secret files." >&2
   exit 1
 fi
 
-if [[ -n "${RESTIC_PASSWORD_FILE:-}" && -z "${RESTIC_REPOSITORY:-}" ]]; then
-  echo "ERROR: RESTIC_PASSWORD_FILE is set but RESTIC_REPOSITORY is empty." >&2
+for legacy in BACKUP_KEEP_DAILY BACKUP_KEEP_WEEKLY BACKUP_KEEP_MONTHLY; do
+  if [[ -n "${!legacy:-}" ]]; then
+    echo "ERROR: ${legacy} is obsolete on the production producer; retention/prune belongs to the backup-maintenance host." >&2
+    exit 1
+  fi
+done
+
+if [[ -n "${RESTIC_PASSWORD_FILE:-}${RESTIC_REST_USERNAME:-}${RESTIC_REST_PASSWORD_FILE:-}" && -z "${RESTIC_REPOSITORY:-}" ]]; then
+  echo "ERROR: restic producer credentials are set but RESTIC_REPOSITORY is empty." >&2
   exit 1
 fi
 
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   command -v restic >/dev/null || { echo "Missing command: restic" >&2; exit 1; }
-  [[ "$RESTIC_REPOSITORY" == sftp:* ]] || { echo "ERROR: RESTIC_REPOSITORY must use restic SFTP syntax for V1." >&2; exit 1; }
+  [[ "$RESTIC_REPOSITORY" == rest:https://* ]] || { echo "ERROR: RESTIC_REPOSITORY must use rest:https:// for the V1 production off-site contract." >&2; exit 1; }
   [[ -n "${RESTIC_PASSWORD_FILE:-}" ]] || { echo "ERROR: RESTIC_PASSWORD_FILE is required with RESTIC_REPOSITORY." >&2; exit 1; }
-  [[ -r "$RESTIC_PASSWORD_FILE" ]] || { echo "ERROR: RESTIC_PASSWORD_FILE is not readable." >&2; exit 1; }
-  require_private_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
+  [[ -n "${RESTIC_REST_USERNAME:-}" ]] || { echo "ERROR: RESTIC_REST_USERNAME is required with RESTIC_REPOSITORY." >&2; exit 1; }
+  [[ -n "${RESTIC_REST_PASSWORD_FILE:-}" ]] || { echo "ERROR: RESTIC_REST_PASSWORD_FILE is required with RESTIC_REPOSITORY." >&2; exit 1; }
 
-  password_path="$(cd "$(dirname "$RESTIC_PASSWORD_FILE")" && pwd -P)/$(basename "$RESTIC_PASSWORD_FILE")"
-  case "$password_path" in
-    "$ROOT_DIR"/*)
-      echo "ERROR: RESTIC_PASSWORD_FILE must live outside the repository." >&2
-      exit 1
-      ;;
-  esac
+  require_private_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
+  require_private_file "$RESTIC_REST_PASSWORD_FILE" "RESTIC_REST_PASSWORD_FILE"
+
+  for secret_file in "$RESTIC_PASSWORD_FILE" "$RESTIC_REST_PASSWORD_FILE"; do
+    secret_path="$(cd "$(dirname "$secret_file")" && pwd -P)/$(basename "$secret_file")"
+    case "$secret_path" in
+      "$ROOT_DIR"/*)
+        echo "ERROR: backup secret files must live outside the repository." >&2
+        exit 1
+        ;;
+    esac
+  done
 fi
 
 case "${MCP_ENABLED:-false}" in
