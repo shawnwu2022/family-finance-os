@@ -76,7 +76,7 @@ if ! run_preflight >"$workdir/rest-producer-valid.out" 2>&1; then
   fail "preflight rejected valid HTTPS REST producer configuration"
 fi
 
-chmod 000 "$restic_password"
+chmod 0200 "$restic_password"
 write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
 if run_preflight >"$workdir/restic-unreadable.out" 2>&1; then
   fail "preflight accepted unreadable RESTIC_PASSWORD_FILE"
@@ -84,7 +84,7 @@ fi
 grep -qiE 'readable|permission' "$workdir/restic-unreadable.out" || fail "unreadable restic password failure was unclear"
 chmod 0600 "$restic_password"
 
-chmod 000 "$rest_server_password"
+chmod 0200 "$rest_server_password"
 write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
 if run_preflight >"$workdir/rest-server-unreadable.out" 2>&1; then
   fail "preflight accepted unreadable RESTIC_REST_PASSWORD_FILE"
