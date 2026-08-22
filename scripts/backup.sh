@@ -55,7 +55,12 @@ fi
 
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   command -v restic >/dev/null 2>&1 || fail "restic is required when RESTIC_REPOSITORY is configured"
+  command -v readlink >/dev/null 2>&1 || fail "readlink is required when RESTIC_REPOSITORY is configured"
   [[ "$RESTIC_REPOSITORY" == rest:https://* ]] || fail "V1 off-site backup repository must use rest:https://"
+  rest_endpoint="${RESTIC_REPOSITORY#rest:https://}"
+  rest_authority="${rest_endpoint%%/*}"
+  [[ -n "$rest_authority" ]] || fail "RESTIC_REPOSITORY must include an HTTPS authority"
+  [[ "$rest_authority" != *"@"* ]] || fail "RESTIC_REPOSITORY must not embed credentials in the URL"
   [[ -n "${RESTIC_PASSWORD_FILE:-}" ]] || fail "RESTIC_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
   [[ -n "${RESTIC_REST_USERNAME:-}" ]] || fail "RESTIC_REST_USERNAME is required when RESTIC_REPOSITORY is configured"
   [[ -n "${RESTIC_REST_PASSWORD_FILE:-}" ]] || fail "RESTIC_REST_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
@@ -63,23 +68,22 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   [[ -r "$RESTIC_REST_PASSWORD_FILE" ]] || fail "RESTIC_REST_PASSWORD_FILE is not readable"
 
   for secret_file in "$RESTIC_PASSWORD_FILE" "$RESTIC_REST_PASSWORD_FILE"; do
-    secret_path="$(cd "$(dirname "$secret_file")" && pwd -P)/$(basename "$secret_file")"
+    secret_path="$(readlink -f -- "$secret_file")" || fail "could not resolve backup secret file path"
     case "$secret_path" in
       "$ROOT_DIR"/*) fail "backup secret files must live outside the repository" ;;
     esac
   done
 
-  RESTIC_REST_PASSWORD="$(<"$RESTIC_REST_PASSWORD_FILE")" \
-    RESTIC_REST_USERNAME="$RESTIC_REST_USERNAME" \
-    RESTIC_REPOSITORY="$RESTIC_REPOSITORY" \
-    RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" \
-    restic snapshots --json >/dev/null
+  run_restic() {
+    RESTIC_REST_PASSWORD="$(<"$RESTIC_REST_PASSWORD_FILE")" \
+      RESTIC_REST_USERNAME="$RESTIC_REST_USERNAME" \
+      RESTIC_REPOSITORY="$RESTIC_REPOSITORY" \
+      RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" \
+      restic "$@"
+  }
 
-  RESTIC_REST_PASSWORD="$(<"$RESTIC_REST_PASSWORD_FILE")" \
-    RESTIC_REST_USERNAME="$RESTIC_REST_USERNAME" \
-    RESTIC_REPOSITORY="$RESTIC_REPOSITORY" \
-    RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" \
-    restic backup "$DEST" --tag family-finance-os --tag "$STAMP"
+  run_restic snapshots --json >/dev/null
+  run_restic backup --group-by '' "$DEST" --tag family-finance-os --tag "$STAMP"
 fi
 
 RETENTION="${BACKUP_RETENTION_DAYS:-14}"
