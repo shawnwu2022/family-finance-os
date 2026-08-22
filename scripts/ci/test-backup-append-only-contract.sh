@@ -13,8 +13,9 @@ backup="scripts/backup.sh"
 preflight="scripts/preflight.sh"
 maintenance="scripts/backup-maintenance.sh"
 env_example=".env.example"
+operations="docs/07-operations.md"
 
-for file in "$backup" "$preflight" "$env_example"; do
+for file in "$backup" "$preflight" "$env_example" "$operations"; do
   [[ -f "$file" ]] || fail "required file is missing: $file"
 done
 
@@ -28,6 +29,13 @@ grep -Fq 'RESTIC_REST_PASSWORD_FILE' "$preflight" || fail "preflight must requir
 grep -Fq 'RESTIC_REST_USERNAME' "$env_example" || fail ".env.example must document the REST producer username"
 grep -Fq 'RESTIC_REST_PASSWORD_FILE' "$env_example" || fail ".env.example must document the REST producer password file"
 
+grep -Fq 'RESTIC_REPOSITORY must not embed credentials in the URL' "$preflight" || fail "preflight must reject REST repository URL userinfo"
+grep -Fq 'RESTIC_REPOSITORY must not embed credentials in the URL' "$backup" || fail "backup must reject REST repository URL userinfo"
+grep -Fq 'readlink -f' "$preflight" || fail "preflight must resolve complete secret paths before repository-boundary checks"
+grep -Fq 'readlink -f' "$backup" || fail "backup must resolve complete secret paths before repository-boundary checks"
+
+grep -Fq "run_restic backup --group-by ''" "$backup" || fail "producer backups must use the same no-grouping identity as retention"
+
 for legacy in BACKUP_KEEP_DAILY BACKUP_KEEP_WEEKLY BACKUP_KEEP_MONTHLY; do
   if grep -Eq "^${legacy}=" "$env_example"; then
     fail ".env.example must not advertise producer-side count retention: $legacy"
@@ -39,8 +47,10 @@ done
 bash -n "$maintenance" || fail "backup-maintenance.sh syntax is invalid"
 grep -Fq 'RESTIC_MAINTENANCE_REPOSITORY' "$maintenance" || fail "maintenance must use a dedicated local repository variable"
 grep -Fq -- '--keep-within' "$maintenance" || fail "maintenance retention must use --keep-within"
+grep -Fq -- "--group-by ''" "$maintenance" || fail "maintenance must disable default host/path grouping for timestamped producer paths"
 grep -Fq -- '--prune' "$maintenance" || fail "maintenance host must own prune"
 grep -Eq 'restic[[:space:]]+check' "$maintenance" || fail "maintenance host must own restic check"
+grep -Fq 'readlink -f' "$maintenance" || fail "maintenance must resolve the repository password file before boundary checks"
 
 for forbidden in --keep-daily --keep-weekly --keep-monthly --keep-last; do
   if grep -Fq -- "$forbidden" "$maintenance"; then
@@ -51,6 +61,8 @@ done
 if grep -Fq 'RESTIC_REST_PASSWORD_FILE' "$maintenance" || grep -Fq 'RESTIC_REST_USERNAME' "$maintenance"; then
   fail "maintenance must not consume the producer REST credential"
 fi
+
+grep -Eq 'install -d .* -o restic .* -g restic .* /srv/restic/family-finance-prod|install -d .* -g restic .* -o restic .* /srv/restic/family-finance-prod' "$operations" || fail "backup-host repository directory must be created for the restic service account"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
@@ -63,7 +75,18 @@ restic_log="$workdir/restic.log"
 cat >"$workdir/bin/restic" <<'EOF_RESTIC'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "$*" >>"$RESTIC_TEST_LOG"
+{
+  first=true
+  for arg in "$@"; do
+    if [[ "$first" == true ]]; then
+      first=false
+    else
+      printf ' '
+    fi
+    printf '%q' "$arg"
+  done
+  printf '\n'
+} >>"$RESTIC_TEST_LOG"
 EOF_RESTIC
 chmod 0755 "$workdir/bin/restic"
 
@@ -108,7 +131,7 @@ PATH="$workdir/bin:$PATH" \
   bash "$maintenance" >"$workdir/valid.out" 2>&1 || fail "maintenance rejected a valid local repository configuration"
 
 grep -Fxq 'snapshots' "$restic_log" || fail "maintenance did not list snapshots before destructive work"
-grep -Fxq 'forget --keep-within 2y --prune' "$restic_log" || fail "maintenance did not use the expected keep-within prune policy"
+grep -Fxq "forget --group-by '' --keep-within 2y --prune" "$restic_log" || fail "maintenance did not use the expected no-grouping keep-within prune policy"
 grep -Fxq 'check' "$restic_log" || fail "maintenance did not run repository check after prune"
 
 echo "Append-only backup contract OK"
