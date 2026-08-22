@@ -32,6 +32,8 @@ grep -Fq 'RESTIC_REST_PASSWORD_FILE' "$env_example" || fail ".env.example must d
 
 grep -Fq 'RESTIC_REPOSITORY must not embed credentials in the URL' "$preflight" || fail "preflight must reject REST repository URL userinfo"
 grep -Fq 'RESTIC_REPOSITORY must not embed credentials in the URL' "$backup" || fail "backup must reject REST repository URL userinfo"
+grep -Fq 'RESTIC_REST_PASSWORD must not be set' "$preflight" || fail "preflight must reject plaintext RESTIC_REST_PASSWORD from the environment"
+grep -Fq 'RESTIC_REST_PASSWORD must not be set' "$backup" || fail "producer backup must reject plaintext RESTIC_REST_PASSWORD from the environment"
 grep -Fq 'readlink -f' "$preflight" || fail "preflight must resolve complete secret paths before repository-boundary checks"
 grep -Fq 'readlink -f' "$backup" || fail "backup must resolve complete secret paths before repository-boundary checks"
 
@@ -69,6 +71,7 @@ fi
 grep -Fq 'install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod' "$operations" || fail "backup-host repository directory must be created for the restic service account"
 grep -Fq 'install -d -o restic -g restic -m 0700 /etc/family-finance' "$operations" || fail "backup-host secret directory must be traversable only by the restic service account"
 grep -Fq 'htpasswd -B -i -c /etc/family-finance/rest-server.htpasswd family-finance-prod' "$operations" || fail "operations must provision the authenticated rest-server producer account"
+grep -Fq "sudo -u restic sh -c 'htpasswd" "$operations" || fail "htpasswd input redirection must execute under the restic account"
 grep -Fq -- '--htpasswd-file /etc/family-finance/rest-server.htpasswd' "$operations" || fail "rest-server service must use the provisioned htpasswd database"
 grep -Fq -- '--append-only --private-repos' "$operations" || fail "rest-server service must enforce append-only private repositories"
 grep -Fq 'systemctl enable --now rest-server' "$operations" || fail "operations must include an executable rest-server service start step"
