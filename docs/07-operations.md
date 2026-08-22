@@ -22,7 +22,7 @@
 - 推荐同时启用 `--private-repos` 做 producer 隔离；
 - 通过 HTTPS 暴露 REST backend；
 - 系统时钟同步，maintenance retention 以该受信任时钟为准；
-- 安装 `restic`；示例使用 `openssl` 生成 repository encryption password；
+- 安装 `restic`、`rest-server`、`openssl` 和提供 `htpasswd` 的系统包；
 - 只有该主机的受保护维护上下文拥有本地 repository 的完整删除/重写权限；
 - 生产 VPS 不得拥有 backup host 文件系统、full-access REST endpoint 或其它可以删除全部离站恢复点的凭据。
 
@@ -91,6 +91,8 @@ chmod 600 .env
 - 是普通文件；
 - 对执行备份/维护的账号可读；
 - group / other 权限均关闭，推荐 `0600`。
+
+`scripts/preflight.sh` 在部署前校验这些条件，`scripts/backup.sh` 在每次真正使用 secret 前再次校验文件类型、可读性和 group/other 权限，防止 preflight 后权限漂移仍继续备份。
 
 不要把以下内容加入 Git：
 
@@ -174,26 +176,83 @@ rest:https://backup.example.com/family-finance-prod/
 
 backup host 的持久化 data root、认证文件、TLS 私钥和 repository 目录都不得暴露给生产 VPS。
 
-### 5.3 Repository 初始化
+### 5.3 Repository、producer 账号与 rest-server 初始化
 
 Repository 初始化属于 backup administrator 的 full-access 操作，**在 backup host 本地完成**，不要让生产 producer 负责创建 full-access repository。
 
-示例逻辑：
+以下示例假定已经按官方 release 校验并安装 `rest-server 0.14.0` 到 `/usr/local/bin/rest-server`，系统存在专用 `restic` 用户/组，并安装了提供 `htpasswd` 的工具。Debian/Ubuntu 通常由 `apache2-utils` 提供 `htpasswd`。
+
+先创建受保护目录和 repository encryption password：
 
 ```bash
 sudo install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod
 sudo install -d -o restic -g restic -m 0700 /etc/family-finance
 sudo -u restic sh -c 'umask 077; openssl rand -base64 48 > /etc/family-finance/restic-password'
-# repository 目录和 repository password 均由执行 restic maintenance 的账号持有。
+
 sudo -u restic env \
   RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
   RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
   restic init
 ```
 
-repository encryption password 需要安全复制一份到生产 VPS 的独立 `RESTIC_PASSWORD_FILE`，因为 producer 创建加密 snapshot 时需要它；不要把 backup-host 文件系统权限或 full-access maintenance credential 一并复制到生产机。
+为生产 producer 生成**独立的 REST Basic Auth password**，并写入 bcrypt htpasswd database：
 
-实际生产部署必须让 repository path、rest-server `--path`、运行用户和文件权限互相一致。初始化完成后，确认 backup host 本地可以执行：
+```bash
+sudo -u restic sh -c 'umask 077; openssl rand -base64 48 > /etc/family-finance/rest-server-producer-password'
+sudo -u restic htpasswd -B -i -c /etc/family-finance/rest-server.htpasswd family-finance-prod \
+  < /etc/family-finance/rest-server-producer-password
+sudo chmod 0600 /etc/family-finance/rest-server.htpasswd
+sudo chown restic:restic /etc/family-finance/rest-server.htpasswd
+```
+
+将 `/etc/family-finance/rest-server-producer-password` 的内容通过受保护渠道**一次性**复制到生产 VPS 的 `/etc/family-finance/rest-server-password`，生产文件由实际执行 `backup.sh` 的账号持有并设为 `0600`。确认生产凭据已落地后，删除 backup host 上这份 producer plaintext；backup host 长期只需保留 bcrypt htpasswd hash：
+
+```bash
+sudo rm -f /etc/family-finance/rest-server-producer-password
+```
+
+repository encryption password 也需要安全复制一份到生产 VPS 的独立 `RESTIC_PASSWORD_FILE`，因为 producer 创建加密 snapshot 时需要它；不要把 backup-host 文件系统权限或 full-access maintenance authority 一并复制到生产机。
+
+#### systemd service
+
+如果 HTTPS 由同一 backup host 上的受控反向代理终止，rest-server 本体只绑定 loopback。创建 `/etc/systemd/system/rest-server.service`：
+
+```ini
+[Unit]
+Description=Family Finance append-only rest-server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=restic
+Group=restic
+UMask=0077
+ExecStart=/usr/local/bin/rest-server --path /srv/restic --listen 127.0.0.1:8000 --append-only --private-repos --htpasswd-file /etc/family-finance/rest-server.htpasswd
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/restic
+ReadOnlyPaths=/etc/family-finance/rest-server.htpasswd
+
+[Install]
+WantedBy=multi-user.target
+```
+
+然后：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now rest-server
+sudo systemctl status --no-pager rest-server
+```
+
+反向代理必须把外部 `https://backup.example.com/` 转发到 `http://127.0.0.1:8000/`，且公网不得直接暴露 8000/tcp。若不用反向代理，应改用 rest-server 自身受验证的 TLS 配置；**无论哪种方式，生产端 `RESTIC_REPOSITORY` 必须是 `rest:https://...`，不得为了省事使用 `--no-auth` 或公网明文 HTTP。**
+
+启动后检查日志，必须看到 append-only/private-repositories 已启用；并确认服务使用 `/etc/family-finance/rest-server.htpasswd` 成功加载认证数据。初始化完成后，backup host 本地 full-access maintenance context 应能执行：
 
 ```bash
 sudo -u restic env \
@@ -216,7 +275,7 @@ BACKUP_RETENTION_DAYS=14
 
 `--private-repos` 模式下，`RESTIC_REPOSITORY` 的第一层 repository path 必须和 `RESTIC_REST_USERNAME` 完全一致；`preflight.sh` 会拒绝不一致配置。
 
-创建 password file 后：
+创建 password file 后，确保文件由实际执行 producer backup 的账号可读且 group/other 无权限：
 
 ```bash
 sudo chmod 0600 /etc/family-finance/restic-password
@@ -302,13 +361,14 @@ restic forget --group-by '' --keep-within 2y --dry-run
 
 1. 部署独立 append-only rest-server；
 2. 在 backup host 本地初始化新的 REST repository；
-3. 在生产 VPS 配置新的 `rest:https://...` producer 凭据；
-4. 执行 `./scripts/preflight.sh`；
-5. 执行 `./scripts/backup.sh` 并确认新 snapshot；
-6. 从生产凭据证明 destructive operation 被拒绝；
-7. 在 backup host 执行 `restic check` 和 `forget --group-by '' --keep-within 2y --dry-run`；
-8. 在独立环境完成真实 snapshot restore；
-9. 只有新边界和恢复证据全部通过后，才按旧 repository 自己的保留策略退役 SFTP 副本。
+3. 创建并验证带认证的 producer account，确认 rest-server 以 `--append-only --private-repos` 启动；
+4. 在生产 VPS 配置新的 `rest:https://...` producer 凭据；
+5. 执行 `./scripts/preflight.sh`；
+6. 执行 `./scripts/backup.sh` 并确认新 snapshot；
+7. 从生产凭据证明 destructive operation 被拒绝；
+8. 在 backup host 执行 `restic check` 和 `forget --group-by '' --keep-within 2y --dry-run`；
+9. 在独立环境完成真实 snapshot restore；
+10. 只有新边界和恢复证据全部通过后，才按旧 repository 自己的保留策略退役 SFTP 副本。
 
 仓库代码变更不会自动删除、转换或迁移现有 SFTP repository。
 
