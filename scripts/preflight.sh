@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT_DIR"
 
-for cmd in docker openssl stat; do
+for cmd in docker openssl stat readlink; do
   command -v "$cmd" >/dev/null || { echo "Missing command: $cmd" >&2; exit 1; }
 done
 
@@ -14,6 +14,7 @@ require_private_file() {
   local path="$1"
   local label="$2"
   [[ -f "$path" ]] || { echo "ERROR: ${label} must be a regular file." >&2; exit 1; }
+  [[ -r "$path" ]] || { echo "ERROR: ${label} must be readable by the deployment account." >&2; exit 1; }
 
   local mode
   mode="$(stat -Lc '%a' "$path")" || { echo "ERROR: could not inspect ${label} file mode." >&2; exit 1; }
@@ -70,6 +71,10 @@ fi
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   command -v restic >/dev/null || { echo "Missing command: restic" >&2; exit 1; }
   [[ "$RESTIC_REPOSITORY" == rest:https://* ]] || { echo "ERROR: RESTIC_REPOSITORY must use rest:https:// for the V1 production off-site contract." >&2; exit 1; }
+  rest_endpoint="${RESTIC_REPOSITORY#rest:https://}"
+  rest_authority="${rest_endpoint%%/*}"
+  [[ -n "$rest_authority" ]] || { echo "ERROR: RESTIC_REPOSITORY must include an HTTPS authority." >&2; exit 1; }
+  [[ "$rest_authority" != *"@"* ]] || { echo "ERROR: RESTIC_REPOSITORY must not embed credentials in the URL." >&2; exit 1; }
   [[ -n "${RESTIC_PASSWORD_FILE:-}" ]] || { echo "ERROR: RESTIC_PASSWORD_FILE is required with RESTIC_REPOSITORY." >&2; exit 1; }
   [[ -n "${RESTIC_REST_USERNAME:-}" ]] || { echo "ERROR: RESTIC_REST_USERNAME is required with RESTIC_REPOSITORY." >&2; exit 1; }
   [[ -n "${RESTIC_REST_PASSWORD_FILE:-}" ]] || { echo "ERROR: RESTIC_REST_PASSWORD_FILE is required with RESTIC_REPOSITORY." >&2; exit 1; }
@@ -78,7 +83,10 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   require_private_file "$RESTIC_REST_PASSWORD_FILE" "RESTIC_REST_PASSWORD_FILE"
 
   for secret_file in "$RESTIC_PASSWORD_FILE" "$RESTIC_REST_PASSWORD_FILE"; do
-    secret_path="$(cd "$(dirname "$secret_file")" && pwd -P)/$(basename "$secret_file")"
+    secret_path="$(readlink -f -- "$secret_file")" || {
+      echo "ERROR: could not resolve backup secret file path." >&2
+      exit 1
+    }
     case "$secret_path" in
       "$ROOT_DIR"/*)
         echo "ERROR: backup secret files must live outside the repository." >&2
