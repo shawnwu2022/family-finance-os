@@ -31,7 +31,8 @@ case "$password_path" in
   "$ROOT_DIR"/*) fail "RESTIC_PASSWORD_FILE must live outside the repository" ;;
 esac
 
-[[ -n "$KEEP_WITHIN" && "$KEEP_WITHIN" != -* ]] || fail "BACKUP_KEEP_WITHIN must be a positive restic duration"
+[[ "$KEEP_WITHIN" =~ ^([0-9]+[ymdh])+$ ]] || fail "BACKUP_KEEP_WITHIN must be a positive restic duration using y/m/d/h units"
+[[ "$KEEP_WITHIN" =~ [1-9] ]] || fail "BACKUP_KEEP_WITHIN must be a positive restic duration"
 
 export RESTIC_REPOSITORY="$REPOSITORY"
 export RESTIC_PASSWORD_FILE="$PASSWORD_FILE"
