@@ -79,6 +79,11 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   [[ -n "${RESTIC_REST_USERNAME:-}" ]] || { echo "ERROR: RESTIC_REST_USERNAME is required with RESTIC_REPOSITORY." >&2; exit 1; }
   [[ -n "${RESTIC_REST_PASSWORD_FILE:-}" ]] || { echo "ERROR: RESTIC_REST_PASSWORD_FILE is required with RESTIC_REPOSITORY." >&2; exit 1; }
 
+  rest_path="${rest_endpoint#*/}"
+  [[ "$rest_path" != "$rest_endpoint" && -n "$rest_path" ]] || { echo "ERROR: RESTIC_REPOSITORY must include the private repository path." >&2; exit 1; }
+  rest_private_repo="${rest_path%%/*}"
+  [[ "$rest_private_repo" == "$RESTIC_REST_USERNAME" ]] || { echo "ERROR: RESTIC_REPOSITORY first path component must match RESTIC_REST_USERNAME for --private-repos." >&2; exit 1; }
+
   require_private_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
   require_private_file "$RESTIC_REST_PASSWORD_FILE" "RESTIC_REST_PASSWORD_FILE"
 
