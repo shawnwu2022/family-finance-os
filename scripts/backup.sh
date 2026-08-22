@@ -10,6 +10,22 @@ fail() {
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+require_private_backup_file() {
+  local path="$1"
+  local label="$2"
+
+  [[ -f "$path" ]] || fail "${label} must be a regular file"
+  [[ -r "$path" ]] || fail "${label} is not readable"
+
+  local mode
+  mode="$(stat -Lc '%a' "$path")" || fail "could not inspect ${label} file mode"
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || fail "invalid ${label} file mode: $mode"
+  local permissions="${mode: -3}"
+  if [[ "${permissions:1:1}" != "0" || "${permissions:2:1}" != "0" ]]; then
+    fail "${label} group and other access must be disabled (mode ${mode})"
+  fi
+}
+
 ENV_FILE="${FINANCE_ENV_FILE:-$ROOT_DIR/.env}"
 [[ -f "$ENV_FILE" ]] || fail "environment file not found: $ENV_FILE"
 
@@ -56,6 +72,7 @@ fi
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   command -v restic >/dev/null 2>&1 || fail "restic is required when RESTIC_REPOSITORY is configured"
   command -v readlink >/dev/null 2>&1 || fail "readlink is required when RESTIC_REPOSITORY is configured"
+  command -v stat >/dev/null 2>&1 || fail "stat is required when RESTIC_REPOSITORY is configured"
   [[ "$RESTIC_REPOSITORY" == rest:https://* ]] || fail "V1 off-site backup repository must use rest:https://"
   rest_endpoint="${RESTIC_REPOSITORY#rest:https://}"
   rest_authority="${rest_endpoint%%/*}"
@@ -64,8 +81,9 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   [[ -n "${RESTIC_PASSWORD_FILE:-}" ]] || fail "RESTIC_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
   [[ -n "${RESTIC_REST_USERNAME:-}" ]] || fail "RESTIC_REST_USERNAME is required when RESTIC_REPOSITORY is configured"
   [[ -n "${RESTIC_REST_PASSWORD_FILE:-}" ]] || fail "RESTIC_REST_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
-  [[ -r "$RESTIC_PASSWORD_FILE" ]] || fail "RESTIC_PASSWORD_FILE is not readable"
-  [[ -r "$RESTIC_REST_PASSWORD_FILE" ]] || fail "RESTIC_REST_PASSWORD_FILE is not readable"
+
+  require_private_backup_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
+  require_private_backup_file "$RESTIC_REST_PASSWORD_FILE" "RESTIC_REST_PASSWORD_FILE"
 
   for secret_file in "$RESTIC_PASSWORD_FILE" "$RESTIC_REST_PASSWORD_FILE"; do
     secret_path="$(readlink -f -- "$secret_file")" || fail "could not resolve backup secret file path"
