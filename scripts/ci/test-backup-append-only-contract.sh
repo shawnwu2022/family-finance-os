@@ -34,6 +34,9 @@ grep -Fq 'RESTIC_REPOSITORY must not embed credentials in the URL' "$backup" || 
 grep -Fq 'readlink -f' "$preflight" || fail "preflight must resolve complete secret paths before repository-boundary checks"
 grep -Fq 'readlink -f' "$backup" || fail "backup must resolve complete secret paths before repository-boundary checks"
 
+grep -Fq 'stat -Lc' "$backup" || fail "producer backup must validate backup secret modes at point of use"
+grep -Fq 'group and other access must be disabled' "$backup" || fail "producer backup must reject group/world-readable backup secrets"
+
 grep -Fq "run_restic backup --group-by ''" "$backup" || fail "producer backups must use the same no-grouping identity as retention"
 
 for legacy in BACKUP_KEEP_DAILY BACKUP_KEEP_WEEKLY BACKUP_KEEP_MONTHLY; do
@@ -64,6 +67,10 @@ fi
 
 grep -Fq 'install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod' "$operations" || fail "backup-host repository directory must be created for the restic service account"
 grep -Fq 'install -d -o restic -g restic -m 0700 /etc/family-finance' "$operations" || fail "backup-host secret directory must be traversable only by the restic service account"
+grep -Fq 'htpasswd -B -i -c /etc/family-finance/rest-server.htpasswd family-finance-prod' "$operations" || fail "operations must provision the authenticated rest-server producer account"
+grep -Fq -- '--htpasswd-file /etc/family-finance/rest-server.htpasswd' "$operations" || fail "rest-server service must use the provisioned htpasswd database"
+grep -Fq -- '--append-only --private-repos' "$operations" || fail "rest-server service must enforce append-only private repositories"
+grep -Fq 'systemctl enable --now rest-server' "$operations" || fail "operations must include an executable rest-server service start step"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
