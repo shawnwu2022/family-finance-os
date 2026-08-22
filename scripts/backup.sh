@@ -50,29 +50,36 @@ tar -C "$ROOT_DIR/data" -czf "$DEST/ezbookkeeping-storage.tar.gz" ezbookkeeping-
 )
 
 if [[ -n "${BACKUP_REMOTE:-}" ]]; then
-  fail "BACKUP_REMOTE is deprecated; configure RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE"
+  fail "BACKUP_REMOTE is deprecated; configure RESTIC_REPOSITORY and backup secret files"
 fi
 
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   command -v restic >/dev/null 2>&1 || fail "restic is required when RESTIC_REPOSITORY is configured"
-  [[ "$RESTIC_REPOSITORY" == sftp:* ]] || fail "V1 off-site backup repository must use restic SFTP syntax"
+  [[ "$RESTIC_REPOSITORY" == rest:https://* ]] || fail "V1 off-site backup repository must use rest:https://"
   [[ -n "${RESTIC_PASSWORD_FILE:-}" ]] || fail "RESTIC_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
+  [[ -n "${RESTIC_REST_USERNAME:-}" ]] || fail "RESTIC_REST_USERNAME is required when RESTIC_REPOSITORY is configured"
+  [[ -n "${RESTIC_REST_PASSWORD_FILE:-}" ]] || fail "RESTIC_REST_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
   [[ -r "$RESTIC_PASSWORD_FILE" ]] || fail "RESTIC_PASSWORD_FILE is not readable"
+  [[ -r "$RESTIC_REST_PASSWORD_FILE" ]] || fail "RESTIC_REST_PASSWORD_FILE is not readable"
 
-  password_path="$(cd "$(dirname "$RESTIC_PASSWORD_FILE")" && pwd -P)/$(basename "$RESTIC_PASSWORD_FILE")"
-  case "$password_path" in
-    "$ROOT_DIR"/*) fail "RESTIC_PASSWORD_FILE must live outside the repository" ;;
-  esac
+  for secret_file in "$RESTIC_PASSWORD_FILE" "$RESTIC_REST_PASSWORD_FILE"; do
+    secret_path="$(cd "$(dirname "$secret_file")" && pwd -P)/$(basename "$secret_file")"
+    case "$secret_path" in
+      "$ROOT_DIR"/*) fail "backup secret files must live outside the repository" ;;
+    esac
+  done
 
-  export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE
-  restic snapshots --json >/dev/null
-  restic backup "$DEST" --tag family-finance-os --tag "$STAMP"
-  restic forget \
-    --keep-daily "${BACKUP_KEEP_DAILY:-14}" \
-    --keep-weekly "${BACKUP_KEEP_WEEKLY:-8}" \
-    --keep-monthly "${BACKUP_KEEP_MONTHLY:-12}" \
-    --prune
-  restic check
+  RESTIC_REST_PASSWORD="$(<"$RESTIC_REST_PASSWORD_FILE")" \
+    RESTIC_REST_USERNAME="$RESTIC_REST_USERNAME" \
+    RESTIC_REPOSITORY="$RESTIC_REPOSITORY" \
+    RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" \
+    restic snapshots --json >/dev/null
+
+  RESTIC_REST_PASSWORD="$(<"$RESTIC_REST_PASSWORD_FILE")" \
+    RESTIC_REST_USERNAME="$RESTIC_REST_USERNAME" \
+    RESTIC_REPOSITORY="$RESTIC_REPOSITORY" \
+    RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" \
+    restic backup "$DEST" --tag family-finance-os --tag "$STAMP"
 fi
 
 RETENTION="${BACKUP_RETENTION_DAYS:-14}"
