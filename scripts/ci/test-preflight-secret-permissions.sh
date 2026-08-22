@@ -99,6 +99,14 @@ if ! run_preflight >"$workdir/rest-producer-valid.out" 2>&1; then
   fail "preflight rejected valid HTTPS REST producer configuration"
 fi
 
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
+printf '%s\n' 'RESTIC_REST_PASSWORD=plaintext-must-not-live-in-env' >>"$repo/.env"
+chmod 0600 "$repo/.env"
+if run_preflight >"$workdir/native-rest-password.out" 2>&1; then
+  fail "preflight accepted plaintext RESTIC_REST_PASSWORD in .env"
+fi
+grep -Fqi 'RESTIC_REST_PASSWORD' "$workdir/native-rest-password.out" || fail "plaintext RESTIC_REST_PASSWORD rejection was unclear"
+
 write_env 'rest:https://backup.test.invalid/family-finance-typo/' "$restic_password" family-finance-prod "$rest_server_password"
 if run_preflight >"$workdir/private-repo-mismatch.out" 2>&1; then
   fail "preflight accepted a private repository path that does not match RESTIC_REST_USERNAME"
