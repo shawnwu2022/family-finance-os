@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
+  echo "ERROR: RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE." >&2
+  exit 1
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT_DIR"
 
@@ -42,6 +47,11 @@ if grep -Eq '^[[:space:]]*[^#[:space:]].*(REPLACE_WITH|example\.com)' .env; then
   exit 1
 fi
 
+if grep -Eq '^[[:space:]]*(export[[:space:]]+)?RESTIC_REST_PASSWORD[[:space:]]*=' .env; then
+  echo "ERROR: RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE." >&2
+  exit 1
+fi
+
 for key in FINANCE_AUTH_USER FINANCE_AUTH_HASH; do
   if ! grep -Eq "^${key}=[^[:space:]]+" .env; then
     echo "ERROR: ${key} must be set for the public Finance Core edge." >&2
@@ -53,6 +63,11 @@ set -a
 # shellcheck disable=SC1091
 source .env
 set +a
+
+if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
+  echo "ERROR: RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE." >&2
+  exit 1
+fi
 
 if [[ -n "${BACKUP_REMOTE:-}" ]]; then
   echo "ERROR: BACKUP_REMOTE is deprecated; use RESTIC_REPOSITORY and backup secret files." >&2
