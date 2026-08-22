@@ -62,7 +62,7 @@ if grep -Fq 'RESTIC_REST_PASSWORD_FILE' "$maintenance" || grep -Fq 'RESTIC_REST_
   fail "maintenance must not consume the producer REST credential"
 fi
 
-grep -Eq 'install -d .* -o restic .* -g restic .* /srv/restic/family-finance-prod|install -d .* -g restic .* -o restic .* /srv/restic/family-finance-prod' "$operations" || fail "backup-host repository directory must be created for the restic service account"
+grep -Fq 'install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod' "$operations" || fail "backup-host repository directory must be created for the restic service account"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
