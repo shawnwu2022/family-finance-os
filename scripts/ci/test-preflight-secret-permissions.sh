@@ -37,8 +37,11 @@ FINANCE_AUTH_USER=acceptance
 FINANCE_AUTH_HASH='hash'
 RESTIC_REPOSITORY=${1:-}
 RESTIC_PASSWORD_FILE=${2:-}
-MCP_ENABLED=${3:-false}
-MCP_TOKEN_FILE=${4:-/run/secrets/finance-mcp-token}
+RESTIC_REST_USERNAME=${3:-}
+RESTIC_REST_PASSWORD_FILE=${4:-}
+BACKUP_KEEP_DAILY=${5:-}
+MCP_ENABLED=${6:-false}
+MCP_TOKEN_FILE=${7:-/run/secrets/finance-mcp-token}
 EOF_ENV
 }
 
@@ -58,24 +61,79 @@ chmod 0600 "$repo/.env"
 run_preflight >"$workdir/env-private.out" 2>&1 || fail "preflight rejected private .env"
 
 restic_password="$workdir/restic-password"
+rest_server_password="$workdir/rest-server-password"
 printf '%s' 'high-entropy-restic-password-material' >"$restic_password"
-chmod 0644 "$restic_password"
-write_env 'sftp:backup-host:/srv/restic/family-finance-os' "$restic_password"
+printf '%s' 'high-entropy-rest-server-password-material' >"$rest_server_password"
+chmod 0600 "$restic_password" "$rest_server_password"
+
+valid_rest_repo='rest:https://backup.test.invalid/family-finance-prod/'
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
 chmod 0600 "$repo/.env"
+if ! run_preflight >"$workdir/rest-producer-valid.out" 2>&1; then
+  cat "$workdir/rest-producer-valid.out" >&2
+  fail "preflight rejected valid HTTPS REST producer configuration"
+fi
+
+chmod 0644 "$restic_password"
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
 if run_preflight >"$workdir/restic-public.out" 2>&1; then
   fail "preflight accepted RESTIC_PASSWORD_FILE with group/world permissions"
 fi
-
 grep -qiE 'permission|mode|group|world' "$workdir/restic-public.out" || fail "insecure restic password failure did not explain file permissions"
-
 chmod 0600 "$restic_password"
-run_preflight >"$workdir/restic-private.out" 2>&1 || fail "preflight rejected private RESTIC_PASSWORD_FILE"
+
+chmod 0644 "$rest_server_password"
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
+if run_preflight >"$workdir/rest-server-public.out" 2>&1; then
+  fail "preflight accepted RESTIC_REST_PASSWORD_FILE with group/world permissions"
+fi
+grep -qiE 'permission|mode|group|world' "$workdir/rest-server-public.out" || fail "insecure REST producer password failure did not explain file permissions"
+chmod 0600 "$rest_server_password"
+
+repo_rest_password="$repo/rest-server-password"
+printf '%s' 'repo-local-rest-server-password' >"$repo_rest_password"
+chmod 0600 "$repo_rest_password"
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$repo_rest_password"
+if run_preflight >"$workdir/rest-server-repo-local.out" 2>&1; then
+  fail "preflight accepted repository-local RESTIC_REST_PASSWORD_FILE"
+fi
+grep -qiE 'outside|repository' "$workdir/rest-server-repo-local.out" || fail "repository-local REST producer password failure was unclear"
+
+write_env "$valid_rest_repo" "$restic_password" '' "$rest_server_password"
+if run_preflight >"$workdir/rest-username-missing.out" 2>&1; then
+  fail "preflight accepted missing RESTIC_REST_USERNAME"
+fi
+grep -Fqi 'RESTIC_REST_USERNAME' "$workdir/rest-username-missing.out" || fail "missing REST producer username failure was unclear"
+
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod ''
+if run_preflight >"$workdir/rest-password-file-missing.out" 2>&1; then
+  fail "preflight accepted missing RESTIC_REST_PASSWORD_FILE"
+fi
+grep -Fqi 'RESTIC_REST_PASSWORD_FILE' "$workdir/rest-password-file-missing.out" || fail "missing REST producer password-file failure was unclear"
+
+write_env 'sftp:backup-host:/srv/restic/family-finance-os' "$restic_password" family-finance-prod "$rest_server_password"
+if run_preflight >"$workdir/sftp-legacy.out" 2>&1; then
+  fail "preflight accepted legacy SFTP producer repository"
+fi
+grep -qiE 'rest:https|HTTPS REST|production off-site' "$workdir/sftp-legacy.out" || fail "legacy SFTP rejection did not explain the HTTPS REST requirement"
+
+write_env 'rest:http://backup.test.invalid/family-finance-prod/' "$restic_password" family-finance-prod "$rest_server_password"
+if run_preflight >"$workdir/rest-http.out" 2>&1; then
+  fail "preflight accepted plaintext REST producer repository"
+fi
+grep -qiE 'rest:https|HTTPS REST|production off-site' "$workdir/rest-http.out" || fail "plaintext REST rejection did not explain the HTTPS requirement"
+
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password" 14
+if run_preflight >"$workdir/legacy-retention.out" 2>&1; then
+  fail "preflight accepted legacy producer-side BACKUP_KEEP_DAILY"
+fi
+grep -Fqi 'BACKUP_KEEP_DAILY' "$workdir/legacy-retention.out" || fail "legacy producer retention rejection was unclear"
 
 mkdir -p "$repo/secrets"
 mcp_token="$repo/secrets/finance-mcp-token"
 printf '%s' '0123456789abcdef0123456789abcdef' >"$mcp_token"
 chmod 0644 "$mcp_token"
-write_env '' '' true /run/secrets/finance-mcp-token
+write_env '' '' '' '' '' true /run/secrets/finance-mcp-token
 chmod 0600 "$repo/.env"
 if run_preflight >"$workdir/mcp-public.out" 2>&1; then
   fail "preflight accepted MCP bearer file with group/world permissions"
