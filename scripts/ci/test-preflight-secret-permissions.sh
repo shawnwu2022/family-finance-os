@@ -76,6 +76,22 @@ if ! run_preflight >"$workdir/rest-producer-valid.out" 2>&1; then
   fail "preflight rejected valid HTTPS REST producer configuration"
 fi
 
+chmod 000 "$restic_password"
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
+if run_preflight >"$workdir/restic-unreadable.out" 2>&1; then
+  fail "preflight accepted unreadable RESTIC_PASSWORD_FILE"
+fi
+grep -qiE 'readable|permission' "$workdir/restic-unreadable.out" || fail "unreadable restic password failure was unclear"
+chmod 0600 "$restic_password"
+
+chmod 000 "$rest_server_password"
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
+if run_preflight >"$workdir/rest-server-unreadable.out" 2>&1; then
+  fail "preflight accepted unreadable RESTIC_REST_PASSWORD_FILE"
+fi
+grep -qiE 'readable|permission' "$workdir/rest-server-unreadable.out" || fail "unreadable REST producer password failure was unclear"
+chmod 0600 "$rest_server_password"
+
 chmod 0644 "$restic_password"
 write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
 if run_preflight >"$workdir/restic-public.out" 2>&1; then
@@ -89,7 +105,7 @@ write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_serve
 if run_preflight >"$workdir/rest-server-public.out" 2>&1; then
   fail "preflight accepted RESTIC_REST_PASSWORD_FILE with group/world permissions"
 fi
-grep -qiE 'permission|mode|group|world' "$workdir/rest-server-public.out" || fail "insecure REST producer password failure did not explain file permissions"
+grep -qiE 'permission|mode|group|world' "$workdir/rest-server-public.out" || fail "insecure REST producer password failure did not explain secret permissions"
 chmod 0600 "$rest_server_password"
 
 repo_rest_password="$repo/rest-server-password"
@@ -100,6 +116,14 @@ if run_preflight >"$workdir/rest-server-repo-local.out" 2>&1; then
   fail "preflight accepted repository-local RESTIC_REST_PASSWORD_FILE"
 fi
 grep -qiE 'outside|repository' "$workdir/rest-server-repo-local.out" || fail "repository-local REST producer password failure was unclear"
+
+external_symlink="$workdir/rest-server-password-link"
+ln -s "$repo_rest_password" "$external_symlink"
+write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$external_symlink"
+if run_preflight >"$workdir/rest-server-symlink.out" 2>&1; then
+  fail "preflight accepted an external symlink resolving to a repository-local REST password"
+fi
+grep -qiE 'outside|repository|symlink' "$workdir/rest-server-symlink.out" || fail "repository-local REST password symlink failure was unclear"
 
 write_env "$valid_rest_repo" "$restic_password" '' "$rest_server_password"
 if run_preflight >"$workdir/rest-username-missing.out" 2>&1; then
@@ -112,6 +136,12 @@ if run_preflight >"$workdir/rest-password-file-missing.out" 2>&1; then
   fail "preflight accepted missing RESTIC_REST_PASSWORD_FILE"
 fi
 grep -Fqi 'RESTIC_REST_PASSWORD_FILE' "$workdir/rest-password-file-missing.out" || fail "missing REST producer password-file failure was unclear"
+
+write_env 'rest:https://family-finance-prod:plaintext-password@backup.test.invalid/family-finance-prod/' "$restic_password" family-finance-prod "$rest_server_password"
+if run_preflight >"$workdir/rest-url-userinfo.out" 2>&1; then
+  fail "preflight accepted credentials embedded in RESTIC_REPOSITORY"
+fi
+grep -qiE 'credential|userinfo|URL' "$workdir/rest-url-userinfo.out" || fail "embedded REST URL credential rejection was unclear"
 
 write_env 'sftp:backup-host:/srv/restic/family-finance-os' "$restic_password" family-finance-prod "$rest_server_password"
 if run_preflight >"$workdir/sftp-legacy.out" 2>&1; then
