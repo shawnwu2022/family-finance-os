@@ -10,6 +10,7 @@ backup="scripts/backup.sh"
 restore="scripts/restore-drill.sh"
 preflight="scripts/preflight.sh"
 edge="scripts/check-edge-security.sh"
+operations="docs/07-operations.md"
 live_smoke="scripts/acceptance/ezbookkeeping-live-smoke.sh"
 openclaw_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
 ollama_schema_contract="scripts/acceptance/test-ollama-schema-probe.sh"
@@ -20,6 +21,7 @@ for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw
   [[ -f "$script" ]] || fail "required script is missing: $script"
   bash -n "$script" || fail "shell syntax is invalid: $script"
 done
+[[ -f "$operations" ]] || fail "operations guide is missing"
 
 grep -Fq 'pg_dump' "$backup" || fail "backup must invoke pg_dump"
 grep -Fq -- '-Fc' "$backup" || fail "backup must use PostgreSQL custom format"
@@ -27,6 +29,7 @@ grep -Fq 'ezbookkeeping-storage.tar.gz' "$backup" || fail "backup must archive e
 grep -Fq 'RESTIC_REPOSITORY' "$backup" || fail "backup must support a restic repository"
 grep -Fq 'RESTIC_PASSWORD_FILE' "$backup" || fail "restic automation must use a password file"
 grep -Eq 'restic[[:space:]]+backup' "$backup" || fail "backup must send the snapshot through restic"
+grep -Fq 'restic producer credentials are set but RESTIC_REPOSITORY is empty' "$backup" || fail "backup must reject partial off-site producer configuration instead of silently falling back to local-only"
 grep -Fq 'FINANCE_BACKUP_DIR must not be /' "$backup" || fail "backup must reject filesystem root as the retention directory"
 grep -Fq -- "-name '20??????T??????Z'" "$backup" || fail "retention must only remove script-generated timestamp directories"
 if grep -Eq '(^|[[:space:]])rsync([[:space:]]|$)' "$backup"; then
@@ -40,6 +43,11 @@ grep -Fq 'finance_restore_drill' "$restore" || fail "restore drill must use isol
 grep -Fq 'RESTIC_REPOSITORY' "$preflight" || fail "preflight must validate restic repository configuration"
 grep -Fq 'RESTIC_PASSWORD_FILE' "$preflight" || fail "preflight must validate restic password file"
 grep -Fq 'must live outside the repository' "$preflight" || fail "preflight must reject repository-local restic password files"
+
+grep -Fq 'HTTPS reverse proxy is a prerequisite' "$operations" || fail "backup-host operations must make HTTPS termination a deployment prerequisite"
+grep -Fq 'curl -fsS https://backup.example.com/' "$operations" || fail "backup-host operations must include an HTTPS endpoint validation step"
+grep -Fq 'sudo -u restic bash scripts/backup-maintenance.sh' "$operations" || fail "maintenance must run under the authorized restic account"
+grep -Fq 'sudo -u restic env RESTIC_REPOSITORY=/srv/restic/family-finance-prod' "$operations" || fail "maintenance dry-run must run under the authorized restic account"
 
 grep -Fq 'host port exposure' "$edge" || fail "edge security must enforce host-port exposure"
 grep -Fq 'network_mode' "$edge" || fail "edge security must reject host networking"
