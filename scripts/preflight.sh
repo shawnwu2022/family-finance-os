@@ -34,7 +34,10 @@ if [[ ! -f .env ]]; then
 fi
 require_private_file .env ".env"
 
-if grep -Ev '^[[:space:]]*(#|$)' .env | grep -Eq 'REPLACE_WITH|example\.com'; then
+# Match active assignment/content lines in one grep process. Avoid a filter | grep -q
+# pipeline here: with pipefail, an early successful -q can SIGPIPE the producer and
+# turn a real placeholder match into a false negative for a sufficiently large .env.
+if grep -Eq '^[[:space:]]*[^#[:space:]].*(REPLACE_WITH|example\.com)' .env; then
   echo "ERROR: .env still contains deployment placeholders." >&2
   exit 1
 fi
