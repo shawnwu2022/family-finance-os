@@ -63,6 +63,7 @@ if grep -Fq 'RESTIC_REST_PASSWORD_FILE' "$maintenance" || grep -Fq 'RESTIC_REST_
 fi
 
 grep -Fq 'install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod' "$operations" || fail "backup-host repository directory must be created for the restic service account"
+grep -Fq 'install -d -o restic -g restic -m 0700 /etc/family-finance' "$operations" || fail "backup-host secret directory must be traversable only by the restic service account"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
