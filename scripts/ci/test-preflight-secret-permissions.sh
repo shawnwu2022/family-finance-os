@@ -33,6 +33,8 @@ chmod 0755 "$repo/bin/docker" "$repo/bin/openssl" "$repo/bin/restic"
 
 write_env() {
   cat >"$repo/.env" <<EOF_ENV
+# Documentation comments may contain example.com and must not be treated as active placeholders.
+# Example: RESTIC_REPOSITORY=rest:https://backup.example.com/family-finance-prod/
 FINANCE_AUTH_USER=acceptance
 FINANCE_AUTH_HASH='hash'
 RESTIC_REPOSITORY=${1:-}
@@ -58,7 +60,7 @@ fi
 grep -qiE 'permission|mode|group|world' "$workdir/env-public.out" || fail "insecure .env failure did not explain file permissions"
 
 chmod 0600 "$repo/.env"
-run_preflight >"$workdir/env-private.out" 2>&1 || fail "preflight rejected private .env"
+run_preflight >"$workdir/env-private.out" 2>&1 || fail "preflight rejected private .env because a commented example looked like an active placeholder"
 
 restic_password="$workdir/restic-password"
 rest_server_password="$workdir/rest-server-password"
