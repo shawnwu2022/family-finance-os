@@ -83,7 +83,7 @@ chmod 600 .env
 - `RESTIC_PASSWORD_FILE`：restic repository 的加密密码；生产 VPS 创建 snapshot 时需要它，backup/maintenance host 做恢复和维护时也需要它；
 - `RESTIC_REST_PASSWORD_FILE`：生产 producer 登录 append-only REST endpoint 的认证密码。它只用于 REST 认证，不等于 repository 加密密码。
 
-`RESTIC_REST_USERNAME` 不是 secret，可以位于 `.env`；REST 密码本身不得写入 `.env`、repository URL、命令行、Git 或验收证据。`scripts/backup.sh` 从 `RESTIC_REST_PASSWORD_FILE` 读取后，只把原生 `RESTIC_REST_PASSWORD` 传给 restic 子进程环境。
+`RESTIC_REST_USERNAME` 不是 secret，可以位于 `.env`；REST 密码本身不得写入 `.env`、repository URL、命令行、Git 或验收证据。**不得在 `.env` 或宿主环境预设原生 `RESTIC_REST_PASSWORD`**；`scripts/preflight.sh` 和 `scripts/backup.sh` 会拒绝它。`scripts/backup.sh` 只在调用 restic 子进程时从 `RESTIC_REST_PASSWORD_FILE` 读取并临时注入原生 `RESTIC_REST_PASSWORD`。
 
 两个 password file 都必须：
 
@@ -195,12 +195,11 @@ sudo -u restic env \
   restic init
 ```
 
-为生产 producer 生成**独立的 REST Basic Auth password**，并写入 bcrypt htpasswd database：
+为生产 producer 生成**独立的 REST Basic Auth password**，并写入 bcrypt htpasswd database。输入重定向必须在 `restic` 身份的 shell 内执行；不能把 `< /etc/family-finance/...` 留给普通管理员 shell：
 
 ```bash
 sudo -u restic sh -c 'umask 077; openssl rand -base64 48 > /etc/family-finance/rest-server-producer-password'
-sudo -u restic htpasswd -B -i -c /etc/family-finance/rest-server.htpasswd family-finance-prod \
-  < /etc/family-finance/rest-server-producer-password
+sudo -u restic sh -c 'htpasswd -B -i -c /etc/family-finance/rest-server.htpasswd family-finance-prod < /etc/family-finance/rest-server-producer-password'
 sudo chmod 0600 /etc/family-finance/rest-server.htpasswd
 sudo chown restic:restic /etc/family-finance/rest-server.htpasswd
 ```
@@ -273,7 +272,7 @@ RESTIC_REST_PASSWORD_FILE=/etc/family-finance/rest-server-password
 BACKUP_RETENTION_DAYS=14
 ```
 
-`--private-repos` 模式下，`RESTIC_REPOSITORY` 的第一层 repository path 必须和 `RESTIC_REST_USERNAME` 完全一致；`preflight.sh` 会拒绝不一致配置。
+`--private-repos` 模式下，`RESTIC_REPOSITORY` 的第一层 repository path 必须和 `RESTIC_REST_USERNAME` 完全一致；`preflight.sh` 会拒绝不一致配置。不要额外设置 `RESTIC_REST_PASSWORD`。
 
 创建 password file 后，确保文件由实际执行 producer backup 的账号可读且 group/other 无权限：
 
