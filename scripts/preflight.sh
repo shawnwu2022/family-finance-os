@@ -33,7 +33,7 @@ if [[ ! -f .env ]]; then
 fi
 require_private_file .env ".env"
 
-if grep -Eq 'REPLACE_WITH|example\.com' .env; then
+if grep -Ev '^[[:space:]]*(#|$)' .env | grep -Eq 'REPLACE_WITH|example\.com'; then
   echo "ERROR: .env still contains deployment placeholders." >&2
   exit 1
 fi
