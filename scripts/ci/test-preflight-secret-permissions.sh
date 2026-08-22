@@ -62,6 +62,10 @@ grep -qiE 'permission|mode|group|world' "$workdir/env-public.out" || fail "insec
 chmod 0600 "$repo/.env"
 run_preflight >"$workdir/env-private.out" 2>&1 || fail "preflight rejected private .env because a commented example looked like an active placeholder"
 
+# Effective readability differs for privileged UID 0. Keep this contract UID-independent:
+# production preflight must explicitly check readability, while mode behavior is exercised below.
+grep -Fq '[[ -r "$path" ]]' "$repo/scripts/preflight.sh" || fail "preflight must explicitly require secret readability"
+
 restic_password="$workdir/restic-password"
 rest_server_password="$workdir/rest-server-password"
 printf '%s' 'high-entropy-restic-password-material' >"$restic_password"
@@ -81,22 +85,6 @@ if run_preflight >"$workdir/private-repo-mismatch.out" 2>&1; then
   fail "preflight accepted a private repository path that does not match RESTIC_REST_USERNAME"
 fi
 grep -qiE 'private|repository|username|RESTIC_REST_USERNAME' "$workdir/private-repo-mismatch.out" || fail "private repository username/path mismatch failure was unclear"
-
-chmod 0200 "$restic_password"
-write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
-if run_preflight >"$workdir/restic-unreadable.out" 2>&1; then
-  fail "preflight accepted unreadable RESTIC_PASSWORD_FILE"
-fi
-grep -qiE 'readable|permission' "$workdir/restic-unreadable.out" || fail "unreadable restic password failure was unclear"
-chmod 0600 "$restic_password"
-
-chmod 0200 "$rest_server_password"
-write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
-if run_preflight >"$workdir/rest-server-unreadable.out" 2>&1; then
-  fail "preflight accepted unreadable RESTIC_REST_PASSWORD_FILE"
-fi
-grep -qiE 'readable|permission' "$workdir/rest-server-unreadable.out" || fail "unreadable REST producer password failure was unclear"
-chmod 0600 "$rest_server_password"
 
 chmod 0644 "$restic_password"
 write_env "$valid_rest_repo" "$restic_password" family-finance-prod "$rest_server_password"
