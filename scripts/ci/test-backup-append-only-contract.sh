@@ -14,8 +14,9 @@ preflight="scripts/preflight.sh"
 maintenance="scripts/backup-maintenance.sh"
 env_example=".env.example"
 operations="docs/07-operations.md"
+acceptance="docs/08-testing-acceptance.md"
 
-for file in "$backup" "$preflight" "$env_example" "$operations"; do
+for file in "$backup" "$preflight" "$env_example" "$operations" "$acceptance"; do
   [[ -f "$file" ]] || fail "required file is missing: $file"
 done
 
@@ -71,6 +72,12 @@ grep -Fq 'htpasswd -B -i -c /etc/family-finance/rest-server.htpasswd family-fina
 grep -Fq -- '--htpasswd-file /etc/family-finance/rest-server.htpasswd' "$operations" || fail "rest-server service must use the provisioned htpasswd database"
 grep -Fq -- '--append-only --private-repos' "$operations" || fail "rest-server service must enforce append-only private repositories"
 grep -Fq 'systemctl enable --now rest-server' "$operations" || fail "operations must include an executable rest-server service start step"
+
+if grep -Fq 'restic/SFTP' "$acceptance" || grep -Fq 'SFTP/restic' "$acceptance"; then
+  fail "production acceptance must not require the superseded SFTP backup backend"
+fi
+grep -Fq 'authenticated append-only REST' "$acceptance" || fail "production acceptance must require the authenticated append-only REST repository"
+grep -Fq 'REST producer credential' "$acceptance" || fail "production acceptance must include the append-only producer credential boundary"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
