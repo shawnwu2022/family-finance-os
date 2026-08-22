@@ -21,6 +21,7 @@
 - 对生产凭据启用 `--append-only`；
 - 推荐同时启用 `--private-repos` 做 producer 隔离；
 - 通过 HTTPS 暴露 REST backend；
+- 系统时钟同步，maintenance retention 以该受信任时钟为准；
 - 只有该主机的受保护维护上下文拥有本地 repository 的完整删除/重写权限；
 - 生产 VPS 不得拥有 backup host 文件系统、full-access REST endpoint 或其它可以删除全部离站恢复点的凭据。
 
@@ -177,9 +178,9 @@ Repository 初始化属于 backup administrator 的 full-access 操作，**在 b
 示例逻辑：
 
 ```bash
-sudo install -d -m 0700 /srv/restic/family-finance-prod
+sudo install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod
 sudo install -d -m 0700 /etc/family-finance
-# 以实际 rest-server/repository owner 身份执行；下面的账号名仅为示例。
+# repository 目录已经归 restic 账号所有；下面以同一账号初始化。
 sudo -u restic env \
   RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
   RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
@@ -197,7 +198,7 @@ sudo -u restic env \
 
 ### 5.4 生产 VPS producer 配置
 
-在生产 VPS 的 `.env` 中只保存非 secret 的 repository URL 和 username；两个密码通过仓库外私有文件提供：
+在生产 VPS 的 `.env` 中只保存非 secret 的 repository URL 和 username；两个密码通过仓库外私有文件提供。`RESTIC_REPOSITORY` URL 本身不得包含 `user:password@host` 形式的 userinfo：
 
 ```env
 RESTIC_REPOSITORY=rest:https://backup.example.com/family-finance-prod/
@@ -261,11 +262,15 @@ bash scripts/backup-maintenance.sh
 
 ```text
 restic snapshots
-restic forget --keep-within <duration> --prune
+restic forget --group-by '' --keep-within <duration> --prune
 restic check
 ```
 
+producer 每次备份的是不同 UTC 时间戳目录。如果使用 restic 默认的 `host,paths` grouping，每个 timestamp path 会形成独立 snapshot group，使 retention 无法按预期淘汰历史 snapshot。因此 producer backup 和 maintenance forget 都显式使用 `--group-by ''`，把这个专用 repository 的 Family Finance snapshots 作为一个 retention set。
+
 V1 append-only retention 只允许基于 `--keep-within` 的保护窗口，不使用 `--keep-daily`、`--keep-weekly`、`--keep-monthly` 或 `--keep-last` 等计数型 producer retention。原因是受攻陷 producer 可以生成带恶意时间戳/数量的 snapshot；restic 官方对 append-only repository 明确建议使用 `--keep-within`，并由独立安全 client 执行 `forget/prune`。
+
+restic 的 duration-based `--keep-within` 会忽略相对于 maintenance host 当前时间位于未来的 snapshot；这些未来 snapshot 本身不会被自动删除，也不会作为合法 retention cutoff。该安全性质依赖 maintenance host 时钟可信，因此 backup/maintenance host 必须保持系统时间同步，并在 destructive maintenance 前检查异常 snapshot 数量和时间。
 
 默认：
 
@@ -278,7 +283,7 @@ BACKUP_KEEP_WITHIN=2y
 ```bash
 RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
 RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
-restic forget --keep-within 2y --dry-run
+restic forget --group-by '' --keep-within 2y --dry-run
 ```
 
 确认结果符合预期后，再调度 `scripts/backup-maintenance.sh`。维护窗口应避开生产 backup 时间，因为 prune 会锁定 repository。
@@ -293,7 +298,7 @@ restic forget --keep-within 2y --dry-run
 4. 执行 `./scripts/preflight.sh`；
 5. 执行 `./scripts/backup.sh` 并确认新 snapshot；
 6. 从生产凭据证明 destructive operation 被拒绝；
-7. 在 backup host 执行 `restic check` 和 `forget --keep-within 2y --dry-run`；
+7. 在 backup host 执行 `restic check` 和 `forget --group-by '' --keep-within 2y --dry-run`；
 8. 在独立环境完成真实 snapshot restore；
 9. 只有新边界和恢复证据全部通过后，才按旧 repository 自己的保留策略退役 SFTP 副本。
 
