@@ -22,6 +22,7 @@
 - 推荐同时启用 `--private-repos` 做 producer 隔离；
 - 通过 HTTPS 暴露 REST backend；
 - 系统时钟同步，maintenance retention 以该受信任时钟为准；
+- 安装 `restic`；示例使用 `openssl` 生成 repository encryption password；
 - 只有该主机的受保护维护上下文拥有本地 repository 的完整删除/重写权限；
 - 生产 VPS 不得拥有 backup host 文件系统、full-access REST endpoint 或其它可以删除全部离站恢复点的凭据。
 
@@ -169,6 +170,8 @@ family-finance-prod
 rest:https://backup.example.com/family-finance-prod/
 ```
 
+生产 `preflight.sh` 会验证这个关系；username/path 不一致会在真正访问 rest-server 前直接失败。
+
 backup host 的持久化 data root、认证文件、TLS 私钥和 repository 目录都不得暴露给生产 VPS。
 
 ### 5.3 Repository 初始化
@@ -179,13 +182,16 @@ Repository 初始化属于 backup administrator 的 full-access 操作，**在 b
 
 ```bash
 sudo install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod
-sudo install -d -m 0700 /etc/family-finance
-# repository 目录已经归 restic 账号所有；下面以同一账号初始化。
+sudo install -d -o restic -g restic -m 0700 /etc/family-finance
+sudo -u restic sh -c 'umask 077; openssl rand -base64 48 > /etc/family-finance/restic-password'
+# repository 目录和 repository password 均由执行 restic maintenance 的账号持有。
 sudo -u restic env \
   RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
   RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
   restic init
 ```
+
+repository encryption password 需要安全复制一份到生产 VPS 的独立 `RESTIC_PASSWORD_FILE`，因为 producer 创建加密 snapshot 时需要它；不要把 backup-host 文件系统权限或 full-access maintenance credential 一并复制到生产机。
 
 实际生产部署必须让 repository path、rest-server `--path`、运行用户和文件权限互相一致。初始化完成后，确认 backup host 本地可以执行：
 
@@ -207,6 +213,8 @@ RESTIC_REST_USERNAME=family-finance-prod
 RESTIC_REST_PASSWORD_FILE=/etc/family-finance/rest-server-password
 BACKUP_RETENTION_DAYS=14
 ```
+
+`--private-repos` 模式下，`RESTIC_REPOSITORY` 的第一层 repository path 必须和 `RESTIC_REST_USERNAME` 完全一致；`preflight.sh` 会拒绝不一致配置。
 
 创建 password file 后：
 
