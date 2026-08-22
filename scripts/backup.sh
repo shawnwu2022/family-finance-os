@@ -7,6 +7,10 @@ fail() {
   exit 1
 }
 
+if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
+  fail "RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE"
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -33,6 +37,10 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
+
+if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
+  fail "RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE"
+fi
 
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 FINANCE_DB="${FINANCE_DB_NAME:-finance}"
