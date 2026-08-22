@@ -1,7 +1,7 @@
 # Append-only Off-site Backup Boundary Design
 
 Date: 2026-08-22
-Status: proposed for implementation
+Status: awaiting written-spec review
 Runtime target before this change: `cbfba3268a9c747d874d84845910dca1f2c5657d`
 
 ## 1. Problem
@@ -83,7 +83,7 @@ The producer uses three secret/config inputs:
 
 ```text
 RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password
-RESTIC_REST_USERNAME=family-finance-prod
+RESTIC_REST_USERNAME=family-finance-os
 RESTIC_REST_PASSWORD_FILE=/etc/family-finance/rest-server-password
 ```
 
@@ -116,7 +116,7 @@ For a dedicated Family Finance OS repository, the recommended rest-server flags 
 rest-server --append-only --private-repos
 ```
 
-The production user therefore uses a private repository path matching its account name or a deployment-specific equivalent that preserves user isolation. The final deployment guide must show the exact path chosen for the actual backup host.
+With `RESTIC_REST_USERNAME=family-finance-os`, `--private-repos` therefore authorizes the repository path `/family-finance-os/`, matching the `RESTIC_REPOSITORY` example above. The final deployment guide must preserve that username/path relationship for the actual backup host.
 
 ## 7. Production backup flow
 
@@ -174,9 +174,9 @@ The operator must inspect abnormal snapshot growth or suspicious timestamps befo
 
 The transition is intentionally explicit; there is no transparent in-place switch of credentials.
 
-1. Deploy the independent rest-server append-only endpoint.
-2. Create the new REST repository using the intended repository encryption password.
-3. Configure the production VPS with the new `rest:https://...` repository, REST username, and REST password file.
+1. On the independent backup host, initialize the new restic repository locally at `/srv/restic/family-finance-os` using the intended repository encryption password.
+2. Serve that existing repository through the authenticated HTTPS rest-server append-only endpoint with the `family-finance-os` private-repository user/path relationship.
+3. Configure the production VPS with the new `rest:https://.../family-finance-os/` repository, REST username, and REST password file.
 4. Run production preflight.
 5. Create a new production backup and confirm a snapshot appears.
 6. From the production credential, prove destructive operations are denied. The production acceptance evidence records only command result/status and sanitized snapshot identifiers.
