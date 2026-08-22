@@ -52,4 +52,63 @@ if grep -Fq 'RESTIC_REST_PASSWORD_FILE' "$maintenance" || grep -Fq 'RESTIC_REST_
   fail "maintenance must not consume the producer REST credential"
 fi
 
+workdir="$(mktemp -d)"
+trap 'rm -rf "$workdir"' EXIT
+mkdir -p "$workdir/bin" "$workdir/repository"
+password_file="$workdir/restic-password"
+printf '%s' 'high-entropy-maintenance-password-material' >"$password_file"
+chmod 0600 "$password_file"
+restic_log="$workdir/restic.log"
+
+cat >"$workdir/bin/restic" <<'EOF_RESTIC'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$RESTIC_TEST_LOG"
+EOF_RESTIC
+chmod 0755 "$workdir/bin/restic"
+
+if PATH="$workdir/bin:$PATH" \
+  RESTIC_TEST_LOG="$restic_log" \
+  RESTIC_MAINTENANCE_REPOSITORY='rest:https://backup.test.invalid/family-finance-prod/' \
+  RESTIC_PASSWORD_FILE="$password_file" \
+  BACKUP_KEEP_WITHIN=2y \
+  bash "$maintenance" >"$workdir/network.out" 2>&1; then
+  fail "maintenance accepted a network repository"
+fi
+grep -qi 'local' "$workdir/network.out" || fail "network repository rejection did not explain the local-only boundary"
+
+chmod 0644 "$password_file"
+if PATH="$workdir/bin:$PATH" \
+  RESTIC_TEST_LOG="$restic_log" \
+  RESTIC_MAINTENANCE_REPOSITORY="$workdir/repository" \
+  RESTIC_PASSWORD_FILE="$password_file" \
+  BACKUP_KEEP_WITHIN=2y \
+  bash "$maintenance" >"$workdir/public-password.out" 2>&1; then
+  fail "maintenance accepted a group/world-readable repository password"
+fi
+grep -qiE 'permission|group|other|mode' "$workdir/public-password.out" || fail "maintenance password-permission rejection was unclear"
+chmod 0600 "$password_file"
+
+if PATH="$workdir/bin:$PATH" \
+  RESTIC_TEST_LOG="$restic_log" \
+  RESTIC_MAINTENANCE_REPOSITORY="$workdir/repository" \
+  RESTIC_PASSWORD_FILE="$password_file" \
+  BACKUP_KEEP_WITHIN=0d \
+  bash "$maintenance" >"$workdir/zero-retention.out" 2>&1; then
+  fail "maintenance accepted a zero retention window"
+fi
+grep -qiE 'positive|duration|keep-within' "$workdir/zero-retention.out" || fail "zero retention rejection was unclear"
+
+: >"$restic_log"
+PATH="$workdir/bin:$PATH" \
+  RESTIC_TEST_LOG="$restic_log" \
+  RESTIC_MAINTENANCE_REPOSITORY="$workdir/repository" \
+  RESTIC_PASSWORD_FILE="$password_file" \
+  BACKUP_KEEP_WITHIN=2y \
+  bash "$maintenance" >"$workdir/valid.out" 2>&1 || fail "maintenance rejected a valid local repository configuration"
+
+grep -Fxq 'snapshots' "$restic_log" || fail "maintenance did not list snapshots before destructive work"
+grep -Fxq 'forget --keep-within 2y --prune' "$restic_log" || fail "maintenance did not use the expected keep-within prune policy"
+grep -Fxq 'check' "$restic_log" || fail "maintenance did not run repository check after prune"
+
 echo "Append-only backup contract OK"
