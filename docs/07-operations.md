@@ -22,7 +22,7 @@
 - 推荐同时启用 `--private-repos` 做 producer 隔离；
 - 通过 HTTPS 暴露 REST backend；
 - 系统时钟同步，maintenance retention 以该受信任时钟为准；
-- 安装 `restic`、`rest-server`、`openssl` 和提供 `htpasswd` 的系统包；
+- 安装 `restic`、`rest-server`、`openssl`、提供 `htpasswd` 的系统包，以及用于 TLS 终止的 Caddy（或已经受验证的等价 HTTPS reverse proxy）；
 - 只有该主机的受保护维护上下文拥有本地 repository 的完整删除/重写权限；
 - 生产 VPS 不得拥有 backup host 文件系统、full-access REST endpoint 或其它可以删除全部离站恢复点的凭据。
 
@@ -158,7 +158,9 @@ V1 推荐在独立 backup host 上运行 `rest-server 0.14.0` 或部署时明确
 --private-repos
 ```
 
-认证必须开启。不得使用 `--no-auth` 暴露生产 endpoint。HTTPS 可以由 rest-server 原生 TLS 或受控反向代理终止；生产 `RESTIC_REPOSITORY` 必须始终使用 `rest:https://...`。
+认证必须开启。不得使用 `--no-auth` 暴露生产 endpoint。生产 `RESTIC_REPOSITORY` 必须始终使用 `rest:https://...`。
+
+本手册采用的标准部署是：rest-server 仅监听 `127.0.0.1:8000`，由同机 Caddy 负责公网 TLS。**HTTPS reverse proxy is a prerequisite**；如果 backup host 已有受验证的等价反向代理，可以替换 Caddy，但必须满足相同的 HTTPS、证书、loopback upstream 和端口暴露约束。
 
 若 producer 用户名为：
 
@@ -214,7 +216,7 @@ repository encryption password 也需要安全复制一份到生产 VPS 的独�
 
 #### systemd service
 
-如果 HTTPS 由同一 backup host 上的受控反向代理终止，rest-server 本体只绑定 loopback。创建 `/etc/systemd/system/rest-server.service`：
+rest-server 本体只绑定 loopback。创建 `/etc/systemd/system/rest-server.service`：
 
 ```ini
 [Unit]
@@ -249,7 +251,30 @@ sudo systemctl enable --now rest-server
 sudo systemctl status --no-pager rest-server
 ```
 
-反向代理必须把外部 `https://backup.example.com/` 转发到 `http://127.0.0.1:8000/`，且公网不得直接暴露 8000/tcp。若不用反向代理，应改用 rest-server 自身受验证的 TLS 配置；**无论哪种方式，生产端 `RESTIC_REPOSITORY` 必须是 `rest:https://...`，不得为了省事使用 `--no-auth` 或公网明文 HTTP。**
+#### HTTPS reverse proxy
+
+backup DNS（例如 `backup.example.com`）先指向 backup host，公网防火墙只允许 Caddy 所需的 80/443；不得开放 rest-server 的 8000/tcp。若没有现成的受验证 HTTPS proxy，使用 Caddy。示例 `/etc/caddy/Caddyfile`：
+
+```caddyfile
+backup.example.com {
+    @root path /
+    respond @root "ok" 200
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+应用并验证：
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl enable --now caddy
+sudo systemctl reload caddy
+curl -fsS https://backup.example.com/
+```
+
+最后一条必须通过正常的公网 DNS 和受信任证书返回 `ok`。它只验证 TLS/反代入口；真正的 restic repository 路径仍由 rest-server 的 htpasswd 认证保护。然后从生产 VPS 通过 `rest:https://backup.example.com/family-finance-prod/` 做第一次真实 producer smoke。
+
+无论使用 Caddy 还是已受验证的等价 HTTPS proxy，生产端 `RESTIC_REPOSITORY` 都必须是 `rest:https://...`；不得为了省事使用 `--no-auth`、公网明文 HTTP，或把 8000/tcp 直接暴露到 Internet。
 
 启动后检查日志，必须看到 append-only/private-repositories 已启用；并确认服务使用 `/etc/family-finance/rest-server.htpasswd` 成功加载认证数据。初始化完成后，backup host 本地 full-access maintenance context 应能执行：
 
@@ -315,14 +340,23 @@ BACKUP_KEEP_MONTHLY
 
 ### 5.6 Backup host maintenance
 
-离站 retention、prune、完整 check 只在独立 backup host 上执行。该主机使用**本地 repository path**，不使用生产 REST producer credential：
+离站 retention、prune、完整 check 只在独立 backup host 上执行。该主机使用**本地 repository path**，不使用生产 REST producer credential。因为 `/etc/family-finance` 由 `restic:restic` 以 `0700` 持有，maintenance 必须在 `restic` 身份下执行：
 
 ```bash
-export RESTIC_MAINTENANCE_REPOSITORY=/srv/restic/family-finance-prod
-export RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password
-export BACKUP_KEEP_WITHIN=2y
-bash scripts/backup-maintenance.sh
+sudo -u restic env \
+  RESTIC_MAINTENANCE_REPOSITORY=/srv/restic/family-finance-prod \
+  RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
+  BACKUP_KEEP_WITHIN=2y \
+  bash scripts/backup-maintenance.sh
 ```
+
+如果上述变量已经通过受保护的 systemd `Environment=` / `EnvironmentFile=` 注入，实际执行体必须保持为：
+
+```bash
+sudo -u restic bash scripts/backup-maintenance.sh
+```
+
+不要以普通管理员账号直接运行该脚本，也不要放宽 `/etc/family-finance` 权限来迁就错误的执行身份。
 
 脚本执行：
 
@@ -344,12 +378,12 @@ restic 的 duration-based `--keep-within` 会忽略相对于 maintenance host �
 BACKUP_KEEP_WITHIN=2y
 ```
 
-第一次真实 destructive maintenance 前，先由管理员直接运行 dry-run 并人工检查异常 snapshot 数量/时间：
+第一次真实 destructive maintenance 前，以 `restic` 身份运行 dry-run 并人工检查异常 snapshot 数量/时间：
 
 ```bash
-RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
-RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
-restic forget --group-by '' --keep-within 2y --dry-run
+sudo -u restic env RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
+  RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
+  restic forget --group-by '' --keep-within 2y --dry-run
 ```
 
 确认结果符合预期后，再调度 `scripts/backup-maintenance.sh`。维护窗口应避开生产 backup 时间，因为 prune 会锁定 repository。
