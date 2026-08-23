@@ -42,6 +42,10 @@ if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
   fail "RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE"
 fi
 
+if [[ -n "${RESTIC_PASSWORD_FILE:-}${RESTIC_REST_USERNAME:-}${RESTIC_REST_PASSWORD_FILE:-}" && -z "${RESTIC_REPOSITORY:-}" ]]; then
+  fail "restic producer credentials are set but RESTIC_REPOSITORY is empty"
+fi
+
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 FINANCE_DB="${FINANCE_DB_NAME:-finance}"
 EBK_DB="${EBK_DB_NAME:-ezbookkeeping}"
