@@ -7,8 +7,28 @@ fail() {
   exit 1
 }
 
+if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
+  fail "RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE"
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+require_private_backup_file() {
+  local path="$1"
+  local label="$2"
+
+  [[ -f "$path" ]] || fail "${label} must be a regular file"
+  [[ -r "$path" ]] || fail "${label} is not readable"
+
+  local mode
+  mode="$(stat -Lc '%a' "$path")" || fail "could not inspect ${label} file mode"
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || fail "invalid ${label} file mode: $mode"
+  local permissions="${mode: -3}"
+  if [[ "${permissions:1:1}" != "0" || "${permissions:2:1}" != "0" ]]; then
+    fail "${label} group and other access must be disabled (mode ${mode})"
+  fi
+}
 
 ENV_FILE="${FINANCE_ENV_FILE:-$ROOT_DIR/.env}"
 [[ -f "$ENV_FILE" ]] || fail "environment file not found: $ENV_FILE"
@@ -17,6 +37,14 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
+
+if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
+  fail "RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE"
+fi
+
+if [[ -n "${RESTIC_PASSWORD_FILE:-}${RESTIC_REST_USERNAME:-}${RESTIC_REST_PASSWORD_FILE:-}" && -z "${RESTIC_REPOSITORY:-}" ]]; then
+  fail "restic producer credentials are set but RESTIC_REPOSITORY is empty"
+fi
 
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 FINANCE_DB="${FINANCE_DB_NAME:-finance}"
@@ -50,29 +78,42 @@ tar -C "$ROOT_DIR/data" -czf "$DEST/ezbookkeeping-storage.tar.gz" ezbookkeeping-
 )
 
 if [[ -n "${BACKUP_REMOTE:-}" ]]; then
-  fail "BACKUP_REMOTE is deprecated; configure RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE"
+  fail "BACKUP_REMOTE is deprecated; configure RESTIC_REPOSITORY and backup secret files"
 fi
 
 if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   command -v restic >/dev/null 2>&1 || fail "restic is required when RESTIC_REPOSITORY is configured"
-  [[ "$RESTIC_REPOSITORY" == sftp:* ]] || fail "V1 off-site backup repository must use restic SFTP syntax"
+  command -v readlink >/dev/null 2>&1 || fail "readlink is required when RESTIC_REPOSITORY is configured"
+  command -v stat >/dev/null 2>&1 || fail "stat is required when RESTIC_REPOSITORY is configured"
+  [[ "$RESTIC_REPOSITORY" == rest:https://* ]] || fail "V1 off-site backup repository must use rest:https://"
+  rest_endpoint="${RESTIC_REPOSITORY#rest:https://}"
+  rest_authority="${rest_endpoint%%/*}"
+  [[ -n "$rest_authority" ]] || fail "RESTIC_REPOSITORY must include an HTTPS authority"
+  [[ "$rest_authority" != *"@"* ]] || fail "RESTIC_REPOSITORY must not embed credentials in the URL"
   [[ -n "${RESTIC_PASSWORD_FILE:-}" ]] || fail "RESTIC_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
-  [[ -r "$RESTIC_PASSWORD_FILE" ]] || fail "RESTIC_PASSWORD_FILE is not readable"
+  [[ -n "${RESTIC_REST_USERNAME:-}" ]] || fail "RESTIC_REST_USERNAME is required when RESTIC_REPOSITORY is configured"
+  [[ -n "${RESTIC_REST_PASSWORD_FILE:-}" ]] || fail "RESTIC_REST_PASSWORD_FILE is required when RESTIC_REPOSITORY is configured"
 
-  password_path="$(cd "$(dirname "$RESTIC_PASSWORD_FILE")" && pwd -P)/$(basename "$RESTIC_PASSWORD_FILE")"
-  case "$password_path" in
-    "$ROOT_DIR"/*) fail "RESTIC_PASSWORD_FILE must live outside the repository" ;;
-  esac
+  require_private_backup_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
+  require_private_backup_file "$RESTIC_REST_PASSWORD_FILE" "RESTIC_REST_PASSWORD_FILE"
 
-  export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE
-  restic snapshots --json >/dev/null
-  restic backup "$DEST" --tag family-finance-os --tag "$STAMP"
-  restic forget \
-    --keep-daily "${BACKUP_KEEP_DAILY:-14}" \
-    --keep-weekly "${BACKUP_KEEP_WEEKLY:-8}" \
-    --keep-monthly "${BACKUP_KEEP_MONTHLY:-12}" \
-    --prune
-  restic check
+  for secret_file in "$RESTIC_PASSWORD_FILE" "$RESTIC_REST_PASSWORD_FILE"; do
+    secret_path="$(readlink -f -- "$secret_file")" || fail "could not resolve backup secret file path"
+    case "$secret_path" in
+      "$ROOT_DIR"/*) fail "backup secret files must live outside the repository" ;;
+    esac
+  done
+
+  run_restic() {
+    RESTIC_REST_PASSWORD="$(<"$RESTIC_REST_PASSWORD_FILE")" \
+      RESTIC_REST_USERNAME="$RESTIC_REST_USERNAME" \
+      RESTIC_REPOSITORY="$RESTIC_REPOSITORY" \
+      RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" \
+      restic "$@"
+  }
+
+  run_restic snapshots --json >/dev/null
+  run_restic backup --group-by '' "$DEST" --tag family-finance-os --tag "$STAMP"
 fi
 
 RETENTION="${BACKUP_RETENTION_DAYS:-14}"

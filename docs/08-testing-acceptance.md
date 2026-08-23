@@ -168,11 +168,12 @@ CI 绿色只代表**可重复的软件/运维契约**通过，不等价于真实
 ### 6.4 备份与恢复
 
 - 至少一个真实生产 backup 同时包含两份 custom-format DB dump、ezBookkeeping storage 和 SHA256SUMS；
-- 该 backup 已成功进入 restic/SFTP repository；
-- `restic check` 通过；
+- 该 backup 已通过 **authenticated append-only REST** endpoint 成功创建离站 restic snapshot；
+- 使用生产 **REST producer credential** 验证可以创建新 snapshot，但无法删除、覆盖或改写已有离站恢复点；
+- `restic check` 从独立、授权的 maintenance/recovery context 执行并通过；
 - 至少一次**异机**从真实 restic snapshot 恢复；
 - 恢复后 ezBookkeeping 与 Finance Core 可启动，关键账户/交易/月报抽查一致；
-- 记录 snapshot ID、RTO、执行人和脱敏结果。
+- 记录 snapshot ID、destructive-denial 脱敏证据、RTO、执行人和脱敏结果。
 
 ### 6.5 Scheduler 重启幂等
 
@@ -202,4 +203,4 @@ CI 绿色只代表**可重复的软件/运维契约**通过，不等价于真实
 - 没有未处理的高严重度可达漏洞；
 - 没有已知 secret 泄露。
 
-若缺少真实服务器、账单、LLM、手机或 SFTP/restic 凭据，只能把状态记为 `NOT RUN`/`BLOCKED`，不能推断为通过，也不能创建 V1 tag。
+若缺少真实服务器、账单、LLM、手机、authenticated append-only REST producer 或独立 maintenance/recovery 凭据，只能把状态记为 `NOT RUN`/`BLOCKED`，不能推断为通过，也不能创建 V1 tag。
