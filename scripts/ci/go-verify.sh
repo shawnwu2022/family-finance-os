@@ -51,7 +51,12 @@ if [[ "$mcp_version" == *-* ]]; then
 fi
 
 mapfile -t gofiles < <(find cmd internal -type f -name '*.go' -print)
-test -z "$(gofmt -l "${gofiles[@]}")"
+unformatted="$(gofmt -l "${gofiles[@]}")"
+if [[ -n "$unformatted" ]]; then
+  echo "gofmt required for:" >&2
+  printf '%s\n' "$unformatted" >&2
+  exit 1
+fi
 
 go vet ./...
 go test ./...
