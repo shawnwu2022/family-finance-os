@@ -12,6 +12,7 @@ import (
 	"github.com/shawnwu2022/family-finance-os/internal/advisor"
 	"github.com/shawnwu2022/family-finance-os/internal/appapi"
 	"github.com/shawnwu2022/family-finance-os/internal/audit"
+	financeauth "github.com/shawnwu2022/family-finance-os/internal/auth"
 	"github.com/shawnwu2022/family-finance-os/internal/config"
 	"github.com/shawnwu2022/family-finance-os/internal/ledger/ezbookkeeping"
 	"github.com/shawnwu2022/family-finance-os/internal/llm"
@@ -25,6 +26,10 @@ import (
 )
 
 func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handler, func(), error) {
+	secretBox, err := loadBrowserAuthSecretBox(cfg.Auth)
+	if err != nil {
+		return nil, nil, err
+	}
 	pool, err := store.OpenPostgres(ctx, cfg.Database)
 	if err != nil {
 		return nil, nil, err
@@ -39,6 +44,10 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		return nil, nil, err
 	}
 
+	browserAuth, err := financeauth.NewService(financeauth.NewPostgresStore(pool), secretBox)
+	if err != nil {
+		return fail(fmt.Errorf("configure browser authentication: %w", err))
+	}
 	ledgerClient, err := ezbookkeeping.NewClient(cfg.Ledger.BaseURL, cfg.Ledger.APIToken, cfg.Timezone, nil)
 	if err != nil {
 		return fail(fmt.Errorf("configure ezbookkeeping ledger: %w", err))
@@ -116,6 +125,7 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		server.WithAPI(householdScopedAPI{FinanceAPI: reportingAPI, advisor: financeAPI}),
 		server.WithWeb(webassets.Handler()),
 		server.WithReady(pool.Ping),
+		server.WithBrowserAuth(browserAuth),
 	}
 	if cfg.MCP.Enabled {
 		mcpHandler, err := buildMCPHandler(ctx, cfg.MCP, pool, financeAPI)
@@ -190,6 +200,23 @@ func newMonthlyReportJob(scope scheduler.HouseholdScope, reporter monthlyReporte
 			return err
 		},
 	}, nil
+}
+
+func loadBrowserAuthSecretBox(cfg config.AuthConfig) (*financeauth.SecretBox, error) {
+	key, err := readRequiredSecretFile(strings.TrimSpace(cfg.KeyFile), 32)
+	if err != nil {
+		return nil, fmt.Errorf("read finance auth key: %w", err)
+	}
+	defer func() {
+		for i := range key {
+			key[i] = 0
+		}
+	}()
+	secretBox, err := financeauth.NewSecretBox(key)
+	if err != nil {
+		return nil, fmt.Errorf("configure finance auth key: %w", err)
+	}
+	return secretBox, nil
 }
 
 func validateRuntimeAIConfig(cfg config.LLMConfig) (bool, error) {
