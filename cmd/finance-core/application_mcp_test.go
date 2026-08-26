@@ -15,6 +15,7 @@ import (
 	storesqlc "github.com/shawnwu2022/family-finance-os/internal/store/sqlc"
 )
 
+// applicationTestAuthKey is a non-secret fixed fixture for production-handler integration tests.
 const applicationTestAuthKey = "0123456789abcdef0123456789abcdef"
 
 func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T) {
