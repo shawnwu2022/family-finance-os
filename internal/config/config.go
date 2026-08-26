@@ -18,6 +18,7 @@ type Config struct {
 	LLM        LLMConfig
 	MCP        MCPConfig
 	Portfolio  PortfolioConfig
+	Auth       AuthConfig
 }
 
 type DatabaseConfig struct {
@@ -56,6 +57,12 @@ type MCPConfig struct {
 type PortfolioConfig struct {
 	ValuationStaleAfter time.Duration
 	FXStaleAfter        time.Duration
+}
+
+type AuthConfig struct {
+	KeyFile           string
+	AdminUsername     string
+	AdminPasswordFile string
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -106,6 +113,11 @@ func Load(getenv func(string) string) (Config, error) {
 		},
 		MCP:       mcp,
 		Portfolio: portfolioConfig,
+		Auth: AuthConfig{
+			KeyFile:           valueOrDefault(getenv("FINANCE_AUTH_KEY_FILE"), "/run/secrets/finance-auth-key"),
+			AdminUsername:     valueOrDefault(getenv("FINANCE_ADMIN_USERNAME"), "finance"),
+			AdminPasswordFile: valueOrDefault(getenv("FINANCE_ADMIN_PASSWORD_FILE"), "/run/secrets/finance-admin-password"),
+		},
 	}, nil
 }
 
