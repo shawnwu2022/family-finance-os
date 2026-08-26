@@ -22,31 +22,40 @@ func TestPostgresAuthStoreChallengeSessionAndRecoveryLifecycleIntegration(t *tes
 	}
 	defer pool.Close()
 
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 	var householdID int64
 	if err := pool.QueryRow(ctx, `
 		INSERT INTO households (name, base_currency, timezone)
 		VALUES ($1, 'CNY', 'Asia/Shanghai')
 		RETURNING id
-	`, "auth-integration-"+strconv.FormatInt(time.Now().UnixNano(), 10)).Scan(&householdID); err != nil {
+	`, "auth-integration-"+suffix).Scan(&householdID); err != nil {
 		t.Fatalf("insert household: %v", err)
 	}
 
 	authStore := NewPostgresStore(pool)
-	user, created, err := authStore.CreateOrGetAdminUser(ctx, CreateAdminUserParams{
-		Username:           "Owner",
-		NormalizedUsername: "owner",
+	params := CreateAdminUserParams{
+		Username:           "Owner-" + suffix,
+		NormalizedUsername: "owner-" + suffix,
 		PasswordHash:       "$argon2id$test",
 		HouseholdID:        householdID,
-	})
+	}
+	user, created, err := authStore.CreateOrGetAdminUser(ctx, params)
 	if err != nil {
 		t.Fatalf("CreateOrGetAdminUser: %v", err)
 	}
-	if !created || user.HouseholdID != householdID || user.NormalizedUsername != "owner" {
+	if !created || user.HouseholdID != householdID || user.NormalizedUsername != params.NormalizedUsername {
 		t.Fatalf("created user = %#v created=%v", user, created)
+	}
+	existing, created, err := authStore.CreateOrGetAdminUser(ctx, params)
+	if err != nil {
+		t.Fatalf("CreateOrGetAdminUser existing: %v", err)
+	}
+	if created || existing.ID != user.ID || existing.HouseholdID != householdID {
+		t.Fatalf("existing user = %#v created=%v", existing, created)
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
-	challengeHash := sha256.Sum256([]byte("challenge-token"))
+	challengeHash := sha256.Sum256([]byte("challenge-token-" + suffix))
 	if err := authStore.CreateChallenge(ctx, ChallengeRecord{
 		TokenHash: challengeHash[:], UserID: user.ID, Kind: ChallengeLogin,
 		CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute),
@@ -60,8 +69,8 @@ func TestPostgresAuthStoreChallengeSessionAndRecoveryLifecycleIntegration(t *tes
 		t.Fatal("ConsumeChallenge second succeeded; challenge must be single-use")
 	}
 
-	sessionHash := sha256.Sum256([]byte("session-token"))
-	csrfHash := sha256.Sum256([]byte("csrf-token"))
+	sessionHash := sha256.Sum256([]byte("session-token-" + suffix))
+	csrfHash := sha256.Sum256([]byte("csrf-token-" + suffix))
 	if err := authStore.CreateSession(ctx, SessionRecord{
 		TokenHash: sessionHash[:], UserID: user.ID, CSRFTokenHash: csrfHash[:],
 		CreatedAt: now, LastSeenAt: now, ExpiresAt: now.Add(12 * time.Hour),
@@ -82,7 +91,7 @@ func TestPostgresAuthStoreChallengeSessionAndRecoveryLifecycleIntegration(t *tes
 		t.Fatal("GetSession returned revoked session")
 	}
 
-	recoveryHash := sha256.Sum256([]byte("recovery-code"))
+	recoveryHash := sha256.Sum256([]byte("recovery-code-" + suffix))
 	if err := authStore.InsertRecoveryCodes(ctx, user.ID, [][]byte{recoveryHash[:]}); err != nil {
 		t.Fatalf("InsertRecoveryCodes: %v", err)
 	}
