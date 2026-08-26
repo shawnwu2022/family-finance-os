@@ -12,6 +12,9 @@ type loginFailureBucket struct {
 	startedAt time.Time
 }
 
+// loginThrottle bounds password verification attempts by both remote IP and
+// normalized username. Its table is capped so unauthenticated input cannot grow
+// process memory without bound; saturation fails closed for unseen identities.
 type loginThrottle struct {
 	mu          sync.Mutex
 	maxFailures int
