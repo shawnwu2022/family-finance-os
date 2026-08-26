@@ -13,9 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/shawnwu2022/family-finance-os/internal/agentadapter"
+	financeauth "github.com/shawnwu2022/family-finance-os/internal/auth"
 	"github.com/shawnwu2022/family-finance-os/internal/config"
+	"github.com/shawnwu2022/family-finance-os/internal/server"
 	storesqlc "github.com/shawnwu2022/family-finance-os/internal/store/sqlc"
 )
 
@@ -87,16 +90,23 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 	}
 	defer cleanup()
 
+	sessionToken, csrfToken := createPortfolioBrowserSession(t, ctx, pool, household.ID)
+
 	assetURL := fmt.Sprintf("/api/v1/portfolio/assets/property:home?household_id=%d", household.ID)
 	body := `{"name":"Home","asset_class":"property","value_minor":"100000","currency":"CNY","source_currency":"CNY","valuation_as_of":"2026-08-18T12:00:00Z","source_kind":"manual"}`
 	put := httptest.NewRecorder()
-	handler.ServeHTTP(put, httptest.NewRequest(http.MethodPut, assetURL, strings.NewReader(body)))
+	putRequest := httptest.NewRequest(http.MethodPut, assetURL, strings.NewReader(body))
+	putRequest.AddCookie(&http.Cookie{Name: server.SessionCookieName, Value: sessionToken})
+	putRequest.Header.Set("X-CSRF-Token", csrfToken)
+	handler.ServeHTTP(put, putRequest)
 	if put.Code != http.StatusOK {
 		t.Fatalf("portfolio PUT status=%d body=%s", put.Code, put.Body.String())
 	}
 
 	get := httptest.NewRecorder()
-	handler.ServeHTTP(get, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/portfolio/assets?household_id=%d", household.ID), nil))
+	getRequest := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/portfolio/assets?household_id=%d", household.ID), nil)
+	getRequest.AddCookie(&http.Cookie{Name: server.SessionCookieName, Value: sessionToken})
+	handler.ServeHTTP(get, getRequest)
 	if get.Code != http.StatusOK {
 		t.Fatalf("portfolio GET status=%d body=%s", get.Code, get.Body.String())
 	}
@@ -145,4 +155,49 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 	if !bytes.Contains(encoded, []byte(`"class":"property"`)) || !bytes.Contains(encoded, []byte(`"minor":"100000"`)) {
 		t.Fatalf("allocation=%s", encoded)
 	}
+}
+
+func createPortfolioBrowserSession(t *testing.T, ctx context.Context, pool *pgxpool.Pool, householdID int64) (string, string) {
+	t.Helper()
+	store := financeauth.NewPostgresStore(pool)
+	username := fmt.Sprintf("portfolio-browser-%d", householdID)
+	user, _, err := store.CreateOrGetAdminUser(ctx, financeauth.CreateAdminUserParams{
+		Username:           username,
+		NormalizedUsername: username,
+		PasswordHash:       "test-only-not-used-for-session",
+		HouseholdID:        householdID,
+	})
+	if err != nil {
+		t.Fatalf("create browser auth user: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM auth_sessions WHERE user_id = $1`, user.ID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM auth_users WHERE id = $1`, user.ID)
+	})
+
+	secretBox, err := financeauth.NewSecretBox([]byte(applicationTestAuthKey))
+	if err != nil {
+		t.Fatalf("NewSecretBox: %v", err)
+	}
+	const csrfToken = "portfolio-browser-csrf-token"
+	csrfCiphertext, err := secretBox.Seal([]byte(csrfToken))
+	if err != nil {
+		t.Fatalf("encrypt CSRF token: %v", err)
+	}
+	sessionToken := fmt.Sprintf("portfolio-browser-session-%d", householdID)
+	sessionHash := financeauth.HashOpaqueToken(sessionToken)
+	csrfHash := financeauth.HashOpaqueToken(csrfToken)
+	now := time.Now().UTC()
+	if err := store.CreateSession(ctx, financeauth.SessionRecord{
+		TokenHash:           sessionHash[:],
+		UserID:              user.ID,
+		CSRFTokenHash:       csrfHash[:],
+		CSRFTokenCiphertext: csrfCiphertext,
+		CreatedAt:           now,
+		LastSeenAt:          now,
+		ExpiresAt:           now.Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("create browser auth session: %v", err)
+	}
+	return sessionToken, csrfToken
 }
