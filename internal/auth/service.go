@@ -25,7 +25,7 @@ const (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
 	ErrInvalidSecondFactor = errors.New("invalid second factor")
 	ErrUnauthenticated     = errors.New("unauthenticated")
 )
@@ -287,17 +287,17 @@ func (s *Service) newSession(userID int64, now time.Time) (SessionIssue, Session
 	sessionHash := HashOpaqueToken(sessionToken)
 	csrfHash := HashOpaqueToken(csrfToken)
 	return SessionIssue{
-		SessionToken: sessionToken,
-		CSRFToken:    csrfToken,
-	}, SessionRecord{
-		TokenHash:           sessionHash[:],
-		UserID:              userID,
-		CSRFTokenHash:       csrfHash[:],
-		CSRFTokenCiphertext: csrfCiphertext,
-		CreatedAt:           now,
-		LastSeenAt:          now,
-		ExpiresAt:           now.Add(sessionAbsoluteTTL),
-	}, nil
+			SessionToken: sessionToken,
+			CSRFToken:    csrfToken,
+		}, SessionRecord{
+			TokenHash:           sessionHash[:],
+			UserID:              userID,
+			CSRFTokenHash:       csrfHash[:],
+			CSRFTokenCiphertext: csrfCiphertext,
+			CreatedAt:           now,
+			LastSeenAt:          now,
+			ExpiresAt:           now.Add(sessionAbsoluteTTL),
+		}, nil
 }
 
 func buildOTPAuthURI(username, secret string) string {
