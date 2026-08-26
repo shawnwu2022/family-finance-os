@@ -1,3 +1,4 @@
+import { clearAuthState, getCSRFToken } from './auth'
 import type {
   AdvisorResponse,
   DashboardData,
@@ -13,17 +14,15 @@ interface APIErrorEnvelope {
   }
 }
 
-export async function loadDashboard(householdId: number, period: string): Promise<DashboardData> {
-  const household = encodeURIComponent(String(householdId))
+export async function loadDashboard(period: string): Promise<DashboardData> {
   const month = encodeURIComponent(period)
-  return requestJSON<DashboardData>(`/api/v1/dashboard?household_id=${household}&period=${month}`)
+  return requestJSON<DashboardData>(`/api/v1/dashboard?period=${month}`)
 }
 
-export async function askAdvisor(householdId: number, question: string, requireReview: boolean): Promise<AdvisorResponse> {
+export async function askAdvisor(question: string, requireReview: boolean): Promise<AdvisorResponse> {
   return requestJSON<AdvisorResponse>('/api/v1/advisor', {
     method: 'POST',
     body: JSON.stringify({
-      household_id: householdId,
       question,
       require_tool: true,
       require_review: requireReview,
@@ -31,28 +30,24 @@ export async function askAdvisor(householdId: number, question: string, requireR
   })
 }
 
-export async function listPortfolioAssets(householdId: number): Promise<PortfolioAssetsResponse> {
-  const household = encodeURIComponent(String(householdId))
-  return requestJSON<PortfolioAssetsResponse>(`/api/v1/portfolio/assets?household_id=${household}`)
+export async function listPortfolioAssets(): Promise<PortfolioAssetsResponse> {
+  return requestJSON<PortfolioAssetsResponse>('/api/v1/portfolio/assets')
 }
 
 export async function upsertPortfolioAsset(
-  householdId: number,
   assetRef: string,
   request: PortfolioAssetUpsertRequest,
 ): Promise<PortfolioAssetResponse> {
-  const household = encodeURIComponent(String(householdId))
   const encodedAssetRef = encodeURIComponent(assetRef)
-  return requestJSON<PortfolioAssetResponse>(`/api/v1/portfolio/assets/${encodedAssetRef}?household_id=${household}`, {
+  return requestJSON<PortfolioAssetResponse>(`/api/v1/portfolio/assets/${encodedAssetRef}`, {
     method: 'PUT',
     body: JSON.stringify(request),
   })
 }
 
-export async function deletePortfolioAsset(householdId: number, assetRef: string): Promise<void> {
-  const household = encodeURIComponent(String(householdId))
+export async function deletePortfolioAsset(assetRef: string): Promise<void> {
   const encodedAssetRef = encodeURIComponent(assetRef)
-  await requestResponse(`/api/v1/portfolio/assets/${encodedAssetRef}?household_id=${household}`, {
+  await requestResponse(`/api/v1/portfolio/assets/${encodedAssetRef}`, {
     method: 'DELETE',
   })
 }
@@ -67,12 +62,22 @@ async function requestResponse(url: string, init: RequestInit = {}): Promise<Res
   if (init.body) headers.set('Content-Type', 'application/json')
   headers.set('Accept', 'application/json')
 
+  const method = (init.method ?? 'GET').toUpperCase()
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const csrf = getCSRFToken()
+    if (csrf) headers.set('X-CSRF-Token', csrf)
+  }
+
   const response = await fetch(url, {
     ...init,
     headers,
     credentials: 'same-origin',
     cache: 'no-store',
   })
+  if (response.status === httpUnauthorized) {
+    clearAuthState()
+    throw new Error('unauthenticated')
+  }
   if (!response.ok) {
     let code = 'request_failed'
     try {
@@ -85,3 +90,5 @@ async function requestResponse(url: string, init: RequestInit = {}): Promise<Res
   }
   return response
 }
+
+const httpUnauthorized = 401

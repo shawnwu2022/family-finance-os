@@ -1,4 +1,4 @@
-const CACHE_NAME = 'family-finance-shell-v2'
+const CACHE_NAME = 'family-finance-shell-v3'
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg']
 
 self.addEventListener('install', (event) => {
@@ -31,12 +31,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         try {
-          const response = await fetch(request, { cache: 'no-store' })
-          if (response.ok && (response.type === 'basic' || response.type === 'default')) {
-            const cache = await caches.open(CACHE_NAME)
-            await cache.put('/', response.clone())
-          }
-          return response
+          return await fetch(request, { cache: 'no-store' })
         } catch (error) {
           const fallback = await caches.match('/')
           if (fallback) return fallback

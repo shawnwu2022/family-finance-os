@@ -9,7 +9,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch
 })
 
-it('loads the dashboard through one bounded backend request', async () => {
+it('loads the dashboard through one bounded authenticated-scope request', async () => {
   const requests = []
   globalThis.fetch = async (url, init) => {
     requests.push({ url, init })
@@ -22,10 +22,11 @@ it('loads the dashboard through one bounded backend request', async () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   }
 
-  const dashboard = await loadDashboard(42, '2026-08')
+  const dashboard = await loadDashboard('2026-08')
 
   assert.equal(requests.length, 1)
-  assert.equal(requests[0].url, '/api/v1/dashboard?household_id=42&period=2026-08')
+  assert.equal(requests[0].url, '/api/v1/dashboard?period=2026-08')
+  assert.ok(!requests[0].url.includes('household_id'))
   assert.equal(requests[0].init.cache, 'no-store')
   assert.equal(dashboard.cashflow.period, '2026-08')
 })
