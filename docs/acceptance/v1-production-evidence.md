@@ -6,9 +6,10 @@
 
 ## Evidence model
 
-- **Runtime target commit** 是当前 `main` 上准备进入真实生产验收的应用/部署 payload。当前固定为 `cbfba3268a9c747d874d84845910dca1f2c5657d`。
-- PR #33 的 exact validated head 为 `7f01fd69b00312830b7dedabd235a1b0141b1896`，validated runtime tree 为 `65c4ad9486151249903444dddfa7beff9205a1a3`；该 head 的全部适用自动化 gate 通过后，以 exact-head guard 合并为上述 `main` runtime target。
-- PR #31 的 runtime-image hardening exact validated head 为 `bec6d2354f72c319f3fadb40a5732ed7c841c638`。PR #33 未修改 Dockerfile、Compose、Caddy、依赖或 runtime-image 定义，因此其既有 build + real-container smoke 证据继续适用于未变化的 runtime-image surface。
+- **Runtime target commit** 是当前 `main` 上准备进入真实生产验收的应用/部署 payload。当前固定为 `12bee8c7ef9e78be6c4d39c2bee6f99177afca1f`。
+- PR #35 的 exact validated head 为 `0e7bd554bec3f7fe589a832aaee4a595c64be843`，validated runtime tree 为 `064599732156817a7600e85d8c3dd4d23906803c`；该 head 的 CI、MCP Security、Edge Security、OpenClaw Release Acceptance（含 Real OpenClaw）全部通过后，以 `expected_head_sha` guard 合并为上述 `main` runtime target。
+- PR #33 的 Finance API CSRF / unsafe-method 与 external LLM transport remediation 已包含在当前 runtime tree；PR #35 没有回退这些边界，且当前 exact-head 全量 CI / security workflows 已重新验证当前树。
+- PR #31 的 runtime-image hardening exact validated head 为 `bec6d2354f72c319f3fadb40a5732ed7c841c638`。PR #35 未修改 Dockerfile、Compose、Caddy、依赖或 runtime-image 定义，因此其既有 build + real-container smoke 证据继续适用于未变化的 runtime-image surface。
 - 只修改本证据文件、README、LICENSE 或其它纯治理元数据的后续 commit **不重新定义 runtime target**；否则记录证据本身会造成无限 SHA 递归。
 - 任何影响应用代码、依赖、数据库 schema、Docker/Compose/Caddy、CI/acceptance 逻辑或运行时配置契约的变更，都必须选择新的 runtime target，并重新执行适用 gate。
 - 公共/第三方 runtime image 的 CVE 扫描按项目策略**不作为 mandatory blocking PR/release gate**。但若通过任何渠道已经发现并确认存在**未处理的高严重度可达漏洞**，无论来源是 first-party 还是 third-party，仍必须阻塞 V1 release，直到完成修复或形成符合项目安全标准的处置结论。
@@ -19,9 +20,9 @@
 
 | 字段 | 值 |
 |---|---|
-| Runtime target commit (`main`) | `cbfba3268a9c747d874d84845910dca1f2c5657d` |
-| Validated runtime tree | `65c4ad9486151249903444dddfa7beff9205a1a3` |
-| Validated PR exact head | `7f01fd69b00312830b7dedabd235a1b0141b1896` |
+| Runtime target commit (`main`) | `12bee8c7ef9e78be6c4d39c2bee6f99177afca1f` |
+| Validated runtime tree | `064599732156817a7600e85d8c3dd4d23906803c` |
+| Validated PR exact head | `0e7bd554bec3f7fe589a832aaee4a595c64be843` |
 | Finance Core version/tag | `pre-release / not tagged` |
 | ezBookkeeping version | `1.6.1` |
 | PostgreSQL major | `18` |
@@ -33,41 +34,42 @@
 
 ## A. CI / Reproducible Gates
 
-本节当前应用/安全边界自动化证据来自 PR #33 exact head `7f01fd69b00312830b7dedabd235a1b0141b1896`。该 exact head 的 CI、MCP Security、Edge Security、OpenClaw Release Acceptance（含 Real OpenClaw）全部 PASS 后，以 exact-head guard 合并为 `main` runtime target `cbfba3268a9c747d874d84845910dca1f2c5657d`。
+本节当前应用/安全/运维边界自动化证据来自 PR #35 exact head `0e7bd554bec3f7fe589a832aaee4a595c64be843`。该 exact head 的 CI、MCP Security、Edge Security、OpenClaw Release Acceptance（含 Real OpenClaw）全部 PASS 后，以 exact-head guard 合并为 `main` runtime target `12bee8c7ef9e78be6c4d39c2bee6f99177afca1f`。
 
-PR #33 未触发 path-scoped Runtime Images Security，因为它没有修改 Dockerfile、Compose、Caddy、依赖或 runtime-image 定义；未变化的 runtime-image surface 继续引用 PR #31 exact-head build + real-container smoke 证据。
+PR #35 未触发 path-scoped Runtime Images Security，因为它没有修改 Dockerfile、Compose、Caddy、依赖或 runtime-image 定义；未变化的 runtime-image surface 继续引用 PR #31 exact-head build + real-container smoke 证据。
 
-- CI `32502408867`: PASS
-- MCP Security `32502409066`: PASS
-- Edge Security `32502408730`: PASS
-- OpenClaw Release Acceptance `32502408707`: PASS — static contracts + Real OpenClaw acceptance
+- CI `32646849476`: PASS
+- MCP Security `32646849464`: PASS
+- Edge Security `32646849457`: PASS
+- OpenClaw Release Acceptance `32646849461`: PASS — static contracts + Real OpenClaw acceptance
 - Runtime Images Security `32470278120`: PASS — PR #31 unchanged runtime-image surface; hardened third-party runtime build + real-container smoke only
 
 | Gate | Status | Evidence |
 |---|---|---|
-| migration up/down/up | PASS | CI `32502408867` / `make verify` |
-| sqlc generated source clean | PASS | CI `32502408867` / `make verify` |
-| gofmt / go vet / go test | PASS | CI `32502408867` / `make verify` |
-| govulncheck (first-party Go dependency/code gate) | PASS | CI `32502408867` / `make verify` |
-| PostgreSQL + domain integrations | PASS | CI `32502408867` / `make verify` |
-| scheduler restart/idempotency integration | PASS | CI `32502408867` / `make verify` automated integration |
-| backup restore drill | PASS | CI `32502408867` / disposable restore drill; **not** real off-host recovery |
-| go race | PASS | CI `32502408867` / `make verify` |
-| Go binary build | PASS | CI `32502408867` / `make verify` |
-| frontend npm ci + unit | PASS | CI `32502408867` / `make verify` |
-| PWA contract + typecheck + build | PASS | CI `32502408867` / `make verify` |
-| Finance Core container build | PASS | CI `32502408867` / `make verify` |
-| production operations contract | PASS | CI `32502408867` / `make verify` |
-| third-party hardened runtime build + smoke | PASS | Runtime Images Security `32470278120`; PR #33 did not change this surface |
+| migration up/down/up | PASS | CI `32646849476` / `make verify` |
+| sqlc generated source clean | PASS | CI `32646849476` / `make verify` |
+| gofmt / go vet / go test | PASS | CI `32646849476` / `make verify` |
+| govulncheck (first-party Go dependency/code gate) | PASS | CI `32646849476` / `make verify` |
+| PostgreSQL + domain integrations | PASS | CI `32646849476` / `make verify` |
+| scheduler restart/idempotency integration | PASS | CI `32646849476` / `make verify` automated integration |
+| backup restore drill | PASS | CI `32646849476` / disposable restore drill; **not** real off-host recovery |
+| go race | PASS | CI `32646849476` / `make verify` |
+| Go binary build | PASS | CI `32646849476` / `make verify` |
+| frontend npm ci + unit | PASS | CI `32646849476` / `make verify` |
+| PWA contract + typecheck + build | PASS | CI `32646849476` / `make verify` |
+| Finance Core container build | PASS | CI `32646849476` / `make verify` |
+| production operations contract | PASS | CI `32646849476`; append-only producer / maintenance split and fail-closed configuration contracts included |
+| append-only off-site backup repository contract | PASS | PR #35 exact head; producer cannot run retention/prune/check, maintenance authority is separated, REST producer configuration is HTTPS/authenticated/fail-closed |
+| third-party hardened runtime build + smoke | PASS | Runtime Images Security `32470278120`; PR #35 did not change this surface |
 | public/third-party runtime image CVE scan | NOT RUN | Not mandatory by project policy. If a HIGH/CRITICAL vulnerability is nevertheless discovered and confirmed reachable, it remains release-blocking until handled |
-| edge exposure/security workflow | PASS | Edge Security `32502408730` |
-| MCP security workflow | PASS | MCP Security `32502409066` |
-| Real OpenClaw ephemeral acceptance | PASS | OpenClaw `32502408707`; static acceptance contracts + real Ollama/OpenClaw/MCP run completed successfully |
-| Finance API cross-origin unsafe-method protection | PASS | PR #33 exact head; POST/PUT/PATCH/DELETE shared request boundary; RED→GREEN regression coverage in CI `32502408867` |
-| external LLM plaintext transport rejection | PASS | PR #33 exact head; external `http://` rejected, only IP-literal loopback HTTP permitted |
-| LLM HTTPS→HTTP redirect downgrade protection | PASS | PR #33 exact head; redirect policy enforced per request, including caller-supplied client; RED→GREEN regression coverage in CI `32502408867` |
+| edge exposure/security workflow | PASS | Edge Security `32646849457` |
+| MCP security workflow | PASS | MCP Security `32646849464` |
+| Real OpenClaw ephemeral acceptance | PASS | OpenClaw `32646849461`; static acceptance contracts + real Ollama/OpenClaw/MCP run completed successfully |
+| Finance API cross-origin unsafe-method protection | PASS | PR #33 control retained in current tree; current exact-head CI/Edge gates revalidated the integrated runtime |
+| external LLM plaintext transport rejection | PASS | PR #33 control retained in current tree; external `http://` remains rejected except IP-literal loopback |
+| LLM HTTPS→HTTP redirect downgrade protection | PASS | PR #33 control retained in current tree; redirect transport policy remains enforced |
 
-Automated PASS proves the repository-defined contracts on the exact validated runtime tree. It does **not** replace the real production host, real ledger, off-host disaster recovery, real external Advisor provider, or real-phone acceptance below。
+Automated PASS proves the repository-defined contracts on the exact validated runtime tree. It does **not** replace the real production host, real ledger, real append-only backup service, off-host disaster recovery, real external Advisor provider, or real-phone acceptance below。
 
 ## B. Real Ledger / Complete Month
 
@@ -108,14 +110,16 @@ Automated PASS proves the repository-defined contracts on the exact validated ru
 
 | Gate | Status | Evidence / Notes |
 |---|---|---|
+| Repository-side append-only recovery boundary | PASS | PR #35 / current runtime tree enforces separate producer and maintenance authority; this is repository evidence only, not proof of real backup-host deployment |
 | Real production backup created | NOT RUN | Backup timestamp and SHA256SUMS hash |
-| Restic off-site snapshot created | NOT RUN | Snapshot ID only |
+| Authenticated append-only REST off-site snapshot created | NOT RUN | Snapshot ID only; producer must use `rest:https://...` |
+| Producer credential cannot delete/overwrite existing recovery points | NOT RUN | Record destructive-operation rejection from the real production producer credential; no secret or raw repository contents |
+| Authorized maintenance retention/prune authority verified | NOT RUN | Run from independent backup/maintenance host; record sanitized dry-run/result only |
 | `restic check` passed | NOT RUN | Run from an authorized maintenance/recovery context; timestamp + sanitized result |
-| Off-host restore from real snapshot | NOT RUN | Restore host identifier redacted |
+| Off-host restore from real snapshot | NOT RUN | Restore host/environment identifier redacted |
 | Restored ezBookkeeping/Finance Core healthy | NOT RUN | health/readiness result |
 | Restored key data sampled | NOT RUN | counts/ranges/hashes only |
 | RTO recorded | NOT RUN | Duration |
-| Production host cannot destroy all off-site recovery points | NOT RUN | Require separated destructive retention/prune authority or equivalent immutable/append-only recovery boundary; production-host compromise must not be sufficient to delete every recovery point |
 
 ## F. Scheduler Restart
 
@@ -140,13 +144,14 @@ Automated PASS proves the repository-defined contracts on the exact validated ru
 
 | Gate | Status | Evidence / Notes |
 |---|---|---|
-| Production acceptance tracker exists | PASS | GitHub Issue #26, updated to current runtime target `cbfba3268a9c747d874d84845910dca1f2c5657d` |
+| Production acceptance tracker exists | PASS | GitHub Issue #26; governance refresh updates it to runtime target `12bee8c7ef9e78be6c4d39c2bee6f99177afca1f` |
 | Repository license selected | PASS | MIT; PR #27 merged |
-| Runtime-image hardening | PASS | PR #31 merged exact validated head `bec6d2354f72c319f3fadb40a5732ed7c841c638`; unchanged by PR #33 |
-| Runtime security remediation | PASS | PR #33 merged exact validated head `7f01fd69b00312830b7dedabd235a1b0141b1896` as `cbfba3268a9c747d874d84845910dca1f2c5657d` after RED→GREEN tests, required checks and resolved review findings |
+| Runtime-image hardening | PASS | PR #31 merged exact validated head `bec6d2354f72c319f3fadb40a5732ed7c841c638`; unchanged by PR #35 |
+| Runtime security remediation | PASS | PR #33 controls remain integrated; current exact-head CI/MCP/Edge/OpenClaw gates revalidated the current runtime tree |
+| Append-only off-site backup boundary | PASS | PR #35 merged exact validated head `0e7bd554bec3f7fe589a832aaee4a595c64be843` as `12bee8c7ef9e78be6c4d39c2bee6f99177afca1f` after RED→GREEN tests, required checks, Real OpenClaw acceptance and resolved review findings |
 | `main` branch protection / ruleset | PASS | Repository Ruleset active; GitHub API reports `main` as `protected: true` |
-| Repository hygiene | PASS | Runtime/spike PR count is 0 and stale runtime/work/spike branches were removed. Evidence-only governance PR/branches are transient and removed after merge |
-| Final first-party repository/security review | PASS | Repository-wide security review + PR #33 remediation/review follow-up; no unresolved review thread; exact-head CI/MCP/Edge/OpenClaw gates PASS |
+| Repository hygiene | PASS | Runtime/spike PR count is 0 after #35 merge; evidence-only governance PR/branch is transient and removed after merge |
+| Final first-party repository/security review | PASS | Repository-wide review chain through PR #35; no unresolved review thread on exact validated head; CI/MCP/Edge/OpenClaw gates PASS |
 | Known high-severity reachable vulnerabilities | PASS | No unresolved known reachable HIGH/CRITICAL finding is carried in the current release ledger; if one becomes known through any source, release returns to BLOCKED until handled |
 
 ## Final Decision
