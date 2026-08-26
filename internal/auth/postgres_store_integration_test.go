@@ -73,7 +73,8 @@ func TestPostgresAuthStoreChallengeSessionAndRecoveryLifecycleIntegration(t *tes
 	csrfHash := sha256.Sum256([]byte("csrf-token-" + suffix))
 	if err := authStore.CreateSession(ctx, SessionRecord{
 		TokenHash: sessionHash[:], UserID: user.ID, CSRFTokenHash: csrfHash[:],
-		CreatedAt: now, LastSeenAt: now, ExpiresAt: now.Add(12 * time.Hour),
+		CSRFTokenCiphertext: make([]byte, 28),
+		CreatedAt:           now, LastSeenAt: now, ExpiresAt: now.Add(12 * time.Hour),
 	}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}

@@ -28,7 +28,7 @@ func TestPasswordHashRoundTrip(t *testing.T) {
 }
 
 func TestPasswordPolicy(t *testing.T) {
-	if _, err := HashPassword("short-password"); err == nil {
+	if _, err := HashPassword("short-passwor"); err == nil {
 		t.Fatal("HashPassword accepted fewer than 14 Unicode characters")
 	}
 	long := strings.Repeat("密", 43) // 129 UTF-8 bytes.

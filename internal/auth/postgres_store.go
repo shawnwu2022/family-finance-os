@@ -51,12 +51,13 @@ type ChallengeRecord struct {
 }
 
 type SessionRecord struct {
-	TokenHash     []byte
-	UserID        int64
-	CSRFTokenHash []byte
-	CreatedAt     time.Time
-	LastSeenAt    time.Time
-	ExpiresAt     time.Time
+	TokenHash           []byte
+	UserID              int64
+	CSRFTokenHash       []byte
+	CSRFTokenCiphertext []byte
+	CreatedAt           time.Time
+	LastSeenAt          time.Time
+	ExpiresAt           time.Time
 }
 
 type SessionView struct {
@@ -201,7 +202,8 @@ func (s *PostgresStore) GetSession(ctx context.Context, tokenHash []byte, now ti
 	var session SessionView
 	err := s.pool.QueryRow(ctx, `
 		SELECT
-			s.token_hash, s.user_id, s.csrf_token_hash, s.created_at, s.last_seen_at, s.expires_at,
+			s.token_hash, s.user_id, s.csrf_token_hash, s.csrf_token_ciphertext,
+			s.created_at, s.last_seen_at, s.expires_at,
 			u.username, u.household_id
 		FROM auth_sessions s
 		JOIN auth_users u ON u.id = s.user_id
@@ -213,6 +215,7 @@ func (s *PostgresStore) GetSession(ctx context.Context, tokenHash []byte, now ti
 		&session.TokenHash,
 		&session.UserID,
 		&session.CSRFTokenHash,
+		&session.CSRFTokenCiphertext,
 		&session.CreatedAt,
 		&session.LastSeenAt,
 		&session.ExpiresAt,
@@ -553,10 +556,11 @@ type sessionExecutor interface {
 func insertSession(ctx context.Context, executor sessionExecutor, session SessionRecord) error {
 	_, err := executor.Exec(ctx, `
 		INSERT INTO auth_sessions (
-			token_hash, user_id, csrf_token_hash, created_at, last_seen_at, expires_at
+			token_hash, user_id, csrf_token_hash, csrf_token_ciphertext,
+			created_at, last_seen_at, expires_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, session.TokenHash, session.UserID, session.CSRFTokenHash, session.CreatedAt, session.LastSeenAt, session.ExpiresAt)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, session.TokenHash, session.UserID, session.CSRFTokenHash, session.CSRFTokenCiphertext, session.CreatedAt, session.LastSeenAt, session.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("create auth session: %w", err)
 	}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestTOTPWindowAndReplayCounter(t *testing.T) {
-	const secret = "JBSWY3DPEHPK3PXP"
+	const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 	at := time.Unix(1_700_000_000, 0).UTC()
 	code, counter, err := TOTPCode(secret, at)
 	if err != nil {

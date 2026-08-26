@@ -70,14 +70,15 @@ type AuthRecoveryCode struct {
 }
 
 type AuthSession struct {
-	ID            int64              `json:"id"`
-	TokenHash     []byte             `json:"token_hash"`
-	UserID        int64              `json:"user_id"`
-	CsrfTokenHash []byte             `json:"csrf_token_hash"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	LastSeenAt    pgtype.Timestamptz `json:"last_seen_at"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	RevokedAt     pgtype.Timestamptz `json:"revoked_at"`
+	ID                  int64              `json:"id"`
+	TokenHash           []byte             `json:"token_hash"`
+	UserID              int64              `json:"user_id"`
+	CsrfTokenHash       []byte             `json:"csrf_token_hash"`
+	CsrfTokenCiphertext []byte             `json:"csrf_token_ciphertext"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	LastSeenAt          pgtype.Timestamptz `json:"last_seen_at"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt           pgtype.Timestamptz `json:"revoked_at"`
 }
 
 type AuthUser struct {
@@ -163,7 +164,7 @@ type FinancialGoal struct {
 	Flexibility              string             `json:"flexibility"`
 	MonthlyContributionMinor int64              `json:"monthly_contribution_minor"`
 	Currency                 string             `json:"currency"`
-	Active                   bool               `json:"active"`
+	Active                    bool               `json:"active"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }

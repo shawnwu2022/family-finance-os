@@ -33,12 +33,14 @@ CREATE TABLE auth_sessions (
     token_hash BYTEA NOT NULL UNIQUE,
     user_id BIGINT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
     csrf_token_hash BYTEA NOT NULL,
+    csrf_token_ciphertext BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     last_seen_at TIMESTAMPTZ NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     revoked_at TIMESTAMPTZ,
     CHECK (octet_length(token_hash) = 32),
     CHECK (octet_length(csrf_token_hash) = 32),
+    CHECK (octet_length(csrf_token_ciphertext) >= 28),
     CHECK (last_seen_at >= created_at),
     CHECK (expires_at > created_at)
 );
