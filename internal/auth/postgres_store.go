@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -545,17 +546,11 @@ func consumeLoginChallenge(ctx context.Context, tx pgx.Tx, tokenHash []byte, now
 	return userID, nil
 }
 
-type sessionInserter interface {
-	Exec(context.Context, string, ...any) (pgconnCommandTag, error)
+type sessionExecutor interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }
 
-type pgconnCommandTag interface {
-	RowsAffected() int64
-}
-
-func insertSession(ctx context.Context, executor interface {
-	Exec(context.Context, string, ...any) (pgconnCommandTag, error)
-}, session SessionRecord) error {
+func insertSession(ctx context.Context, executor sessionExecutor, session SessionRecord) error {
 	_, err := executor.Exec(ctx, `
 		INSERT INTO auth_sessions (
 			token_hash, user_id, csrf_token_hash, created_at, last_seen_at, expires_at
