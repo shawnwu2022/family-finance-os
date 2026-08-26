@@ -54,6 +54,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 	if mux == nil || auth == nil {
 		return
 	}
+	loginLimiter := newLoginThrottle(5, 5*time.Minute, 4096)
 
 	mux.HandleFunc("GET /api/v1/auth/session", func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(SessionCookieName)
@@ -80,19 +81,25 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 			return
 		}
 		request.Username = strings.TrimSpace(request.Username)
-		if request.Username == "" || request.Password == "" {
-			writeAPIError(w, http.StatusUnauthorized, "invalid_credentials", "invalid credentials")
+		normalizedUsername := strings.ToLower(request.Username)
+		remoteHost := loginRemoteHost(r.RemoteAddr)
+		now := time.Now().UTC()
+		if !loginLimiter.Allow(remoteHost, normalizedUsername, now) {
+			w.Header().Set("Retry-After", "300")
+			writeAPIError(w, http.StatusTooManyRequests, "rate_limited", "too many authentication attempts")
 			return
 		}
-		result, err := auth.BeginLogin(r.Context(), request.Username, request.Password, time.Now().UTC())
+		result, err := auth.BeginLogin(r.Context(), request.Username, request.Password, now)
 		if err != nil {
 			if errors.Is(err, financeauth.ErrInvalidCredentials) {
+				loginLimiter.RecordFailure(remoteHost, normalizedUsername, now)
 				writeAPIError(w, http.StatusUnauthorized, "invalid_credentials", "invalid credentials")
 				return
 			}
 			writeAPIError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 			return
 		}
+		loginLimiter.RecordSuccess(remoteHost, normalizedUsername)
 		writeJSON(w, http.StatusOK, authLoginResponse{
 			Challenge:  result.ChallengeToken,
 			Step:       result.Step,
