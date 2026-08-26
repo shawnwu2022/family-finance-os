@@ -14,6 +14,8 @@ import (
 
 const SessionCookieName = "__Host-finance_session"
 
+// BrowserAuth is the application-owned browser authentication boundary. MCP
+// authentication remains a separate bearer-token path and does not implement it.
 type BrowserAuth interface {
 	BeginLogin(context.Context, string, string, time.Time) (financeauth.LoginResult, error)
 	ConfirmEnrollment(context.Context, string, string, time.Time) (financeauth.SessionIssue, error)
