@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shawnwu2022/family-finance-os/internal/requestscope"
 )
 
 const maxAPIRequestBytes = 1 << 20
@@ -169,9 +171,10 @@ type FinanceAPI interface {
 }
 
 type handlerConfig struct {
-	api FinanceAPI
-	web http.Handler
-	mcp http.Handler
+	api  FinanceAPI
+	web  http.Handler
+	mcp  http.Handler
+	auth BrowserAuth
 }
 
 type HandlerOption func(*handlerConfig)
@@ -182,6 +185,9 @@ func WithWeb(handler http.Handler) HandlerOption {
 }
 func WithMCP(handler http.Handler) HandlerOption {
 	return func(cfg *handlerConfig) { cfg.mcp = handler }
+}
+func WithBrowserAuth(auth BrowserAuth) HandlerOption {
+	return func(cfg *handlerConfig) { cfg.auth = auth }
 }
 
 func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
@@ -254,7 +260,12 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 			return
 		}
 		request.Kind = strings.TrimSpace(request.Kind)
-		if request.HouseholdID <= 0 || request.Kind == "" || len(request.Input) == 0 || !json.Valid(request.Input) {
+		householdID, ok := resolveBodyHouseholdID(w, r.Context(), request.HouseholdID)
+		if !ok {
+			return
+		}
+		request.HouseholdID = householdID
+		if request.Kind == "" || len(request.Input) == 0 || !json.Valid(request.Input) {
 			writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid request")
 			return
 		}
@@ -267,7 +278,12 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 			return
 		}
 		request.Question = strings.TrimSpace(request.Question)
-		if request.HouseholdID <= 0 || request.Question == "" || len(request.Question) > 8192 {
+		householdID, ok := resolveBodyHouseholdID(w, r.Context(), request.HouseholdID)
+		if !ok {
+			return
+		}
+		request.HouseholdID = householdID
+		if request.Question == "" || len(request.Question) > 8192 {
 			writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid request")
 			return
 		}
@@ -285,13 +301,48 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 }
 
 func parseHouseholdID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	raw := strings.TrimSpace(r.URL.Query().Get("household_id"))
-	value, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || value <= 0 {
+	if r == nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return 0, false
+	}
+	if scoped, ok := requestscope.HouseholdID(r.Context()); ok {
+		if !r.URL.Query().Has("household_id") {
+			return scoped, true
+		}
+		value, valid := parsePositiveHouseholdID(r.URL.Query().Get("household_id"))
+		if !valid || value != scoped {
+			writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+			return 0, false
+		}
+		return scoped, true
+	}
+
+	value, ok := parsePositiveHouseholdID(r.URL.Query().Get("household_id"))
+	if !ok {
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid request")
 		return 0, false
 	}
 	return value, true
+}
+
+func resolveBodyHouseholdID(w http.ResponseWriter, ctx context.Context, provided int64) (int64, bool) {
+	if scoped, ok := requestscope.HouseholdID(ctx); ok {
+		if provided != 0 && provided != scoped {
+			writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+			return 0, false
+		}
+		return scoped, true
+	}
+	if provided <= 0 {
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+		return 0, false
+	}
+	return provided, true
+}
+
+func parsePositiveHouseholdID(raw string) (int64, bool) {
+	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	return value, err == nil && value > 0
 }
 
 func parsePeriod(w http.ResponseWriter, raw string) (string, bool) {
