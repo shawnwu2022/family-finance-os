@@ -110,11 +110,11 @@ func authIntegrationDatabaseConfig(t *testing.T) config.DatabaseConfig {
 		t.Fatalf("TEST_POSTGRES_PORT: %v", err)
 	}
 	return config.DatabaseConfig{
-		Host: host,
-		Port: uint16(port),
-		Name: os.Getenv("TEST_POSTGRES_DB"),
-		User: os.Getenv("TEST_POSTGRES_USER"),
+		Host:     host,
+		Port:     uint16(port),
+		Name:     os.Getenv("TEST_POSTGRES_DB"),
+		User:     os.Getenv("TEST_POSTGRES_USER"),
 		Password: os.Getenv("TEST_POSTGRES_PASSWORD"),
-		SSLMode: "disable",
+		SSLMode:  "disable",
 	}
 }
