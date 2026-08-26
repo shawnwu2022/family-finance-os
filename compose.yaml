@@ -93,6 +93,10 @@ services:
     environment:
       <<: *finance-database-environment
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+      FINANCE_ADMIN_USERNAME: ${FINANCE_ADMIN_USERNAME:-finance}
+      FINANCE_ADMIN_PASSWORD_FILE: ${FINANCE_ADMIN_PASSWORD_FILE:-/run/secrets/finance-admin-password}
+    volumes:
+      - ./secrets:/run/secrets:ro
     networks: [app]
 
   finance-core:
@@ -125,6 +129,7 @@ services:
       MCP_MAX_CONCURRENT: ${MCP_MAX_CONCURRENT:-4}
       MCP_REQUESTS_PER_MINUTE: ${MCP_REQUESTS_PER_MINUTE:-60}
       MCP_MAX_BODY_BYTES: ${MCP_MAX_BODY_BYTES:-262144}
+      FINANCE_AUTH_KEY_FILE: ${FINANCE_AUTH_KEY_FILE:-/run/secrets/finance-auth-key}
       FINANCE_LISTEN_ADDR: ${FINANCE_LISTEN_ADDR:-:8000}
       FINANCE_HEALTHCHECK_URL: ${FINANCE_HEALTHCHECK_URL:-http://127.0.0.1:8000/healthz}
     volumes:

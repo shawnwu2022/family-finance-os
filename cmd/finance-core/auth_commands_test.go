@@ -24,7 +24,7 @@ func TestRunAuthMaintenanceCommandsUseSecretFileAndDatabaseConfig(t *testing.T) 
 	var resetTOTPUsername string
 	handlers := databaseCommandHandlers{
 		migrate: func(context.Context, config.DatabaseConfig) error { return nil },
-		bootstrap: func(context.Context, config.DatabaseConfig, bootstrap.Input) (bootstrap.Result, error) {
+		bootstrap: func(context.Context, config.DatabaseConfig, bootstrap.Input, bootstrap.AdminInput) (bootstrap.Result, error) {
 			return bootstrap.Result{}, nil
 		},
 		resetPassword: func(_ context.Context, cfg config.DatabaseConfig, username string, password []byte) error {
@@ -63,7 +63,7 @@ func TestRunAuthMaintenanceCommandsUseSecretFileAndDatabaseConfig(t *testing.T) 
 	}
 }
 
-func TestReadRequiredSecretFileRejectsEmptyDirectoryAndOversized(t *testing.T) {
+func TestReadRequiredSecretFileRejectsEmptyDirectoryOversizedAndPermissive(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	empty := filepath.Join(dir, "empty")
@@ -82,5 +82,12 @@ func TestReadRequiredSecretFileRejectsEmptyDirectoryAndOversized(t *testing.T) {
 	}
 	if _, err := readRequiredSecretFile(over, 128); err == nil {
 		t.Fatal("readRequiredSecretFile accepted oversized secret")
+	}
+	permissive := filepath.Join(dir, "permissive")
+	if err := os.WriteFile(permissive, []byte("correct horse battery staple"), 0o644); err != nil {
+		t.Fatalf("write permissive file: %v", err)
+	}
+	if _, err := readRequiredSecretFile(permissive, 128); err == nil {
+		t.Fatal("readRequiredSecretFile accepted group/other-readable secret")
 	}
 }
