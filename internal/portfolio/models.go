@@ -47,10 +47,11 @@ type Valuation struct {
 }
 
 type SummaryInput struct {
-	ReportingCurrency string
-	AsOf              time.Time
-	FXStaleAfter      time.Duration
-	Valuations        []Valuation
+	ReportingCurrency   string
+	AsOf                time.Time
+	ValuationStaleAfter time.Duration
+	FXStaleAfter        time.Duration
+	Valuations          []Valuation
 }
 
 type Allocation struct {
@@ -61,8 +62,9 @@ type Allocation struct {
 type WarningCode string
 
 const (
-	WarningFXMissing WarningCode = "fx_missing"
-	WarningFXStale   WarningCode = "fx_stale"
+	WarningFXMissing      WarningCode = "fx_missing"
+	WarningFXStale        WarningCode = "fx_stale"
+	WarningValuationStale WarningCode = "valuation_stale"
 )
 
 type Warning struct {

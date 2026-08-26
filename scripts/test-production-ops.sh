@@ -11,6 +11,7 @@ restore="scripts/restore-drill.sh"
 preflight="scripts/preflight.sh"
 edge="scripts/check-edge-security.sh"
 operations="docs/07-operations.md"
+compose="compose.yaml"
 live_smoke="scripts/acceptance/ezbookkeeping-live-smoke.sh"
 openclaw_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
 ollama_schema_contract="scripts/acceptance/test-ollama-schema-probe.sh"
@@ -22,6 +23,18 @@ for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw
   bash -n "$script" || fail "shell syntax is invalid: $script"
 done
 [[ -f "$operations" ]] || fail "operations guide is missing"
+[[ -f "$compose" ]] || fail "production Compose file is missing"
+
+grep -Eq '^  finance-migrate:$' "$compose" || fail "Compose must define a finance-migrate job"
+grep -Eq '^  finance-bootstrap:$' "$compose" || fail "Compose must define a finance-bootstrap job"
+grep -Fq 'condition: service_completed_successfully' "$compose" || fail "finance-core startup must be gated by successful initialization jobs"
+grep -Fq 'command: ["migrate"]' "$compose" || fail "finance-migrate must execute the embedded migration command"
+grep -Fq -- '- bootstrap' "$compose" || fail "finance-bootstrap must execute the idempotent bootstrap command"
+grep -Fq 'COPY infra/postgres/init/ /docker-entrypoint-initdb.d/' Dockerfile.postgres \
+  || fail "PostgreSQL init scripts must be embedded in the image"
+if grep -Fq './infra/postgres/init:/docker-entrypoint-initdb.d' "$compose"; then
+  fail "PostgreSQL init scripts must not depend on host checkout line endings"
+fi
 
 grep -Fq 'pg_dump' "$backup" || fail "backup must invoke pg_dump"
 grep -Fq -- '-Fc' "$backup" || fail "backup must use PostgreSQL custom format"

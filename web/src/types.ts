@@ -80,6 +80,7 @@ export interface GoalResponse {
   flexibility: string
   monthly_contribution: MoneyDTO
   required_monthly: MoneyDTO
+  capacity_shortfall: MoneyDTO
   status: string
 }
 

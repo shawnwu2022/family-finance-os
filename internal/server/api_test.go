@@ -58,6 +58,29 @@ func TestFinanceAPIOverviewContract(t *testing.T) {
 	}
 }
 
+func TestFinanceAPIDashboardContract(t *testing.T) {
+	fake := &fakeFinanceAPI{dashboard: DashboardResponse{Cashflow: CashflowResponse{Period: "2026-08"}}}
+	handler := NewHandler(WithAPI(fake))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard?household_id=42&period=2026-08", nil)
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", resp.Code, resp.Body.String())
+	}
+	if fake.dashboardHouseholdID != 42 || fake.dashboardPeriod != "2026-08" {
+		t.Fatalf("dashboard query = household %d period %q", fake.dashboardHouseholdID, fake.dashboardPeriod)
+	}
+	var got DashboardResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode dashboard: %v", err)
+	}
+	if got.Cashflow.Period != "2026-08" {
+		t.Fatalf("dashboard response = %#v", got)
+	}
+}
+
 func TestFinanceAPIRejectsInvalidQueryBeforeBackend(t *testing.T) {
 	fake := &fakeFinanceAPI{}
 	handler := NewHandler(WithAPI(fake))
@@ -138,14 +161,24 @@ func TestFinanceAPIDoesNotLeakBackendErrors(t *testing.T) {
 }
 
 type fakeFinanceAPI struct {
-	calls               int
-	overview            OverviewResponse
-	overviewErr         error
-	overviewHouseholdID int64
-	scenario            ScenarioResponse
-	scenarioRequest     ScenarioRequest
-	advisor             AdvisorResponse
-	advisorRequest      AdvisorRequest
+	calls                int
+	overview             OverviewResponse
+	overviewErr          error
+	overviewHouseholdID  int64
+	scenario             ScenarioResponse
+	scenarioRequest      ScenarioRequest
+	advisor              AdvisorResponse
+	advisorRequest       AdvisorRequest
+	dashboard            DashboardResponse
+	dashboardHouseholdID int64
+	dashboardPeriod      string
+}
+
+func (f *fakeFinanceAPI) Dashboard(_ context.Context, householdID int64, period string) (DashboardResponse, error) {
+	f.calls++
+	f.dashboardHouseholdID = householdID
+	f.dashboardPeriod = period
+	return f.dashboard, nil
 }
 
 func (f *fakeFinanceAPI) Overview(_ context.Context, householdID int64) (OverviewResponse, error) {

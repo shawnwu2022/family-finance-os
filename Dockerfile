@@ -12,6 +12,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
+COPY db ./db
 COPY internal ./internal
 COPY pkg ./pkg
 COPY --from=web-build /src/web/dist ./internal/webassets/dist

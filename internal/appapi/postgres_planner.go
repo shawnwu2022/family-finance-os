@@ -85,6 +85,7 @@ func (p *PostgresPlanner) Debts(ctx context.Context, householdID int64) ([]DebtS
 			ScheduledPayment:    money.Money{Minor: row.ScheduledPaymentMinor, Currency: row.Currency},
 			TermRemainingMonths: row.TermRemainingMonths,
 			DueDay:              row.DueDay,
+			SourceAccountRef:    row.SourceAccountRef.String,
 			Active:              true,
 		})
 	}

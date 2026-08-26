@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/shawnwu2022/family-finance-os/internal/ledger"
 )
@@ -49,6 +50,32 @@ func TestClientListAccountsNormalizesAndFlattensHierarchy(t *testing.T) {
 	card := findAccount(t, accounts, "200")
 	if card.Category != ledger.AccountCategoryCreditCard || !card.IsLiability || card.IsAsset {
 		t.Fatalf("credit card normalized incorrectly: %#v", card)
+	}
+}
+
+func TestClientListTransactionsSendsExclusiveTimeBounds(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertRequestHeaders(t, r)
+		if got := r.URL.Query().Get("min_time"); got != "1698768000000" {
+			t.Fatalf("min_time = %q, want 1698768000000", got)
+		}
+		if got := r.URL.Query().Get("max_time"); got != "1701446399999" {
+			t.Fatalf("max_time = %q, want 1701446399999", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"result":{"items":[],"nextTimeSequenceId":0,"totalCount":0}}`))
+	}))
+	defer server.Close()
+
+	client := mustClient(t, server.URL+"/api/v1", server.Client())
+	_, err := client.ListTransactions(context.Background(), ledger.TransactionQuery{
+		Start: time.Unix(1698768000, 0).UTC(),
+		End:   time.Unix(1701446400, 0).UTC(),
+	})
+	if err != nil {
+		t.Fatalf("ListTransactions: %v", err)
 	}
 }
 

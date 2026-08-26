@@ -17,6 +17,7 @@ type Config struct {
 	Ledger     LedgerConfig
 	LLM        LLMConfig
 	MCP        MCPConfig
+	Portfolio  PortfolioConfig
 }
 
 type DatabaseConfig struct {
@@ -52,6 +53,11 @@ type MCPConfig struct {
 	MaxBodyBytes      int64
 }
 
+type PortfolioConfig struct {
+	ValuationStaleAfter time.Duration
+	FXStaleAfter        time.Duration
+}
+
 func Load(getenv func(string) string) (Config, error) {
 	if getenv == nil {
 		return Config{}, errors.New("getenv function is required")
@@ -78,6 +84,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	portfolioConfig, err := parsePortfolioConfig(getenv)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		ListenAddr: valueOrDefault(getenv("FINANCE_LISTEN_ADDR"), ":8000"),
@@ -94,8 +104,21 @@ func Load(getenv func(string) string) (Config, error) {
 			PlannerModel:  getenv("LLM_PLANNER_MODEL"),
 			ReviewerModel: getenv("LLM_REVIEWER_MODEL"),
 		},
-		MCP: mcp,
+		MCP:       mcp,
+		Portfolio: portfolioConfig,
 	}, nil
+}
+
+func parsePortfolioConfig(getenv func(string) string) (PortfolioConfig, error) {
+	valuationStaleAfter, err := parsePositiveDuration("PORTFOLIO_VALUATION_STALE_AFTER", valueOrDefault(getenv("PORTFOLIO_VALUATION_STALE_AFTER"), "720h"))
+	if err != nil {
+		return PortfolioConfig{}, err
+	}
+	fxStaleAfter, err := parsePositiveDuration("PORTFOLIO_FX_STALE_AFTER", valueOrDefault(getenv("PORTFOLIO_FX_STALE_AFTER"), "72h"))
+	if err != nil {
+		return PortfolioConfig{}, err
+	}
+	return PortfolioConfig{ValuationStaleAfter: valuationStaleAfter, FXStaleAfter: fxStaleAfter}, nil
 }
 
 func (c DatabaseConfig) URL() *url.URL {
@@ -200,6 +223,14 @@ func parsePositiveInt(key, raw string) (int, error) {
 	value, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || value <= 0 {
 		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return value, nil
+}
+
+func parsePositiveDuration(key, raw string) (time.Duration, error) {
+	value, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive duration", key)
 	}
 	return value, nil
 }

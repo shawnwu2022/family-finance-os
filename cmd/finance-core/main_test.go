@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/shawnwu2022/family-finance-os/internal/bootstrap"
+	"github.com/shawnwu2022/family-finance-os/internal/config"
 )
 
 func TestRunServeUsesDefaultListenAddress(t *testing.T) {
@@ -108,5 +112,45 @@ func TestCheckHealthRejectsUnhealthyStatus(t *testing.T) {
 
 	if err := checkHealth(context.Background(), ts.Client(), ts.URL); err == nil {
 		t.Fatal("checkHealth returned nil for 503")
+	}
+}
+
+func TestRunDatabaseCommandsUseRuntimeConfigAndBootstrapArguments(t *testing.T) {
+	t.Parallel()
+
+	var migrated config.DatabaseConfig
+	var bootstrapped bootstrap.Input
+	handlers := databaseCommandHandlers{
+		migrate: func(_ context.Context, cfg config.DatabaseConfig) error {
+			migrated = cfg
+			return nil
+		},
+		bootstrap: func(_ context.Context, _ config.DatabaseConfig, input bootstrap.Input) (bootstrap.Result, error) {
+			bootstrapped = input
+			return bootstrap.Result{HouseholdID: 7, BudgetPlanID: 9}, nil
+		},
+	}
+
+	if err := runWithCommands([]string{"migrate"}, validRuntimeGetenv(nil), nil, nil, nil, io.Discard, handlers); err != nil {
+		t.Fatalf("run migrate: %v", err)
+	}
+	if migrated.Name != "finance" || migrated.User != "finance_app" {
+		t.Fatalf("migration database config = %#v", migrated)
+	}
+
+	args := []string{
+		"bootstrap",
+		"--name", "家庭",
+		"--currency", "CNY",
+		"--timezone", "Asia/Shanghai",
+		"--period", "2026-08",
+		"--liquidity-floor-minor", "500000",
+	}
+	if err := runWithCommands(args, validRuntimeGetenv(nil), nil, nil, nil, io.Discard, handlers); err != nil {
+		t.Fatalf("run bootstrap: %v", err)
+	}
+	if bootstrapped.Name != "家庭" || bootstrapped.Currency != "CNY" || bootstrapped.Timezone != "Asia/Shanghai" ||
+		bootstrapped.Period != "2026-08" || bootstrapped.LiquidityFloorMinor != 500000 {
+		t.Fatalf("bootstrap input = %#v", bootstrapped)
 	}
 }

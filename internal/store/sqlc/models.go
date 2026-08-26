@@ -177,6 +177,19 @@ type JobRun struct {
 	ErrorCode    pgtype.Text        `json:"error_code"`
 }
 
+type MonthlyReport struct {
+	ID          int64              `json:"id"`
+	HouseholdID int64              `json:"household_id"`
+	Period      string             `json:"period"`
+	Kind        string             `json:"kind"`
+	DataAsOf    pgtype.Timestamptz `json:"data_as_of"`
+	GeneratedAt pgtype.Timestamptz `json:"generated_at"`
+	Quality     string             `json:"quality"`
+	ContentHash string             `json:"content_hash"`
+	Payload     []byte             `json:"payload"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type PortfolioAssetSnapshot struct {
 	HouseholdID      int64              `json:"household_id"`
 	AssetRef         string             `json:"asset_ref"`

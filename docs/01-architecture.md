@@ -18,6 +18,7 @@
 - 不使用 GORM 或大型 Web framework；
 - Money 使用 `int64` 最小货币单位，APR/FX/percentage 使用 `apd/v3` 精确十进制；
 - Vue/PWA 在实现阶段构建静态资源并优先 `go:embed` 到同一 Finance Core binary；
+- 月报是 PostgreSQL 中的不可变 JSONB 产物，按 household/period 唯一并保存 SHA-256 内容哈希；`job_runs` 只记录调度执行状态，不能充当报表存储；
 - Python 只属于后续可选 AI Worker，Rust 不属于 V1。
 
 ## 3. V1 容器网络

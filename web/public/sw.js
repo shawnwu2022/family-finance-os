@@ -1,4 +1,4 @@
-const CACHE_NAME = 'family-finance-shell-v1'
+const CACHE_NAME = 'family-finance-shell-v2'
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg']
 
 self.addEventListener('install', (event) => {
@@ -27,25 +27,42 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          const response = await fetch(request, { cache: 'no-store' })
+          if (response.ok && (response.type === 'basic' || response.type === 'default')) {
+            const cache = await caches.open(CACHE_NAME)
+            await cache.put('/', response.clone())
+          }
+          return response
+        } catch (error) {
+          const fallback = await caches.match('/')
+          if (fallback) return fallback
+          throw error
+        }
+      })(),
+    )
+    return
+  }
+
   event.respondWith(
     (async () => {
       const cached = await caches.match(request)
-      if (cached) return cached
-
-      try {
+      const update = (async () => {
         const response = await fetch(request)
-        if (response.ok && response.type === 'basic') {
+        if (response.ok && (response.type === 'basic' || response.type === 'default')) {
           const cache = await caches.open(CACHE_NAME)
           await cache.put(request, response.clone())
         }
         return response
-      } catch (error) {
-        if (request.mode === 'navigate') {
-          const fallback = await caches.match('/')
-          if (fallback) return fallback
-        }
-        throw error
+      })()
+      if (cached) {
+        event.waitUntil(update.catch(() => undefined))
+        return cached
       }
+      return update
     })(),
   )
 })

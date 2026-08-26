@@ -25,6 +25,10 @@ type scopedFinanceAPI struct {
 	next FinanceAPI
 }
 
+func (s scopedFinanceAPI) Dashboard(ctx context.Context, householdID int64, period string) (DashboardResponse, error) {
+	return s.next.Dashboard(ctx, householdID, period)
+}
+
 func (s scopedFinanceAPI) Overview(ctx context.Context, householdID int64) (OverviewResponse, error) {
 	return s.next.Overview(ctx, householdID)
 }

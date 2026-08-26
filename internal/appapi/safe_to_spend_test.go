@@ -74,3 +74,47 @@ func TestSafeToSpendReturnsExistingDeterministicComponents(t *testing.T) {
 		t.Fatalf("warnings=%#v", safe.Warnings)
 	}
 }
+
+func TestSafeToSpendDoesNotReserveDebtPaymentAfterItWasPaid(t *testing.T) {
+	now := time.Date(2026, 8, 17, 3, 30, 0, 0, time.UTC)
+	planner := fakePlanner{
+		profile: household.Profile{
+			Household: household.Household{ID: 42, Name: "测试家庭", BaseCurrency: "CNY", Timezone: "Asia/Shanghai"},
+			Policy:    household.HouseholdPolicy{HouseholdID: 42, LiquidityFloor: money.Money{Currency: "CNY"}},
+		},
+		plan: budget.BudgetPlan{
+			ID: 1, HouseholdID: 42, Period: "2026-08", Currency: "CNY",
+			Lines: []budget.BudgetLine{
+				{ID: 1, BudgetPlanID: 1, SemanticGroup: "monthly-debt", Planned: money.Money{Minor: 10_000, Currency: "CNY"}, Kind: budget.BudgetKindDebt},
+			},
+		},
+		debts: []DebtSnapshot{
+			{ID: 1, Name: "信用卡", Type: "credit_card", SourceAccountRef: "card", Balance: money.Money{Minor: 20_000, Currency: "CNY"}, RepaymentType: "revolving", MinimumPayment: money.Money{Minor: 5_000, Currency: "CNY"}, ScheduledPayment: money.Money{Minor: 10_000, Currency: "CNY"}, DueDay: 20},
+		},
+	}
+	destinationAmount := money.Money{Minor: 10_000, Currency: "CNY"}
+	book := fakeLedger{
+		accounts: []ledger.Account{
+			{ID: "checking", Category: ledger.AccountCategoryChecking, Structure: ledger.AccountStructureSingle, Balance: money.Money{Minor: 90_000, Currency: "CNY"}, IsAsset: true},
+			{ID: "card", Category: ledger.AccountCategoryCreditCard, Structure: ledger.AccountStructureSingle, Balance: money.Money{Minor: 20_000, Currency: "CNY"}, IsLiability: true},
+		},
+		transactions: []ledger.Transaction{
+			{ID: "repayment", Type: ledger.TransactionTypeTransfer, OccurredAt: time.Date(2026, 8, 10, 1, 0, 0, 0, time.UTC), SourceAccountID: "checking", DestinationAccountID: "card", SourceAmount: money.Money{Minor: 10_000, Currency: "CNY"}, DestinationAmount: &destinationAmount},
+		},
+	}
+	api, err := New(Dependencies{Ledger: book, Planner: planner, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	safe, err := api.SafeToSpend(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("SafeToSpend: %v", err)
+	}
+	if safe.Amount.Minor != 90_000 {
+		t.Fatalf("safe-to-spend = %d, want 90000", safe.Amount.Minor)
+	}
+	if safe.Components.UpcomingMandatoryExpenses.Minor != 0 || safe.Components.DebtCommitments.Minor != 0 {
+		t.Fatalf("paid debt remains reserved: %#v", safe.Components)
+	}
+}

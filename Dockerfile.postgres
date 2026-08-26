@@ -10,3 +10,6 @@ RUN apk upgrade --no-cache \
  && ! grep -R 'exec gosu postgres' /usr/local/bin/docker-*.sh \
  && rm -f /usr/local/bin/gosu \
  && su-exec nobody true
+COPY infra/postgres/init/ /docker-entrypoint-initdb.d/
+RUN find /docker-entrypoint-initdb.d -type f -name '*.sh' -exec sed -i 's/\r$//' {} + \
+ && chmod 0555 /docker-entrypoint-initdb.d/*.sh
