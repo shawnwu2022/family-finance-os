@@ -164,7 +164,7 @@ type FinancialGoal struct {
 	Flexibility              string             `json:"flexibility"`
 	MonthlyContributionMinor int64              `json:"monthly_contribution_minor"`
 	Currency                 string             `json:"currency"`
-	Active                    bool               `json:"active"`
+	Active                   bool               `json:"active"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
