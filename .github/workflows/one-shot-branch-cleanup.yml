@@ -1,7 +1,7 @@
 name: Finalize one-shot branch cleanup
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - reopened
@@ -30,6 +30,7 @@ jobs:
 
           api="https://api.github.com/repos/${GH_REPO}"
           previous_branch='chore/remove-one-shot-cleanup-32952786452'
+          trigger_fix_branch='chore/fix-final-cleanup-trigger'
           final_branch='chore/final-remove-one-shot-workflow'
 
           gh_curl() {
@@ -92,9 +93,10 @@ jobs:
           }
 
           delete_ref_if_present "$previous_branch"
+          delete_ref_if_present "$trigger_fix_branch"
           delete_ref_if_present "$final_branch"
 
-          for branch in "$previous_branch" "$final_branch"; do
+          for branch in "$previous_branch" "$trigger_fix_branch" "$final_branch"; do
             status="$(gh_curl \
               --output /tmp/verify-response.json \
               --write-out '%{http_code}' \
