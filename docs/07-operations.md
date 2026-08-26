@@ -45,18 +45,22 @@
 5. `mkdir -p data/ezbookkeeping-storage backups`；
 6. `sudo chown -R 1000:1000 data/ezbookkeeping-storage`；
 7. `docker compose up -d postgres ezbookkeeping caddy`；此时先保证 ezBookkeeping 可通过 HTTPS 访问。Finance 域在 finance-core 尚未启动时暂时不可用是正常的；
-8. 打开 ezBookkeeping，创建管理员并启用 2FA；
+8. 打开 ezBookkeeping，创建首个用户并启用 2FA；
 9. 在 ezBookkeeping 开启 API Token 后生成 Finance Core 专用 Token；
 10. 写入 `.env` 的 `EBK_API_TOKEN`；
-11. `docker compose up -d --build finance-core`；
-12. 访问 `https://<FINANCE_DOMAIN>/healthz`，应先出现 Caddy Basic Auth，认证后返回健康状态；再检查 `/readyz`；
-13. 在独立 backup host 上部署并初始化 append-only restic REST repository，见第 5 节；
-14. 在生产 VPS 配置 REST producer 凭据并再次执行 `./scripts/preflight.sh`；
-15. 执行第一次 `./scripts/backup.sh`；
-16. 从生产凭据验证 destructive operation 被拒绝；
-17. 在 backup host 执行 `restic check` 和 maintenance dry-run；
-18. 在独立恢复环境执行真实 snapshot restore；
-19. 把真实执行证据记录到 `docs/acceptance/v1-production-evidence.md`。
+11. 在 `.env` 中设置 `EBK_USER_ENABLE_REGISTER=false`，并执行 `docker compose up -d --force-recreate ezbookkeeping` 关闭公开注册；
+12. 在 `.env` 中确认 `FINANCE_BOOTSTRAP_NAME`、`FINANCE_BOOTSTRAP_CURRENCY`、`FINANCE_BOOTSTRAP_TIMEZONE` 和 `FINANCE_BOOTSTRAP_LIQUIDITY_FLOOR_MINOR`；
+13. `docker compose up --build finance-bootstrap`。Compose 会先用 PostgreSQL 镜像内嵌的初始化脚本创建应用数据库，再运行 `finance-migrate`；只有全部内嵌 goose migrations 成功后才运行幂等 bootstrap，任一任务失败都会阻止 Finance Core 启动；
+14. 查看 `docker compose logs finance-bootstrap` 并保存输出的 `household_id`；启用 MCP 时，`MCP_HOUSEHOLD_ID` 必须使用该值；
+15. `docker compose up -d finance-core`；该服务仍依赖已成功完成的 `finance-bootstrap`，直接执行 `docker compose up -d --build finance-core` 也不能绕过迁移/初始化链；
+16. 访问 `https://<FINANCE_DOMAIN>/healthz`，应先出现 Caddy Basic Auth，认证后返回健康状态；再检查 `/readyz`；
+17. 在独立 backup host 上部署并初始化 append-only restic REST repository，见第 5 节；
+18. 在生产 VPS 配置 REST producer 凭据并再次执行 `./scripts/preflight.sh`；
+19. 执行第一次 `./scripts/backup.sh`；
+20. 从生产凭据验证 destructive operation 被拒绝；
+21. 在 backup host 执行 `restic check` 和 maintenance dry-run；
+22. 在独立恢复环境执行真实 snapshot restore；
+23. 把真实执行证据记录到 `docs/acceptance/v1-production-evidence.md`。
 
 Caddy 不依赖 finance-core 启动，这是刻意设计的首次部署 bootstrap 边界：必须先能访问 ezBookkeeping 才能生成 `EBK_API_TOKEN`。Finance Core 仍只在内部 Docker network 上被 Caddy 反向代理，没有新增 host 端口。
 
@@ -471,7 +475,7 @@ CI 会用 disposable PostgreSQL 自动执行同一恢复脚本；这证明脚本
 
 ### Finance Core
 
-每次部署必须先通过 CI；数据库迁移使用 goose SQL migrations，迁移脚本进入 Git。
+每次部署必须先通过 CI；数据库迁移使用内嵌于 `finance-core` 的 goose SQL migrations，迁移脚本进入 Git。`finance-migrate → finance-bootstrap → finance-core` 是 Compose 的强制依赖链，升级时 `docker compose up -d --build` 会先重建并完成两个一次性任务，失败时不会启动新应用；不得用“应用启动正常”替代任务日志和迁移证据。
 
 ### rest-server / restic
 

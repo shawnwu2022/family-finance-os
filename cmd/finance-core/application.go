@@ -44,9 +44,11 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		return fail(fmt.Errorf("configure ezbookkeeping ledger: %w", err))
 	}
 	financeAPI, err := appapi.New(appapi.Dependencies{
-		Ledger:    ledgerClient,
-		Planner:   appapi.NewPostgresPlanner(pool),
-		Portfolio: portfolio.NewPostgresStore(pool),
+		Ledger:              ledgerClient,
+		Planner:             appapi.NewPostgresPlanner(pool),
+		Portfolio:           portfolio.NewPostgresStore(pool),
+		ValuationStaleAfter: cfg.Portfolio.ValuationStaleAfter,
+		FXStaleAfter:        cfg.Portfolio.FXStaleAfter,
 	})
 	if err != nil {
 		return fail(fmt.Errorf("configure finance API: %w", err))
@@ -89,7 +91,7 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 	if err := runStore.RecoverInterrupted(ctx, time.Now().UTC()); err != nil {
 		return fail(fmt.Errorf("recover interrupted scheduled jobs: %w", err))
 	}
-	reportingAPI, err := appapi.NewReportingAPI(financeAPI, runStore)
+	reportingAPI, err := appapi.NewReportingAPI(financeAPI, report.NewPostgresStore(pool))
 	if err != nil {
 		return fail(fmt.Errorf("configure reporting API: %w", err))
 	}

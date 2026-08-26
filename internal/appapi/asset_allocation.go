@@ -34,6 +34,8 @@ func (a *API) AssetAllocation(ctx context.Context, householdID int64) (server.As
 	valuations := make([]portfolio.Valuation, 0, len(snapshots)+len(accounts))
 	warnings := make([]string, 0)
 	partial := false
+	stale := false
+	dataAsOf := asOf
 	coveredAccounts := make(map[string]struct{}, len(snapshots))
 	for _, snapshot := range snapshots {
 		if snapshot.Value.Currency != currency {
@@ -50,6 +52,12 @@ func (a *API) AssetAllocation(ctx context.Context, householdID int64) (server.As
 			ValuationAsOf:  snapshot.ValuationAsOf,
 			FXAsOf:         snapshot.FXAsOf,
 		})
+		if snapshot.ValuationAsOf.Before(dataAsOf) {
+			dataAsOf = snapshot.ValuationAsOf
+		}
+		if snapshot.FXAsOf != nil && snapshot.FXAsOf.Before(dataAsOf) {
+			dataAsOf = *snapshot.FXAsOf
+		}
 		if snapshot.SourceAccountRef != "" {
 			coveredAccounts[snapshot.SourceAccountRef] = struct{}{}
 		}
@@ -87,15 +95,22 @@ func (a *API) AssetAllocation(ctx context.Context, householdID int64) (server.As
 	}
 
 	summary, err := portfolio.Summarize(portfolio.SummaryInput{
-		ReportingCurrency: currency,
-		AsOf:              asOf,
-		Valuations:        valuations,
+		ReportingCurrency:   currency,
+		AsOf:                asOf,
+		ValuationStaleAfter: a.valuationStaleAfter,
+		FXStaleAfter:        a.fxStaleAfter,
+		Valuations:          valuations,
 	})
 	if err != nil {
 		return server.AssetAllocationResponse{}, err
 	}
 	for _, warning := range summary.Warnings {
-		partial = true
+		switch warning.Code {
+		case portfolio.WarningValuationStale, portfolio.WarningFXStale:
+			stale = true
+		default:
+			partial = true
+		}
 		warnings = appendWarning(warnings, fmt.Sprintf("portfolio warning %s for valuation %s", warning.Code, warning.ValuationID))
 	}
 
@@ -121,9 +136,11 @@ func (a *API) AssetAllocation(ctx context.Context, householdID int64) (server.As
 	quality := "good"
 	if partial {
 		quality = "partial"
+	} else if stale {
+		quality = "stale"
 	}
 	return server.AssetAllocationResponse{
-		DataAsOf: asOf,
+		DataAsOf: dataAsOf,
 		Quality:  quality,
 		Currency: currency,
 		Total:    moneyDTO(summary.Total),

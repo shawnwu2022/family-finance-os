@@ -38,12 +38,14 @@ func TestSummarizePortfolioAllocationTotals(t *testing.T) {
 func TestSummarizePortfolioWarnsOnForeignFXFreshness(t *testing.T) {
 	asOf := time.Date(2026, 8, 16, 0, 0, 0, 0, time.UTC)
 	stale := asOf.Add(-10 * 24 * time.Hour)
+	staleValuation := asOf.Add(-40 * 24 * time.Hour)
 	got, err := Summarize(SummaryInput{
-		ReportingCurrency: "CNY",
-		AsOf:              asOf,
-		FXStaleAfter:      72 * time.Hour,
+		ReportingCurrency:   "CNY",
+		AsOf:                asOf,
+		ValuationStaleAfter: 30 * 24 * time.Hour,
+		FXStaleAfter:        72 * time.Hour,
 		Valuations: []Valuation{
-			{ID: "usd-stale", Name: "美股", Class: AssetClassEquity, Value: money.Money{Minor: 10_000, Currency: "CNY"}, SourceCurrency: "USD", ValuationAsOf: asOf, FXAsOf: &stale},
+			{ID: "usd-stale", Name: "美股", Class: AssetClassEquity, Value: money.Money{Minor: 10_000, Currency: "CNY"}, SourceCurrency: "USD", ValuationAsOf: staleValuation, FXAsOf: &stale},
 			{ID: "usd-missing", Name: "美元现金", Class: AssetClassCash, Value: money.Money{Minor: 5_000, Currency: "CNY"}, SourceCurrency: "USD", ValuationAsOf: asOf},
 		},
 	})
@@ -55,6 +57,9 @@ func TestSummarizePortfolioWarnsOnForeignFXFreshness(t *testing.T) {
 	}
 	if !hasWarning(got.Warnings, WarningFXMissing, "usd-missing") {
 		t.Fatalf("missing FX warning: %#v", got.Warnings)
+	}
+	if !hasWarning(got.Warnings, WarningValuationStale, "usd-stale") {
+		t.Fatalf("missing stale valuation warning: %#v", got.Warnings)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shawnwu2022/family-finance-os/internal/analytics"
 	"github.com/shawnwu2022/family-finance-os/internal/budget"
 	"github.com/shawnwu2022/family-finance-os/internal/goals"
 	"github.com/shawnwu2022/family-finance-os/internal/household"
@@ -165,6 +166,81 @@ func TestBudgetHandlesZeroPlannedUtilization(t *testing.T) {
 	}
 }
 
+func TestDashboardBuildsOneBoundedSnapshotForSelectedPeriod(t *testing.T) {
+	now := time.Date(2026, 8, 17, 3, 30, 0, 0, time.UTC)
+	queries := []ledger.TransactionQuery{}
+	planner := fakePlanner{
+		profile: household.Profile{
+			Household: household.Household{ID: 42, Name: "测试家庭", BaseCurrency: "CNY", Timezone: "Asia/Shanghai"},
+			Policy:    household.HouseholdPolicy{HouseholdID: 42, LiquidityFloor: money.Money{Currency: "CNY"}},
+		},
+		plan: budget.BudgetPlan{ID: 1, HouseholdID: 42, Period: "2026-08", Currency: "CNY"},
+	}
+	book := fakeLedger{
+		accounts: []ledger.Account{{ID: "checking", Category: ledger.AccountCategoryChecking, Structure: ledger.AccountStructureSingle, Balance: money.Money{Minor: 100_000, Currency: "CNY"}, IsAsset: true}},
+		queries:  &queries,
+	}
+	api, err := New(Dependencies{Ledger: book, Planner: planner, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	dashboard, err := api.Dashboard(context.Background(), 42, "2026-08")
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	if dashboard.Cashflow.Period != "2026-08" || dashboard.Budget.Period != "2026-08" {
+		t.Fatalf("dashboard period = %#v", dashboard)
+	}
+	if len(queries) != 1 {
+		t.Fatalf("ledger transaction queries = %d, want 1", len(queries))
+	}
+	wantStart := time.Date(2026, 7, 31, 16, 0, 0, 0, time.UTC)
+	wantEnd := time.Date(2026, 8, 31, 16, 0, 0, 0, time.UTC)
+	if !queries[0].Start.Equal(wantStart) || !queries[0].End.Equal(wantEnd) {
+		t.Fatalf("transaction query bounds = %v..%v, want %v..%v", queries[0].Start, queries[0].End, wantStart, wantEnd)
+	}
+}
+
+func TestBudgetResponseEncodesEmptyLinesAsArray(t *testing.T) {
+	response := budgetResponse(snapshot{
+		profile: household.Profile{Household: household.Household{BaseCurrency: "CNY"}},
+	}, "2026-08")
+	if response.Lines == nil {
+		t.Fatal("budget lines must be a non-nil empty slice")
+	}
+
+	encoded, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal budget response: %v", err)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("decode budget response: %v", err)
+	}
+	if got := string(payload["lines"]); got != "[]" {
+		t.Fatalf("budget lines JSON = %s, want []", got)
+	}
+}
+
+func TestGoalProjectionAllocatesSharedCapacityByPriority(t *testing.T) {
+	asOf := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	goalList := []goals.FinancialGoal{
+		{ID: 2, Name: "次要目标", Target: money.Money{Minor: 80_000, Currency: "CNY"}, Funded: money.Money{Currency: "CNY"}, TargetDate: time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC), Priority: 2, Flexibility: goals.GoalFlexibilityHard, MonthlyContribution: money.Money{Minor: 8_000, Currency: "CNY"}, Active: true},
+		{ID: 1, Name: "首要目标", Target: money.Money{Minor: 80_000, Currency: "CNY"}, Funded: money.Money{Currency: "CNY"}, TargetDate: time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC), Priority: 1, Flexibility: goals.GoalFlexibilityHard, MonthlyContribution: money.Money{Minor: 8_000, Currency: "CNY"}, Active: true},
+	}
+	items, err := projectGoalDTOs(goalList, analytics.CashflowResult{NetCashflow: money.Money{Minor: 10_000, Currency: "CNY"}}, asOf)
+	if err != nil {
+		t.Fatalf("projectGoalDTOs: %v", err)
+	}
+	if len(items) != 2 || items[0].ID != 1 || items[0].Status != string(goals.GoalStatusOnTrack) {
+		t.Fatalf("priority allocation first goal = %#v", items)
+	}
+	if items[1].ID != 2 || items[1].Status != string(goals.GoalStatusConflicting) || items[1].CapacityShortfall.Minor != 6_000 {
+		t.Fatalf("priority allocation second goal = %#v", items[1])
+	}
+}
+
 func containsWarning(values []string, part string) bool {
 	for _, value := range values {
 		if strings.Contains(value, part) {
@@ -177,13 +253,17 @@ func containsWarning(values []string, part string) bool {
 type fakeLedger struct {
 	accounts     []ledger.Account
 	transactions []ledger.Transaction
+	queries      *[]ledger.TransactionQuery
 }
 
 func (f fakeLedger) ListAccounts(context.Context) ([]ledger.Account, error) {
 	return append([]ledger.Account(nil), f.accounts...), nil
 }
 func (f fakeLedger) ListCategories(context.Context) ([]ledger.Category, error) { return nil, nil }
-func (f fakeLedger) ListTransactions(context.Context, ledger.TransactionQuery) ([]ledger.Transaction, error) {
+func (f fakeLedger) ListTransactions(_ context.Context, query ledger.TransactionQuery) ([]ledger.Transaction, error) {
+	if f.queries != nil {
+		*f.queries = append(*f.queries, query)
+	}
 	return append([]ledger.Transaction(nil), f.transactions...), nil
 }
 

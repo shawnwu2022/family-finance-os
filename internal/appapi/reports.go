@@ -6,29 +6,33 @@ import (
 	"fmt"
 
 	"github.com/shawnwu2022/family-finance-os/internal/report"
-	"github.com/shawnwu2022/family-finance-os/internal/scheduler"
 	"github.com/shawnwu2022/family-finance-os/internal/server"
 )
 
 var ErrInvalidReportingAPI = errors.New("invalid reporting API dependencies")
 
-type ReportRunReader interface {
-	List(ctx context.Context, householdID int64, jobName string) ([]scheduler.RunRecord, error)
-}
-
 type ReportingAPI struct {
 	*API
-	runs ReportRunReader
 }
 
-func NewReportingAPI(core *API, runs ReportRunReader) (*ReportingAPI, error) {
-	if core == nil || runs == nil {
+func NewReportingAPI(core *API, reports report.Store) (*ReportingAPI, error) {
+	if core == nil || reports == nil {
 		return nil, ErrInvalidReportingAPI
 	}
-	return &ReportingAPI{API: core, runs: runs}, nil
+	core.reports = reports
+	return &ReportingAPI{API: core}, nil
 }
 
 func (a *API) MonthlyReport(ctx context.Context, householdID int64, period string) (report.MonthlyReport, error) {
+	if a.reports != nil {
+		stored, err := a.reports.Get(ctx, householdID, period)
+		if err == nil {
+			return stored.Report, nil
+		}
+		if !errors.Is(err, report.ErrNotFound) {
+			return report.MonthlyReport{}, fmt.Errorf("load monthly report: %w", err)
+		}
+	}
 	profile, err := a.planner.Profile(ctx, householdID)
 	if err != nil {
 		return report.MonthlyReport{}, fmt.Errorf("load household profile: %w", err)
@@ -40,7 +44,7 @@ func (a *API) MonthlyReport(ctx context.Context, householdID int64, period strin
 	if err != nil {
 		return report.MonthlyReport{}, err
 	}
-	return report.GenerateMonthly(report.MonthlyInput{
+	monthly, err := report.GenerateMonthly(report.MonthlyInput{
 		Period:      period,
 		DataAsOf:    snapshot.asOf,
 		GeneratedAt: a.now().UTC(),
@@ -57,21 +61,33 @@ func (a *API) MonthlyReport(ctx context.Context, householdID int64, period strin
 		},
 		Warnings: cloneWarnings(snapshot.warnings),
 	})
+	if err != nil {
+		return report.MonthlyReport{}, err
+	}
+	if a.reports == nil {
+		return monthly, nil
+	}
+	stored, err := a.reports.Save(ctx, householdID, monthly)
+	if err != nil {
+		return report.MonthlyReport{}, fmt.Errorf("persist monthly report: %w", err)
+	}
+	return stored.Report, nil
 }
 
 func (a *ReportingAPI) Reports(ctx context.Context, householdID int64) (server.ReportsResponse, error) {
-	runs, err := a.runs.List(ctx, householdID, report.JobNameMonthly)
+	stored, err := a.reports.List(ctx, householdID)
 	if err != nil {
-		return server.ReportsResponse{}, fmt.Errorf("list monthly report runs: %w", err)
+		return server.ReportsResponse{}, fmt.Errorf("list monthly reports: %w", err)
 	}
-	items := make([]server.ReportSummary, 0, len(runs))
-	for _, run := range runs {
+	items := make([]server.ReportSummary, 0, len(stored))
+	for _, artifact := range stored {
 		items = append(items, server.ReportSummary{
-			ID:        run.ID,
-			Period:    run.Key.Period,
-			Kind:      report.KindMonthly,
-			Status:    string(run.Status),
-			CreatedAt: run.StartedAt,
+			ID:          artifact.ID,
+			Period:      artifact.Report.Period,
+			Kind:        artifact.Report.Kind,
+			Status:      "ready",
+			ContentHash: artifact.ContentHash,
+			CreatedAt:   artifact.CreatedAt,
 		})
 	}
 	return server.ReportsResponse{Items: items}, nil

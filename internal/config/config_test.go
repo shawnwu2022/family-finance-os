@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaultsAndMapsRuntimeSettings(t *testing.T) {
@@ -47,6 +48,28 @@ func TestLoadDefaultsAndMapsRuntimeSettings(t *testing.T) {
 	}
 	if cfg.LLM.FastModel != "fast-model" || cfg.LLM.PlannerModel != "planner-model" || cfg.LLM.ReviewerModel != "reviewer-model" {
 		t.Fatalf("LLM models = %#v", cfg.LLM)
+	}
+	if cfg.Portfolio.ValuationStaleAfter != 30*24*time.Hour || cfg.Portfolio.FXStaleAfter != 72*time.Hour {
+		t.Fatalf("Portfolio freshness = %#v", cfg.Portfolio)
+	}
+}
+
+func TestLoadMapsAndValidatesPortfolioFreshness(t *testing.T) {
+	t.Parallel()
+	base := map[string]string{
+		"DB_NAME": "finance", "DB_USER": "finance_app", "DB_PASSWORD": "secret",
+		"PORTFOLIO_VALUATION_STALE_AFTER": "240h", "PORTFOLIO_FX_STALE_AFTER": "24h",
+	}
+	cfg, err := Load(mapGetenv(base))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Portfolio.ValuationStaleAfter != 240*time.Hour || cfg.Portfolio.FXStaleAfter != 24*time.Hour {
+		t.Fatalf("Portfolio freshness = %#v", cfg.Portfolio)
+	}
+	base["PORTFOLIO_FX_STALE_AFTER"] = "0s"
+	if _, err := Load(mapGetenv(base)); err == nil || !strings.Contains(err.Error(), "PORTFOLIO_FX_STALE_AFTER") {
+		t.Fatalf("invalid FX duration error = %v", err)
 	}
 }
 

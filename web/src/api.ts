@@ -1,11 +1,6 @@
 import type {
   AdvisorResponse,
-  BudgetResponse,
-  CashflowResponse,
   DashboardData,
-  DebtsResponse,
-  GoalsResponse,
-  OverviewResponse,
   PortfolioAssetResponse,
   PortfolioAssetsResponse,
   PortfolioAssetUpsertRequest,
@@ -21,14 +16,7 @@ interface APIErrorEnvelope {
 export async function loadDashboard(householdId: number, period: string): Promise<DashboardData> {
   const household = encodeURIComponent(String(householdId))
   const month = encodeURIComponent(period)
-  const [overview, cashflow, budget, debts, goals] = await Promise.all([
-    requestJSON<OverviewResponse>(`/api/v1/overview?household_id=${household}`),
-    requestJSON<CashflowResponse>(`/api/v1/cashflow?household_id=${household}&period=${month}`),
-    requestJSON<BudgetResponse>(`/api/v1/budget?household_id=${household}&period=${month}`),
-    requestJSON<DebtsResponse>(`/api/v1/debts?household_id=${household}`),
-    requestJSON<GoalsResponse>(`/api/v1/goals?household_id=${household}`),
-  ])
-  return { overview, cashflow, budget, debts, goals }
+  return requestJSON<DashboardData>(`/api/v1/dashboard?household_id=${household}&period=${month}`)
 }
 
 export async function askAdvisor(householdId: number, question: string, requireReview: boolean): Promise<AdvisorResponse> {

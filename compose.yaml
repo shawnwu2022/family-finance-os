@@ -1,3 +1,15 @@
+x-finance-core-build: &finance-core-build
+  context: .
+  dockerfile: Dockerfile
+
+x-finance-database-environment: &finance-database-environment
+  DB_HOST: ${DB_HOST:-postgres}
+  DB_PORT: ${DB_PORT:-5432}
+  DB_SSLMODE: ${DB_SSLMODE:-disable}
+  DB_NAME: ${FINANCE_DB_NAME:-finance}
+  DB_USER: ${FINANCE_DB_USER:-finance_app}
+  DB_PASSWORD: ${FINANCE_DB_PASSWORD}
+
 services:
   postgres:
     build:
@@ -18,7 +30,6 @@ services:
     volumes:
       # PostgreSQL 18+ official image: mount the parent path /var/lib/postgresql.
       - postgres_data:/var/lib/postgresql
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-postgres}"]
       interval: 10s
@@ -46,31 +57,61 @@ services:
       EBK_DATABASE_SSL_MODE: disable
       EBK_SECURITY_SECRET_KEY: ${EBK_SECURITY_SECRET_KEY}
       EBK_SECURITY_ENABLE_API_TOKEN: "true"
+      EBK_USER_ENABLE_REGISTER: ${EBK_USER_ENABLE_REGISTER:-true}
       EBK_LOG_MODE: console
     volumes:
       - ./data/ezbookkeeping-storage:/ezbookkeeping/storage
     networks: [app]
 
+  finance-migrate:
+    build: *finance-core-build
+    restart: "no"
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *finance-database-environment
+    networks: [app]
+
+  finance-bootstrap:
+    build: *finance-core-build
+    restart: "no"
+    command:
+      - bootstrap
+      - --name
+      - ${FINANCE_BOOTSTRAP_NAME:-家庭}
+      - --currency
+      - ${FINANCE_BOOTSTRAP_CURRENCY:-CNY}
+      - --timezone
+      - ${FINANCE_BOOTSTRAP_TIMEZONE:-Asia/Shanghai}
+      - --liquidity-floor-minor
+      - ${FINANCE_BOOTSTRAP_LIQUIDITY_FLOOR_MINOR:-0}
+    depends_on:
+      finance-migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *finance-database-environment
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+    networks: [app]
+
   finance-core:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: *finance-core-build
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       ezbookkeeping:
         condition: service_started
+      finance-bootstrap:
+        condition: service_completed_successfully
     environment:
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_SSLMODE: ${DB_SSLMODE:-disable}
-      DB_NAME: ${FINANCE_DB_NAME:-finance}
-      DB_USER: ${FINANCE_DB_USER:-finance_app}
-      DB_PASSWORD: ${FINANCE_DB_PASSWORD}
+      <<: *finance-database-environment
       EBK_BASE_URL: ${EBK_BASE_URL:-http://ezbookkeeping:8080/api/v1}
       EBK_API_TOKEN: ${EBK_API_TOKEN:-}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+      PORTFOLIO_VALUATION_STALE_AFTER: ${PORTFOLIO_VALUATION_STALE_AFTER:-720h}
+      PORTFOLIO_FX_STALE_AFTER: ${PORTFOLIO_FX_STALE_AFTER:-72h}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_FAST_MODEL: ${LLM_FAST_MODEL:-}

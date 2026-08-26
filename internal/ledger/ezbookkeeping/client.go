@@ -104,15 +104,24 @@ func (c *Client) ListTransactions(ctx context.Context, q ledger.TransactionQuery
 	if q.Type != ledger.TransactionTypeUnknown && !validTransactionType(q.Type) {
 		return nil, fmt.Errorf("%w: transaction query type %d", ledger.ErrUnknownEnum, q.Type)
 	}
+	if !q.Start.IsZero() && !q.End.IsZero() && !q.Start.Before(q.End) {
+		return nil, fmt.Errorf("transaction query start must be before end")
+	}
 
 	cursor := int64(0)
-	seen := map[int64]struct{}{0: {}}
+	if !q.End.IsZero() {
+		cursor = q.End.UnixMilli() - 1
+	}
+	seen := map[int64]struct{}{cursor: {}}
 	transactions := make([]ledger.Transaction, 0)
 
 	for {
 		params := url.Values{}
 		params.Set("count", strconv.Itoa(transactionPageSize))
 		params.Set("max_time", strconv.FormatInt(cursor, 10))
+		if !q.Start.IsZero() {
+			params.Set("min_time", strconv.FormatInt(q.Start.UnixMilli(), 10))
+		}
 		params.Set("trim_account", "false")
 		params.Set("trim_category", "true")
 		params.Set("trim_tag", "true")

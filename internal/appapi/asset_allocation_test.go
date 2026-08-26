@@ -133,7 +133,7 @@ func TestAssetAllocationMergesExplicitSnapshotsWithoutDoubleCounting(t *testing.
 	if snapshots.listCalls != 1 || snapshots.lastHouseholdID != 42 {
 		t.Fatalf("snapshot list calls/scope=%d/%d want 1/42", snapshots.listCalls, snapshots.lastHouseholdID)
 	}
-	if !got.DataAsOf.Equal(now) || got.Currency != "CNY" || got.Quality != "partial" {
+	if !got.DataAsOf.Equal(fxAsOf) || got.Currency != "CNY" || got.Quality != "partial" {
 		t.Fatalf("metadata=%#v", got)
 	}
 	if got.Total.Minor != 100_000 || got.Total.Currency != "CNY" {
@@ -166,5 +166,35 @@ func TestAssetAllocationMergesExplicitSnapshotsWithoutDoubleCounting(t *testing.
 		if strings.Contains(warning, "broker-covered") {
 			t.Fatalf("covered account leaked fallback warning: %#v", got.Warnings)
 		}
+	}
+}
+
+func TestAssetAllocationUsesOldestInputAsDataAsOfAndMarksStale(t *testing.T) {
+	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	valuationAsOf := now.Add(-40 * 24 * time.Hour)
+	fxAsOf := now.Add(-10 * 24 * time.Hour)
+	snapshots := &fakeAssetSnapshotStore{list: []portfolio.AssetSnapshot{{
+		AssetRef: "foreign", Name: "Foreign asset", Class: portfolio.AssetClassEquity,
+		Value: money.Money{Minor: 100_000, Currency: "CNY"}, SourceCurrency: "USD",
+		ValuationAsOf: valuationAsOf, FXAsOf: &fxAsOf, SourceKind: portfolio.SnapshotSourceManual,
+	}}}
+	planner := fakePlanner{profile: household.Profile{Household: household.Household{ID: 42, BaseCurrency: "CNY", Timezone: "Asia/Shanghai"}}}
+	api, err := New(Dependencies{
+		Ledger: fakeLedger{}, Planner: planner, Portfolio: snapshots, Now: func() time.Time { return now },
+		ValuationStaleAfter: 30 * 24 * time.Hour, FXStaleAfter: 72 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	got, err := api.AssetAllocation(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("AssetAllocation: %v", err)
+	}
+	if !got.DataAsOf.Equal(valuationAsOf) || got.Quality != "stale" {
+		t.Fatalf("metadata = %#v", got)
+	}
+	if !containsWarning(got.Warnings, "valuation_stale") || !containsWarning(got.Warnings, "fx_stale") {
+		t.Fatalf("warnings = %#v", got.Warnings)
 	}
 }

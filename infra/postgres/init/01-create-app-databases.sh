@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 : "${FINANCE_DB_NAME:?FINANCE_DB_NAME is required}"
 : "${FINANCE_DB_USER:?FINANCE_DB_USER is required}"

@@ -83,6 +83,8 @@ Snowball 改为按当前余额从小到大排序。
 required_monthly = (target - funded) / months_remaining
 ```
 
+多个目标共享同一月度可用净现金流：先按 `priority`、目标日期、ID 稳定排序，高优先级目标占用其 `required_monthly` 后，后续目标只能使用剩余容量；容量不足必须返回 `capacity_shortfall` 和冲突状态，禁止每个目标都重复使用全额现金流。
+
 若目标资产有预期收益，不在 V1 默认使用“理想收益率”降低所需储蓄；只有用户显式开启规划假设时才进入 V3 的收益/风险模拟。
 
 ## 8. Scenario

@@ -47,6 +47,10 @@ func Summarize(input SummaryInput) (Summary, error) {
 		}
 		byClass[valuation.Class] = allocation
 
+		if input.ValuationStaleAfter > 0 && input.AsOf.Sub(valuation.ValuationAsOf) > input.ValuationStaleAfter {
+			warnings = append(warnings, Warning{Code: WarningValuationStale, ValuationID: valuation.ID})
+		}
+
 		if valuation.SourceCurrency != input.ReportingCurrency {
 			switch {
 			case valuation.FXAsOf == nil:

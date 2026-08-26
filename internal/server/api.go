@@ -96,6 +96,7 @@ type GoalResponse struct {
 	Flexibility         string   `json:"flexibility"`
 	MonthlyContribution MoneyDTO `json:"monthly_contribution"`
 	RequiredMonthly     MoneyDTO `json:"required_monthly"`
+	CapacityShortfall   MoneyDTO `json:"capacity_shortfall"`
 	Status              string   `json:"status"`
 }
 
@@ -104,6 +105,14 @@ type GoalsResponse struct {
 	Quality  string         `json:"quality"`
 	Items    []GoalResponse `json:"items"`
 	Warnings []string       `json:"warnings,omitempty"`
+}
+
+type DashboardResponse struct {
+	Overview OverviewResponse `json:"overview"`
+	Cashflow CashflowResponse `json:"cashflow"`
+	Budget   BudgetResponse   `json:"budget"`
+	Debts    DebtsResponse    `json:"debts"`
+	Goals    GoalsResponse    `json:"goals"`
 }
 
 type ScenarioRequest struct {
@@ -135,11 +144,12 @@ type AdvisorResponse struct {
 }
 
 type ReportSummary struct {
-	ID        int64     `json:"id"`
-	Period    string    `json:"period"`
-	Kind      string    `json:"kind"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          int64     `json:"id"`
+	Period      string    `json:"period"`
+	Kind        string    `json:"kind"`
+	Status      string    `json:"status"`
+	ContentHash string    `json:"content_hash"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type ReportsResponse struct {
@@ -147,6 +157,7 @@ type ReportsResponse struct {
 }
 
 type FinanceAPI interface {
+	Dashboard(ctx context.Context, householdID int64, period string) (DashboardResponse, error)
 	Overview(ctx context.Context, householdID int64) (OverviewResponse, error)
 	Cashflow(ctx context.Context, householdID int64, period string) (CashflowResponse, error)
 	Budget(ctx context.Context, householdID int64, period string) (BudgetResponse, error)
@@ -177,6 +188,18 @@ func registerFinanceAPI(mux *http.ServeMux, api FinanceAPI) {
 	if api == nil {
 		return
 	}
+	mux.HandleFunc("GET /api/v1/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		householdID, ok := parseHouseholdID(w, r)
+		if !ok {
+			return
+		}
+		period, ok := parsePeriod(w, r.URL.Query().Get("period"))
+		if !ok {
+			return
+		}
+		response, err := api.Dashboard(r.Context(), householdID, period)
+		writeBackendResult(w, response, err)
+	})
 	mux.HandleFunc("GET /api/v1/overview", func(w http.ResponseWriter, r *http.Request) {
 		householdID, ok := parseHouseholdID(w, r)
 		if !ok {

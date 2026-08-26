@@ -91,4 +91,6 @@ type TransactionQuery struct {
 	Type        TransactionType
 	CategoryIDs []string
 	AccountIDs  []string
+	Start       time.Time
+	End         time.Time
 }

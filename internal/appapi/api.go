@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/shawnwu2022/family-finance-os/internal/ledger"
 	"github.com/shawnwu2022/family-finance-os/internal/llm"
 	"github.com/shawnwu2022/family-finance-os/internal/portfolio"
+	"github.com/shawnwu2022/family-finance-os/internal/report"
 	"github.com/shawnwu2022/family-finance-os/internal/scenario"
 	"github.com/shawnwu2022/family-finance-os/internal/server"
 	"github.com/shawnwu2022/family-finance-os/pkg/money"
@@ -29,6 +31,11 @@ var (
 	ErrAdvisorUnavailable   = errors.New("finance advisor is not configured")
 	ErrPortfolioUnavailable = errors.New("portfolio asset snapshot store is not configured")
 	ErrUnsupportedScenario  = errors.New("scenario is not exposed by the V1 HTTP API")
+)
+
+const (
+	defaultValuationStaleAfter = 30 * 24 * time.Hour
+	defaultFXStaleAfter        = 72 * time.Hour
 )
 
 type DebtSnapshot struct {
@@ -42,6 +49,7 @@ type DebtSnapshot struct {
 	ScheduledPayment    money.Money
 	TermRemainingMonths int32
 	DueDay              int32
+	SourceAccountRef    string
 	Active              bool
 }
 
@@ -63,39 +71,79 @@ type AssetSnapshotStore interface {
 }
 
 type Dependencies struct {
-	Ledger    ledger.Ledger
-	Planner   Planner
-	Advisor   AdvisorRunner
-	Portfolio AssetSnapshotStore
-	Now       func() time.Time
+	Ledger              ledger.Ledger
+	Planner             Planner
+	Advisor             AdvisorRunner
+	Portfolio           AssetSnapshotStore
+	Reports             report.Store
+	ValuationStaleAfter time.Duration
+	FXStaleAfter        time.Duration
+	Now                 func() time.Time
 }
 
 type API struct {
-	ledger         ledger.Ledger
-	planner        Planner
-	advisor        AdvisorRunner
-	assetSnapshots AssetSnapshotStore
-	now            func() time.Time
+	ledger              ledger.Ledger
+	planner             Planner
+	advisor             AdvisorRunner
+	assetSnapshots      AssetSnapshotStore
+	reports             report.Store
+	valuationStaleAfter time.Duration
+	fxStaleAfter        time.Duration
+	now                 func() time.Time
 }
 
 func New(deps Dependencies) (*API, error) {
 	if deps.Ledger == nil || deps.Planner == nil {
 		return nil, ErrInvalidDependencies
 	}
+	if deps.ValuationStaleAfter < 0 || deps.FXStaleAfter < 0 {
+		return nil, ErrInvalidDependencies
+	}
+	if deps.ValuationStaleAfter == 0 {
+		deps.ValuationStaleAfter = defaultValuationStaleAfter
+	}
+	if deps.FXStaleAfter == 0 {
+		deps.FXStaleAfter = defaultFXStaleAfter
+	}
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
 	return &API{
-		ledger:         deps.Ledger,
-		planner:        deps.Planner,
-		advisor:        deps.Advisor,
-		assetSnapshots: deps.Portfolio,
-		now:            deps.Now,
+		ledger:              deps.Ledger,
+		planner:             deps.Planner,
+		advisor:             deps.Advisor,
+		assetSnapshots:      deps.Portfolio,
+		reports:             deps.Reports,
+		valuationStaleAfter: deps.ValuationStaleAfter,
+		fxStaleAfter:        deps.FXStaleAfter,
+		now:                 deps.Now,
 	}, nil
 }
 
 func (a *API) SetAdvisor(runner AdvisorRunner) {
 	a.advisor = runner
+}
+
+func (a *API) Dashboard(ctx context.Context, householdID int64, period string) (server.DashboardResponse, error) {
+	profile, err := a.planner.Profile(ctx, householdID)
+	if err != nil {
+		return server.DashboardResponse{}, fmt.Errorf("load household profile: %w", err)
+	}
+	snapshot, err := a.snapshot(ctx, profile, period)
+	if err != nil {
+		return server.DashboardResponse{}, err
+	}
+	goalResponse, err := goalsResponse(snapshot)
+	if err != nil {
+		return server.DashboardResponse{}, err
+	}
+	return server.DashboardResponse{
+		Overview: overviewResponse(snapshot),
+		Cashflow: cashflowResponse(snapshot, period),
+		Budget:   budgetResponse(snapshot, period),
+		Debts:    debtsResponse(snapshot),
+		Goals:    goalResponse,
+	}, nil
 }
 
 func (a *API) Overview(ctx context.Context, householdID int64) (server.OverviewResponse, error) {
@@ -112,20 +160,7 @@ func (a *API) Overview(ctx context.Context, householdID int64) (server.OverviewR
 		return server.OverviewResponse{}, err
 	}
 
-	return server.OverviewResponse{
-		DataAsOf:        snapshot.asOf,
-		Quality:         qualityString(snapshot.quality),
-		NetWorth:        moneyDTO(snapshot.netWorth.NetWorth),
-		Income:          moneyDTO(snapshot.cashflow.RecognizedIncome),
-		Expense:         moneyDTO(snapshot.cashflow.RecognizedExpense),
-		NetCashflow:     moneyDTO(snapshot.cashflow.NetCashflow),
-		SavingsRate:     savingsRateString(snapshot.cashflow),
-		SafeToSpend:     moneyDTO(snapshot.safeToSpend.Amount),
-		EmergencyMonths: decimalResultString(snapshot.emergencyMonths),
-		TotalDebt:       moneyDTO(snapshot.totalDebt),
-		GoalCount:       len(snapshot.goals),
-		Warnings:        cloneWarnings(snapshot.warnings),
-	}, nil
+	return overviewResponse(snapshot), nil
 }
 
 func (a *API) Cashflow(ctx context.Context, householdID int64, period string) (server.CashflowResponse, error) {
@@ -140,16 +175,7 @@ func (a *API) Cashflow(ctx context.Context, householdID int64, period string) (s
 	if err != nil {
 		return server.CashflowResponse{}, err
 	}
-	return server.CashflowResponse{
-		DataAsOf:    snapshot.asOf,
-		Quality:     qualityString(snapshot.quality),
-		Period:      period,
-		Income:      moneyDTO(snapshot.cashflow.RecognizedIncome),
-		Expense:     moneyDTO(snapshot.cashflow.RecognizedExpense),
-		NetCashflow: moneyDTO(snapshot.cashflow.NetCashflow),
-		SavingsRate: savingsRateString(snapshot.cashflow),
-		Warnings:    cloneWarnings(snapshot.warnings),
-	}, nil
+	return cashflowResponse(snapshot, period), nil
 }
 
 func (a *API) Budget(ctx context.Context, householdID int64, period string) (server.BudgetResponse, error) {
@@ -161,14 +187,7 @@ func (a *API) Budget(ctx context.Context, householdID int64, period string) (ser
 	if err != nil {
 		return server.BudgetResponse{}, err
 	}
-	return server.BudgetResponse{
-		DataAsOf: snapshot.asOf,
-		Quality:  qualityString(snapshot.quality),
-		Period:   period,
-		Currency: profile.Household.BaseCurrency,
-		Lines:    append([]server.BudgetLineResponse(nil), snapshot.budgetLines...),
-		Warnings: cloneWarnings(snapshot.warnings),
-	}, nil
+	return budgetResponse(snapshot, period), nil
 }
 
 func (a *API) Debts(ctx context.Context, householdID int64) (server.DebtsResponse, error) {
@@ -184,29 +203,7 @@ func (a *API) Debts(ctx context.Context, householdID int64) (server.DebtsRespons
 	if err != nil {
 		return server.DebtsResponse{}, err
 	}
-	items := make([]server.DebtResponse, 0, len(snapshot.debts))
-	for _, debt := range snapshot.debts {
-		items = append(items, server.DebtResponse{
-			ID:                  debt.ID,
-			Name:                debt.Name,
-			Type:                debt.Type,
-			Balance:             moneyDTO(debt.Balance),
-			APR:                 debt.APR,
-			RepaymentType:       debt.RepaymentType,
-			MinimumPayment:      moneyDTO(debt.MinimumPayment),
-			ScheduledPayment:    moneyDTO(debt.ScheduledPayment),
-			TermRemainingMonths: debt.TermRemainingMonths,
-			DueDay:              debt.DueDay,
-		})
-	}
-	return server.DebtsResponse{
-		DataAsOf: snapshot.asOf,
-		Quality:  qualityString(snapshot.quality),
-		Currency: profile.Household.BaseCurrency,
-		Total:    moneyDTO(snapshot.totalDebt),
-		Items:    items,
-		Warnings: cloneWarnings(snapshot.warnings),
-	}, nil
+	return debtsResponse(snapshot), nil
 }
 
 func (a *API) Goals(ctx context.Context, householdID int64) (server.GoalsResponse, error) {
@@ -222,15 +219,55 @@ func (a *API) Goals(ctx context.Context, householdID int64) (server.GoalsRespons
 	if err != nil {
 		return server.GoalsResponse{}, err
 	}
+	return goalsResponse(snapshot)
+}
+
+func overviewResponse(snapshot snapshot) server.OverviewResponse {
+	return server.OverviewResponse{
+		DataAsOf: snapshot.asOf, Quality: qualityString(snapshot.quality), NetWorth: moneyDTO(snapshot.netWorth.NetWorth),
+		Income: moneyDTO(snapshot.cashflow.RecognizedIncome), Expense: moneyDTO(snapshot.cashflow.RecognizedExpense),
+		NetCashflow: moneyDTO(snapshot.cashflow.NetCashflow), SavingsRate: savingsRateString(snapshot.cashflow),
+		SafeToSpend: moneyDTO(snapshot.safeToSpend.Amount), EmergencyMonths: decimalResultString(snapshot.emergencyMonths),
+		TotalDebt: moneyDTO(snapshot.totalDebt), GoalCount: len(snapshot.goals), Warnings: cloneWarnings(snapshot.warnings),
+	}
+}
+
+func cashflowResponse(snapshot snapshot, period string) server.CashflowResponse {
+	return server.CashflowResponse{
+		DataAsOf: snapshot.asOf, Quality: qualityString(snapshot.quality), Period: period,
+		Income: moneyDTO(snapshot.cashflow.RecognizedIncome), Expense: moneyDTO(snapshot.cashflow.RecognizedExpense),
+		NetCashflow: moneyDTO(snapshot.cashflow.NetCashflow), SavingsRate: savingsRateString(snapshot.cashflow), Warnings: cloneWarnings(snapshot.warnings),
+	}
+}
+
+func budgetResponse(snapshot snapshot, period string) server.BudgetResponse {
+	lines := make([]server.BudgetLineResponse, 0, len(snapshot.budgetLines))
+	lines = append(lines, snapshot.budgetLines...)
+	return server.BudgetResponse{
+		DataAsOf: snapshot.asOf, Quality: qualityString(snapshot.quality), Period: period,
+		Currency: snapshot.profile.Household.BaseCurrency, Lines: lines,
+		Warnings: cloneWarnings(snapshot.warnings),
+	}
+}
+
+func debtsResponse(snapshot snapshot) server.DebtsResponse {
+	items := make([]server.DebtResponse, 0, len(snapshot.debts))
+	for _, debt := range snapshot.debts {
+		items = append(items, debtResponse(debt))
+	}
+	return server.DebtsResponse{
+		DataAsOf: snapshot.asOf, Quality: qualityString(snapshot.quality), Currency: snapshot.profile.Household.BaseCurrency,
+		Total: moneyDTO(snapshot.totalDebt), Items: items, Warnings: cloneWarnings(snapshot.warnings),
+	}
+}
+
+func goalsResponse(snapshot snapshot) (server.GoalsResponse, error) {
 	items, err := projectGoalDTOs(snapshot.goals, snapshot.cashflow, snapshot.asOf)
 	if err != nil {
 		return server.GoalsResponse{}, err
 	}
 	return server.GoalsResponse{
-		DataAsOf: snapshot.asOf,
-		Quality:  qualityString(snapshot.quality),
-		Items:    items,
-		Warnings: cloneWarnings(snapshot.warnings),
+		DataAsOf: snapshot.asOf, Quality: qualityString(snapshot.quality), Items: items, Warnings: cloneWarnings(snapshot.warnings),
 	}, nil
 }
 
@@ -347,6 +384,24 @@ func (a *API) snapshot(ctx context.Context, profile household.Profile, period st
 	if err != nil {
 		return snapshot{}, fmt.Errorf("list ledger accounts: %w", err)
 	}
+	transactionQuery := ledger.TransactionQuery{Start: start, End: end}
+	historical := !end.After(asOf)
+	if historical {
+		transactionQuery.End = time.Time{}
+		asOf = end.UTC()
+	}
+	transactions, err := a.ledger.ListTransactions(ctx, transactionQuery)
+	if err != nil {
+		return snapshot{}, fmt.Errorf("list ledger transactions: %w", err)
+	}
+	if historical {
+		accounts, warnings, partial, err = reconstructHistoricalAccounts(accounts, transactions, end, warnings, partial)
+		if err != nil {
+			return snapshot{}, err
+		}
+		warnings = appendWarning(warnings, "historical budget, debt, and goal state uses the current planner snapshot")
+		partial = true
+	}
 	accountMap := make(map[string]ledger.Account, len(accounts))
 	valuations := make([]analytics.Valuation, 0, len(accounts))
 	liquid := money.Money{Currency: currency}
@@ -381,15 +436,13 @@ func (a *API) snapshot(ctx context.Context, profile household.Profile, period st
 		return snapshot{}, err
 	}
 
-	transactions, err := a.ledger.ListTransactions(ctx, ledger.TransactionQuery{})
-	if err != nil {
-		return snapshot{}, fmt.Errorf("list ledger transactions: %w", err)
-	}
 	events := make([]analytics.CashflowEvent, 0, len(transactions))
+	periodTransactions := make([]ledger.Transaction, 0, len(transactions))
 	for _, tx := range transactions {
 		if tx.OccurredAt.Before(start) || !tx.OccurredAt.Before(end) {
 			continue
 		}
+		periodTransactions = append(periodTransactions, tx)
 		if tx.SourceAmount.Currency != currency {
 			partial = true
 			warnings = appendWarning(warnings, fmt.Sprintf("transaction %s skipped: currency %s differs from household currency %s", tx.ID, tx.SourceAmount.Currency, currency))
@@ -473,7 +526,23 @@ func (a *API) snapshot(ctx context.Context, profile household.Profile, period st
 		}
 	}
 
-	remainingDebtCommitment, err := residualCommitment(debtCommitment, reserves.debt)
+	paidDebt, paymentWarnings, paymentPartial, err := paidDebtCommitments(periodTransactions, activeDebts, currency)
+	if err != nil {
+		return snapshot{}, err
+	}
+	if paymentPartial {
+		partial = true
+		warnings = append(warnings, paymentWarnings...)
+	}
+	remainingDebtReserve, err := residualCommitment(reserves.debt, paidDebt)
+	if err != nil {
+		return snapshot{}, err
+	}
+	remainingScheduledDebt, err := residualCommitment(debtCommitment, paidDebt)
+	if err != nil {
+		return snapshot{}, err
+	}
+	remainingDebtCommitment, err := residualCommitment(remainingScheduledDebt, remainingDebtReserve)
 	if err != nil {
 		return snapshot{}, err
 	}
@@ -481,7 +550,7 @@ func (a *API) snapshot(ctx context.Context, profile household.Profile, period st
 	if err != nil {
 		return snapshot{}, err
 	}
-	upcomingMandatory, err := reserves.debt.Add(reserves.goal)
+	upcomingMandatory, err := remainingDebtReserve.Add(reserves.goal)
 	if err != nil {
 		return snapshot{}, err
 	}
@@ -620,8 +689,18 @@ func projectGoalDTOs(goalList []goals.FinancialGoal, cashflow analytics.Cashflow
 	if available.Minor < 0 {
 		available.Minor = 0
 	}
+	ordered := append([]goals.FinancialGoal(nil), goalList...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].Priority != ordered[j].Priority {
+			return ordered[i].Priority < ordered[j].Priority
+		}
+		if !ordered[i].TargetDate.Equal(ordered[j].TargetDate) {
+			return ordered[i].TargetDate.Before(ordered[j].TargetDate)
+		}
+		return ordered[i].ID < ordered[j].ID
+	})
 	items := make([]server.GoalResponse, 0, len(goalList))
-	for _, goal := range goalList {
+	for _, goal := range ordered {
 		projection, err := goals.ProjectGoal(goals.GoalProjectionInput{Goal: goal, AsOf: asOf, AvailableMonthly: available})
 		if err != nil {
 			return nil, err
@@ -636,10 +715,137 @@ func projectGoalDTOs(goalList []goals.FinancialGoal, cashflow analytics.Cashflow
 			Flexibility:         string(goal.Flexibility),
 			MonthlyContribution: moneyDTO(goal.MonthlyContribution),
 			RequiredMonthly:     moneyDTO(projection.RequiredMonthly),
+			CapacityShortfall:   moneyDTO(projection.CapacityShortfall),
 			Status:              string(projection.Status),
 		})
+		available, err = residualCommitment(available, projection.RequiredMonthly)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return items, nil
+}
+
+func debtResponse(debt DebtSnapshot) server.DebtResponse {
+	return server.DebtResponse{
+		ID: debt.ID, Name: debt.Name, Type: debt.Type, Balance: moneyDTO(debt.Balance), APR: debt.APR,
+		RepaymentType: debt.RepaymentType, MinimumPayment: moneyDTO(debt.MinimumPayment),
+		ScheduledPayment: moneyDTO(debt.ScheduledPayment), TermRemainingMonths: debt.TermRemainingMonths, DueDay: debt.DueDay,
+	}
+}
+
+func paidDebtCommitments(transactions []ledger.Transaction, debts []DebtSnapshot, currency string) (money.Money, []string, bool, error) {
+	accountRefs := make(map[string]struct{}, len(debts))
+	for _, debt := range debts {
+		if debt.SourceAccountRef != "" {
+			accountRefs[debt.SourceAccountRef] = struct{}{}
+		}
+	}
+	paid := money.Money{Currency: currency}
+	warnings := []string{}
+	partial := false
+	for _, tx := range transactions {
+		if tx.Type != ledger.TransactionTypeTransfer {
+			continue
+		}
+		if _, ok := accountRefs[tx.DestinationAccountID]; !ok {
+			continue
+		}
+		amount := tx.SourceAmount
+		if tx.DestinationAmount != nil {
+			amount = *tx.DestinationAmount
+		}
+		if amount.Currency != currency {
+			partial = true
+			warnings = appendWarning(warnings, fmt.Sprintf("debt payment transaction %s skipped: currency %s differs from household currency %s", tx.ID, amount.Currency, currency))
+			continue
+		}
+		amount, err := magnitude(amount)
+		if err != nil {
+			return money.Money{}, nil, false, err
+		}
+		paid, err = paid.Add(amount)
+		if err != nil {
+			return money.Money{}, nil, false, err
+		}
+	}
+	return paid, warnings, partial, nil
+}
+
+func reconstructHistoricalAccounts(accounts []ledger.Account, transactions []ledger.Transaction, end time.Time, warnings []string, partial bool) ([]ledger.Account, []string, bool, error) {
+	reconstructed := append([]ledger.Account(nil), accounts...)
+	indexes := make(map[string]int, len(reconstructed))
+	for i := range reconstructed {
+		indexes[reconstructed[i].ID] = i
+	}
+	invalid := map[string]struct{}{}
+	adjust := func(accountID string, amount money.Money, add bool, transactionID string) error {
+		index, ok := indexes[accountID]
+		if !ok {
+			partial = true
+			warnings = appendWarning(warnings, fmt.Sprintf("historical transaction %s references missing account %s", transactionID, accountID))
+			return nil
+		}
+		if amount.Currency != reconstructed[index].Balance.Currency {
+			partial = true
+			invalid[accountID] = struct{}{}
+			warnings = appendWarning(warnings, fmt.Sprintf("historical account %s skipped: transaction %s currency mismatch", accountID, transactionID))
+			return nil
+		}
+		var err error
+		if add {
+			reconstructed[index].Balance, err = reconstructed[index].Balance.Add(amount)
+		} else {
+			reconstructed[index].Balance, err = reconstructed[index].Balance.Sub(amount)
+		}
+		return err
+	}
+	for _, tx := range transactions {
+		if tx.OccurredAt.Before(end) {
+			continue
+		}
+		if tx.AmountHidden {
+			partial = true
+			invalid[tx.SourceAccountID] = struct{}{}
+			invalid[tx.DestinationAccountID] = struct{}{}
+			warnings = appendWarning(warnings, fmt.Sprintf("historical transaction %s has a hidden amount", tx.ID))
+			continue
+		}
+		switch tx.Type {
+		case ledger.TransactionTypeIncome:
+			if err := adjust(tx.SourceAccountID, tx.SourceAmount, false, tx.ID); err != nil {
+				return nil, nil, false, err
+			}
+		case ledger.TransactionTypeExpense:
+			if err := adjust(tx.SourceAccountID, tx.SourceAmount, true, tx.ID); err != nil {
+				return nil, nil, false, err
+			}
+		case ledger.TransactionTypeTransfer:
+			if err := adjust(tx.SourceAccountID, tx.SourceAmount, true, tx.ID); err != nil {
+				return nil, nil, false, err
+			}
+			destinationAmount := tx.SourceAmount
+			if tx.DestinationAmount != nil {
+				destinationAmount = *tx.DestinationAmount
+			}
+			if err := adjust(tx.DestinationAccountID, destinationAmount, false, tx.ID); err != nil {
+				return nil, nil, false, err
+			}
+		case ledger.TransactionTypeBalanceModification:
+			partial = true
+			invalid[tx.SourceAccountID] = struct{}{}
+			warnings = appendWarning(warnings, fmt.Sprintf("historical account %s skipped: balance modification %s cannot be reversed", tx.SourceAccountID, tx.ID))
+		default:
+			partial = true
+			warnings = appendWarning(warnings, fmt.Sprintf("historical transaction %s has unknown balance semantics", tx.ID))
+		}
+	}
+	for accountID := range invalid {
+		if index, ok := indexes[accountID]; ok {
+			reconstructed[index].Hidden = true
+		}
+	}
+	return reconstructed, warnings, partial, nil
 }
 
 func periodAt(now time.Time, timezone string) (string, error) {

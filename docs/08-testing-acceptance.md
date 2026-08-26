@@ -179,6 +179,8 @@ CI 绿色只代表**可重复的软件/运维契约**通过，不等价于真实
 
 - 在已有当月成功 monthly report run 后重启 Finance Core；
 - `job_runs` 不产生同一 household/job/scheduled_for 的重复成功记录；
+- `monthly_reports` 只存在一个对应 household/period 的不可变产物，`content_hash` 为 64 位 SHA-256，读取时通过重新计算校验；
+- `/api/v1/reports` 返回真实月报产物及其 `content_hash`，不能用成功的 `job_runs` 冒充已生成报表；
 - 人为制造/模拟 interrupted `running` 后重启，能够恢复为 failed 并允许重试；
 - 不保存原始 secret-bearing error text。
 
