@@ -75,6 +75,12 @@ smoke_images() {
     -e POSTGRES_USER=probe \
     -e POSTGRES_PASSWORD=probe-password \
     -e POSTGRES_DB=probe \
+    -e FINANCE_DB_NAME=finance_probe \
+    -e FINANCE_DB_USER=finance_probe \
+    -e FINANCE_DB_PASSWORD=finance-probe-password \
+    -e EBK_DB_NAME=ebk_probe \
+    -e EBK_DB_USER=ebk_probe \
+    -e EBK_DB_PASSWORD=ebk-probe-password \
     "$POSTGRES_IMAGE" >/dev/null
   wait_for_postgres
   test "$(docker exec "$POSTGRES_CONTAINER" psql -U probe -d probe -Atqc 'SELECT 1')" = '1'
