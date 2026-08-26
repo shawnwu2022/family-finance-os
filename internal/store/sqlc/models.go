@@ -50,6 +50,50 @@ type AgentToolAudit struct {
 	DurationMs      pgtype.Int8        `json:"duration_ms"`
 }
 
+type AuthChallenge struct {
+	ID                          int64              `json:"id"`
+	TokenHash                   []byte             `json:"token_hash"`
+	UserID                      int64              `json:"user_id"`
+	Kind                        string             `json:"kind"`
+	PendingTotpSecretCiphertext []byte             `json:"pending_totp_secret_ciphertext"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt                   pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt                  pgtype.Timestamptz `json:"consumed_at"`
+}
+
+type AuthRecoveryCode struct {
+	ID         int64              `json:"id"`
+	UserID     int64              `json:"user_id"`
+	CodeHash   []byte             `json:"code_hash"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+}
+
+type AuthSession struct {
+	ID            int64              `json:"id"`
+	TokenHash     []byte             `json:"token_hash"`
+	UserID        int64              `json:"user_id"`
+	CsrfTokenHash []byte             `json:"csrf_token_hash"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	LastSeenAt    pgtype.Timestamptz `json:"last_seen_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt     pgtype.Timestamptz `json:"revoked_at"`
+}
+
+type AuthUser struct {
+	ID                   int64              `json:"id"`
+	Username             string             `json:"username"`
+	NormalizedUsername   string             `json:"normalized_username"`
+	PasswordHash         string             `json:"password_hash"`
+	HouseholdID          int64              `json:"household_id"`
+	TotpSecretCiphertext []byte             `json:"totp_secret_ciphertext"`
+	TotpLastCounter      pgtype.Int8        `json:"totp_last_counter"`
+	TotpEnrolledAt       pgtype.Timestamptz `json:"totp_enrolled_at"`
+	DisabledAt           pgtype.Timestamptz `json:"disabled_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type BudgetLine struct {
 	ID                  int64              `json:"id"`
 	BudgetPlanID        int64              `json:"budget_plan_id"`
@@ -119,9 +163,9 @@ type FinancialGoal struct {
 	Flexibility              string             `json:"flexibility"`
 	MonthlyContributionMinor int64              `json:"monthly_contribution_minor"`
 	Currency                 string             `json:"currency"`
-	Active                   bool               `json:"active"`
-	CreatedAt                pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	Active                    bool               `json:"active"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Household struct {
