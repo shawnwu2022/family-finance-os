@@ -48,6 +48,12 @@ for pair in \
   grep -Fq "$pair" compose.yaml || fail "missing hardened ezBookkeeping setting: $pair"
 done
 
+grep -Fq 'FINANCE_TRUSTED_PROXY_CIDR: 172.30.0.10/32' compose.yaml \
+  || fail "Finance Core must trust only the deterministic Caddy address for forwarded login source IPs"
+if grep -Eq 'FINANCE_TRUSTED_PROXY_CIDR:[[:space:]]*\$\{' compose.yaml; then
+  fail "reference Compose must not allow .env to widen the Finance trusted-proxy boundary"
+fi
+
 if grep -Eq '^[[:space:]]*EBK_SECURITY_SECRET_KEY:' compose.yaml || grep -Eq '^EBK_SECURITY_SECRET_KEY=' .env.example; then
   fail "ezBookkeeping secret key must not be supplied as a plaintext environment value"
 fi

@@ -82,7 +82,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 		}
 		request.Username = strings.TrimSpace(request.Username)
 		normalizedUsername := strings.ToLower(request.Username)
-		remoteHost := loginRemoteHost(r.RemoteAddr)
+		remoteHost := loginRemoteHostForAuth(r, auth)
 		now := time.Now().UTC()
 		if !loginLimiter.Allow(remoteHost, normalizedUsername, now) {
 			w.Header().Set("Retry-After", "300")

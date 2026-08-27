@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -63,6 +64,7 @@ type AuthConfig struct {
 	KeyFile           string
 	AdminUsername     string
 	AdminPasswordFile string
+	TrustedProxyCIDR  string
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -98,6 +100,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	trustedProxyCIDR, err := parseOptionalCIDR("FINANCE_TRUSTED_PROXY_CIDR", getenv("FINANCE_TRUSTED_PROXY_CIDR"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		ListenAddr: valueOrDefault(getenv("FINANCE_LISTEN_ADDR"), ":8000"),
@@ -120,6 +126,7 @@ func Load(getenv func(string) string) (Config, error) {
 			KeyFile:           valueOrDefault(getenv("FINANCE_AUTH_KEY_FILE"), "/run/secrets/finance-auth-key"),
 			AdminUsername:     valueOrDefault(getenv("FINANCE_ADMIN_USERNAME"), "finance"),
 			AdminPasswordFile: valueOrDefault(getenv("FINANCE_ADMIN_PASSWORD_FILE"), "/run/secrets/finance-admin-password"),
+			TrustedProxyCIDR:  trustedProxyCIDR,
 		},
 	}, nil
 }
@@ -232,6 +239,18 @@ func canonicalMCPOrigin(raw string) (string, error) {
 		return "", fmt.Errorf("origin must contain only scheme and authority")
 	}
 	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host), nil
+}
+
+func parseOptionalCIDR(key, raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	prefix, err := netip.ParsePrefix(raw)
+	if err != nil {
+		return "", fmt.Errorf("%s must be a valid CIDR", key)
+	}
+	return prefix.Masked().String(), nil
 }
 
 func parsePositiveInt(key, raw string) (int, error) {

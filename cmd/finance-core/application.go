@@ -132,6 +132,7 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 		server.WithWeb(webassets.Handler()),
 		server.WithReady(pool.Ping),
 		server.WithBrowserAuth(browserAuth),
+		server.WithTrustedProxyCIDR(cfg.Auth.TrustedProxyCIDR),
 	}
 	if cfg.MCP.Enabled {
 		mcpHandler, err := buildMCPHandler(ctx, cfg.MCP, pool, financeAPI)
