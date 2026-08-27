@@ -12,7 +12,7 @@ import (
 
 func TestWithScopedAPIBindsAdvisorHouseholdInContext(t *testing.T) {
 	capture := &scopedCaptureAPI{}
-	handler := NewHandler(WithScopedAPI(capture))
+	handler := newFinanceAPIUnitHandler(scopedFinanceAPI{next: capture})
 
 	body := `{"household_id":77,"question":"现在的现金流安全吗？","require_tool":true}`
 	resp := httptest.NewRecorder()
