@@ -298,13 +298,65 @@ sudo chown restic:restic /etc/family-finance/rest-server.htpasswd
 
 把 producer password 和 repository encryption password 通过受保护渠道分别复制到 application host 的 `RESTIC_REST_PASSWORD_FILE` / `RESTIC_PASSWORD_FILE`。确认复制完成后，backup host 上临时 producer plaintext 可以删除；长期保留 bcrypt htpasswd hash 即可。
 
-启动 HTTPS endpoint 后验证：
+### 6.3 rest-server systemd service 与 HTTPS 反代
+
+rest-server 本体只绑定 loopback。创建 `/etc/systemd/system/rest-server.service`：
+
+```ini
+[Unit]
+Description=Family Finance append-only rest-server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=restic
+Group=restic
+UMask=0077
+ExecStart=/usr/local/bin/rest-server --path /srv/restic --listen 127.0.0.1:8000 --append-only --private-repos --htpasswd-file /etc/family-finance/rest-server.htpasswd
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/restic
+ReadOnlyPaths=/etc/family-finance/rest-server.htpasswd
+
+[Install]
+WantedBy=multi-user.target
+```
+
+应用并确认服务运行：
 
 ```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now rest-server
+sudo systemctl status --no-pager rest-server
+```
+
+公网不得开放 rest-server 的 8000/tcp。由 Caddy 或等价受验证代理把 HTTPS 终止后反代到 `127.0.0.1:8000`。例如：
+
+```caddyfile
+backup.example.com {
+    @root path /
+    respond @root "ok" 200
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+应用并验证：
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl enable --now caddy
+sudo systemctl reload caddy
 curl -fsS https://backup.example.com/
 ```
 
-### 6.3 Maintenance
+确认 `rest-server` 使用 `/etc/family-finance/rest-server.htpasswd`，并且 `--append-only --private-repos` 均已生效。不得用 `--no-auth`、公网 HTTP 或直接暴露 8000/tcp 替代该边界。
+
+### 6.4 Maintenance
 
 所有 destructive maintenance 只在 backup host 的授权账户执行。先 dry-run：
 
