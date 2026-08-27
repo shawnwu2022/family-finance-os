@@ -100,6 +100,10 @@ func applicationMCPTestConfig(t *testing.T) config.Config {
 	if err := os.WriteFile(authKeyPath, []byte(applicationTestAuthKey), 0o600); err != nil {
 		t.Fatalf("write auth key: %v", err)
 	}
+	ledgerTokenPath := filepath.Join(t.TempDir(), "ezbookkeeping-api-token")
+	if err := os.WriteFile(ledgerTokenPath, []byte("test-token"), 0o600); err != nil {
+		t.Fatalf("write ledger API token: %v", err)
+	}
 	return config.Config{
 		ListenAddr: ":8000",
 		Timezone:   "Asia/Shanghai",
@@ -112,8 +116,8 @@ func applicationMCPTestConfig(t *testing.T) config.Config {
 			SSLMode:  "disable",
 		},
 		Ledger: config.LedgerConfig{
-			BaseURL:  "http://ezbookkeeping.invalid:8080",
-			APIToken: "test-token",
+			BaseURL:      "http://ezbookkeeping.invalid:8080",
+			APITokenFile: ledgerTokenPath,
 		},
 		Auth: config.AuthConfig{KeyFile: authKeyPath},
 	}
