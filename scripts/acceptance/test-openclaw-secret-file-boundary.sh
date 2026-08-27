@@ -46,4 +46,12 @@ if grep -Fq -- '--user "acceptance:${finance_auth_password}"' "$provisioner"; th
   fail "Finance health check must not depend on removed Caddy Basic Auth"
 fi
 
+grep -Fq -- '--ip 172.30.0.30' "$provisioner" \
+  || fail "ezBookkeeping account seed must originate from the Finance Core source IP"
+grep -Fq 'http://ezbookkeeping:8080/api/v1/accounts/add.json' "$provisioner" \
+  || fail "ezBookkeeping account seed must use the private application network"
+if grep -Fq 'https://ebk.localhost/api/v1/accounts/add.json' "$provisioner"; then
+  fail "Finance API token must not be replayed through the public ezBookkeeping edge for seeding"
+fi
+
 echo "OpenClaw secret-file boundary contract OK"
