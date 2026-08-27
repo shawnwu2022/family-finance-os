@@ -21,7 +21,7 @@ trap cleanup EXIT INT TERM
 
 db_url='postgres://finance_app:test-secret@postgres:5432/finance?sslmode=disable'
 "${compose[@]}" run --rm go goose -dir /src/db/migrations postgres "$db_url" up
-"${compose[@]}" run --rm go bash -lc 'go test -race ./internal/auth ./internal/server ./cmd/finance-core -count=1'
+"${compose[@]}" run --rm go bash -c 'go test -race ./internal/auth ./internal/server ./cmd/finance-core -count=1'
 "${compose[@]}" run --rm go bash /src/scripts/acceptance/finance-auth-live-smoke.sh
 
 echo "Finance authentication security verification OK"
