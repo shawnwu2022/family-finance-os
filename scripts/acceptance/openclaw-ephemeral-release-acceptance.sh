@@ -23,6 +23,7 @@ audit_table="agent_tool_audits"
 openclaw_version="2026.7.1-2"
 ollama_image="ollama/ollama:0.32.5"
 ollama_model="qwen3.5:4b"
+seed_image="alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
 
 workdir="$(mktemp -d /tmp/family-finance-openclaw-acceptance.XXXXXX)"
 chmod 0700 "$workdir"
@@ -234,18 +235,24 @@ printf '%s' "$ebk_api_token" >"$ebk_api_token_host_file"
 chmod 0600 "$ebk_api_token_host_file"
 sudo chown 65532:65532 "$ebk_api_token_host_file"
 
-printf 'header = "Authorization: %s %s"\n' "Bearer" "$ebk_api_token" >"$workdir/ebk-auth.curl"
-chmod 0600 "$workdir/ebk-auth.curl"
 cat >"$workdir/account.json" <<'JSON'
 {"name":"Acceptance Checking","category":2,"type":1,"icon":"1","color":"2196F3","currency":"CNY"}
 JSON
-if ! curl --config "$workdir/ebk-auth.curl" --silent --show-error --fail-with-body \
-  --connect-timeout 5 --max-time 30 --cacert "$caddy_root" \
-  --header 'Content-Type: application/json' \
-  --header 'X-Timezone-Name: Asia/Shanghai' \
-  --data-binary @"$workdir/account.json" \
-  https://ebk.localhost/api/v1/accounts/add.json >"$workdir/account-response.json"; then
-  fail "ezBookkeeping Account API seed request failed"
+if ! docker run --rm \
+  --network "${project}_app" \
+  --ip 172.30.0.30 \
+  --volume "$ebk_api_token_host_file:/run/seed/token:ro" \
+  --volume "$workdir/account.json:/run/seed/account.json:ro" \
+  "$seed_image" sh -eu -c '
+    token="$(cat /run/seed/token)"
+    exec wget -qO- \
+      --header "Authorization: Bearer ${token}" \
+      --header "Content-Type: application/json" \
+      --header "X-Timezone-Name: Asia/Shanghai" \
+      --post-file=/run/seed/account.json \
+      http://ezbookkeeping:8080/api/v1/accounts/add.json
+  ' >"$workdir/account-response.json"; then
+  fail "ezBookkeeping internal Account API seed request failed"
 fi
 jq -e '.success == true and (.result.id != null)' "$workdir/account-response.json" >/dev/null \
   || fail "ezBookkeeping Account API did not create the acceptance account"
