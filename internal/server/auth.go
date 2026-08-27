@@ -55,6 +55,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 		return
 	}
 	loginLimiter := newLoginThrottle(5, 5*time.Minute, 4096)
+	secondFactorLimiter := newLoginThrottle(5, 5*time.Minute, 4096)
 
 	mux.HandleFunc("GET /api/v1/auth/session", func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(SessionCookieName)
@@ -85,8 +86,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 		remoteHost := loginRemoteHostForAuth(r, auth)
 		now := time.Now().UTC()
 		if !loginLimiter.Allow(remoteHost, normalizedUsername, now) {
-			w.Header().Set("Retry-After", "300")
-			writeAPIError(w, http.StatusTooManyRequests, "rate_limited", "too many authentication attempts")
+			writeAuthRateLimited(w)
 			return
 		}
 		result, err := auth.BeginLogin(r.Context(), request.Username, request.Password, now)
@@ -119,11 +119,21 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 			writeAPIError(w, http.StatusUnauthorized, "invalid_second_factor", "invalid second factor")
 			return
 		}
-		issue, err := auth.ConfirmEnrollment(r.Context(), request.Challenge, request.Code, time.Now().UTC())
+		remoteHost := loginRemoteHostForAuth(r, auth)
+		now := time.Now().UTC()
+		if !secondFactorLimiter.Allow(remoteHost, request.Challenge, now) {
+			writeAuthRateLimited(w)
+			return
+		}
+		issue, err := auth.ConfirmEnrollment(r.Context(), request.Challenge, request.Code, now)
 		if err != nil {
+			if errors.Is(err, financeauth.ErrInvalidSecondFactor) {
+				secondFactorLimiter.RecordFailure(remoteHost, request.Challenge, now)
+			}
 			writeSecondFactorError(w, err)
 			return
 		}
+		secondFactorLimiter.RecordSuccess(remoteHost, request.Challenge)
 		writeSessionIssue(w, issue)
 	})
 
@@ -138,11 +148,21 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 			writeAPIError(w, http.StatusUnauthorized, "invalid_second_factor", "invalid second factor")
 			return
 		}
-		issue, err := auth.VerifySecondFactor(r.Context(), request.Challenge, request.Code, request.Recovery, time.Now().UTC())
+		remoteHost := loginRemoteHostForAuth(r, auth)
+		now := time.Now().UTC()
+		if !secondFactorLimiter.Allow(remoteHost, request.Challenge, now) {
+			writeAuthRateLimited(w)
+			return
+		}
+		issue, err := auth.VerifySecondFactor(r.Context(), request.Challenge, request.Code, request.Recovery, now)
 		if err != nil {
+			if errors.Is(err, financeauth.ErrInvalidSecondFactor) {
+				secondFactorLimiter.RecordFailure(remoteHost, request.Challenge, now)
+			}
 			writeSecondFactorError(w, err)
 			return
 		}
+		secondFactorLimiter.RecordSuccess(remoteHost, request.Challenge)
 		writeSessionIssue(w, issue)
 	})
 
@@ -186,6 +206,11 @@ func requireBrowserAuth(auth BrowserAuth, next http.Handler) http.Handler {
 		ctx = requestscope.WithHouseholdID(ctx, identity.HouseholdID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func writeAuthRateLimited(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", "300")
+	writeAPIError(w, http.StatusTooManyRequests, "rate_limited", "too many authentication attempts")
 }
 
 func writeSecondFactorError(w http.ResponseWriter, err error) {
