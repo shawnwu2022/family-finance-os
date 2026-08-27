@@ -23,6 +23,9 @@ jobs:
       - name: Verify release acceptance contract
         shell: bash
         run: bash scripts/acceptance/test-openclaw-release-acceptance.sh
+      - name: Verify application secret-file acceptance contract
+        shell: bash
+        run: bash scripts/acceptance/test-openclaw-secret-file-boundary.sh
       - name: Verify Compose container refresh contract
         shell: bash
         run: bash scripts/acceptance/test-openclaw-compose-container-refresh.sh
