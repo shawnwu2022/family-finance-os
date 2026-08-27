@@ -30,6 +30,12 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 	if err != nil {
 		return nil, nil, err
 	}
+	ledgerToken, err := loadLedgerAPIToken(cfg.Ledger)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer clear(ledgerToken)
+
 	pool, err := store.OpenPostgres(ctx, cfg.Database)
 	if err != nil {
 		return nil, nil, err
@@ -48,7 +54,7 @@ func buildApplicationHandler(ctx context.Context, cfg config.Config) (http.Handl
 	if err != nil {
 		return fail(fmt.Errorf("configure browser authentication: %w", err))
 	}
-	ledgerClient, err := ezbookkeeping.NewClient(cfg.Ledger.BaseURL, cfg.Ledger.APIToken, cfg.Timezone, nil)
+	ledgerClient, err := ezbookkeeping.NewClient(cfg.Ledger.BaseURL, string(ledgerToken), cfg.Timezone, nil)
 	if err != nil {
 		return fail(fmt.Errorf("configure ezbookkeeping ledger: %w", err))
 	}
@@ -207,16 +213,20 @@ func loadBrowserAuthSecretBox(cfg config.AuthConfig) (*financeauth.SecretBox, er
 	if err != nil {
 		return nil, fmt.Errorf("read finance auth key: %w", err)
 	}
-	defer func() {
-		for i := range key {
-			key[i] = 0
-		}
-	}()
+	defer clear(key)
 	secretBox, err := financeauth.NewSecretBox(key)
 	if err != nil {
 		return nil, fmt.Errorf("configure finance auth key: %w", err)
 	}
 	return secretBox, nil
+}
+
+func loadLedgerAPIToken(cfg config.LedgerConfig) ([]byte, error) {
+	token, err := readRequiredSecretFile(strings.TrimSpace(cfg.APITokenFile), 4096)
+	if err != nil {
+		return nil, fmt.Errorf("read ezbookkeeping API token: %w", err)
+	}
+	return token, nil
 }
 
 func validateRuntimeAIConfig(cfg config.LLMConfig) (bool, error) {

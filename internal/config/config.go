@@ -31,8 +31,8 @@ type DatabaseConfig struct {
 }
 
 type LedgerConfig struct {
-	BaseURL  string
-	APIToken string
+	BaseURL      string
+	APITokenFile string
 }
 
 type LLMConfig struct {
@@ -69,6 +69,9 @@ func Load(getenv func(string) string) (Config, error) {
 	if getenv == nil {
 		return Config{}, errors.New("getenv function is required")
 	}
+	if strings.TrimSpace(getenv("EBK_API_TOKEN")) != "" {
+		return Config{}, errors.New("EBK_API_TOKEN must not be set; use EBK_API_TOKEN_FILE")
+	}
 
 	port, err := parsePort(valueOrDefault(getenv("DB_PORT"), "5432"))
 	if err != nil {
@@ -101,8 +104,8 @@ func Load(getenv func(string) string) (Config, error) {
 		Timezone:   valueOrDefault(getenv("APP_TIMEZONE"), "Asia/Shanghai"),
 		Database:   db,
 		Ledger: LedgerConfig{
-			BaseURL:  valueOrDefault(getenv("EBK_BASE_URL"), "http://ezbookkeeping:8080/api/v1"),
-			APIToken: getenv("EBK_API_TOKEN"),
+			BaseURL:      valueOrDefault(getenv("EBK_BASE_URL"), "http://ezbookkeeping:8080/api/v1"),
+			APITokenFile: valueOrDefault(getenv("EBK_API_TOKEN_FILE"), "/run/secrets/ezbookkeeping-api-token"),
 		},
 		LLM: LLMConfig{
 			BaseURL:       getenv("LLM_BASE_URL"),

@@ -31,9 +31,14 @@ func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
 		t.Fatalf("parse TEST_POSTGRES_PORT: %v", err)
 	}
 
-	authKeyFile := filepath.Join(t.TempDir(), "finance-auth-key")
+	secretDir := t.TempDir()
+	authKeyFile := filepath.Join(secretDir, "finance-auth-key")
 	if err := os.WriteFile(authKeyFile, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
 		t.Fatalf("write auth key: %v", err)
+	}
+	ledgerTokenFile := filepath.Join(secretDir, "ezbookkeeping-api-token")
+	if err := os.WriteFile(ledgerTokenFile, []byte("test-token"), 0o600); err != nil {
+		t.Fatalf("write ledger token: %v", err)
 	}
 	cfg := config.Config{
 		ListenAddr: ":8000",
@@ -47,8 +52,8 @@ func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
 			SSLMode:  "disable",
 		},
 		Ledger: config.LedgerConfig{
-			BaseURL:  "http://ezbookkeeping.invalid:8080",
-			APIToken: "test-token",
+			BaseURL:      "http://ezbookkeeping.invalid:8080",
+			APITokenFile: ledgerTokenFile,
 		},
 		Auth: config.AuthConfig{KeyFile: authKeyFile},
 	}
@@ -104,6 +109,29 @@ func TestLoadBrowserAuthSecretBoxRequiresPrivateExactKey(t *testing.T) {
 	}
 	if _, err := loadBrowserAuthSecretBox(config.AuthConfig{KeyFile: insecure}); err == nil {
 		t.Fatal("loadBrowserAuthSecretBox accepted group/other-readable key")
+	}
+}
+
+func TestLoadLedgerAPITokenRequiresPrivateSecretFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	valid := filepath.Join(dir, "valid-token")
+	if err := os.WriteFile(valid, []byte("ledger-token\n"), 0o600); err != nil {
+		t.Fatalf("write valid token: %v", err)
+	}
+	token, err := loadLedgerAPIToken(config.LedgerConfig{APITokenFile: valid})
+	if err != nil || string(token) != "ledger-token" {
+		t.Fatalf("load valid ledger token: token=%q err=%v", token, err)
+	}
+	clear(token)
+
+	insecure := filepath.Join(dir, "insecure-token")
+	if err := os.WriteFile(insecure, []byte("ledger-token"), 0o644); err != nil {
+		t.Fatalf("write insecure token: %v", err)
+	}
+	if _, err := loadLedgerAPIToken(config.LedgerConfig{APITokenFile: insecure}); err == nil {
+		t.Fatal("loadLedgerAPIToken accepted group/other-readable token")
 	}
 }
 

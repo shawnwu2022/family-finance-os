@@ -28,14 +28,15 @@ services:
       EBK_DB_USER: ${EBK_DB_USER:-ezbookkeeping_app}
       EBK_DB_PASSWORD: ${EBK_DB_PASSWORD}
     volumes:
-      # PostgreSQL 18+ official image: mount the parent path /var/lib/postgresql.
       - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 10
-    networks: [app]
+    networks:
+      app:
+        ipv4_address: 172.30.0.40
 
   ezbookkeeping:
     build:
@@ -55,13 +56,23 @@ services:
       EBK_DATABASE_USER: ${EBK_DB_USER:-ezbookkeeping_app}
       EBK_DATABASE_PASSWD: ${EBK_DB_PASSWORD}
       EBK_DATABASE_SSL_MODE: disable
-      EBK_SECURITY_SECRET_KEY: ${EBK_SECURITY_SECRET_KEY}
+      EBK_SECURITY_SECRET_KEY_FILE: /run/secrets/ezbookkeeping-secret-key
+      EBK_SECURITY_TRUSTED_PROXY_IPS: 172.30.0.10/32
+      EBK_SECURITY_TOKEN_EXPIRED_TIME: "43200"
+      EBK_SECURITY_TOKEN_MIN_REFRESH_INTERVAL: "1800"
       EBK_SECURITY_ENABLE_API_TOKEN: "true"
-      EBK_USER_ENABLE_REGISTER: ${EBK_USER_ENABLE_REGISTER:-true}
+      EBK_SECURITY_API_TOKEN_ALLOWED_REMOTE_IPS: 172.30.0.30
+      EBK_SECURITY_MAX_FAILURES_PER_IP_PER_MINUTE: "5"
+      EBK_SECURITY_MAX_FAILURES_PER_USER_PER_MINUTE: "5"
+      EBK_AUTH_ENABLE_TWO_FACTOR: "true"
+      EBK_USER_ENABLE_REGISTER: ${EBK_USER_ENABLE_REGISTER:-false}
       EBK_LOG_MODE: console
     volumes:
       - ./data/ezbookkeeping-storage:/ezbookkeeping/storage
-    networks: [app]
+      - ${EBK_SECURITY_SECRET_KEY_HOST_FILE:?EBK_SECURITY_SECRET_KEY_HOST_FILE is required}:/run/secrets/ezbookkeeping-secret-key:ro
+    networks:
+      app:
+        ipv4_address: 172.30.0.20
 
   finance-migrate:
     build: *finance-core-build
@@ -94,9 +105,9 @@ services:
       <<: *finance-database-environment
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       FINANCE_ADMIN_USERNAME: ${FINANCE_ADMIN_USERNAME:-finance}
-      FINANCE_ADMIN_PASSWORD_FILE: ${FINANCE_ADMIN_PASSWORD_FILE:-/run/secrets/finance-admin-password}
+      FINANCE_ADMIN_PASSWORD_FILE: /run/secrets/finance-admin-password
     volumes:
-      - ./secrets:/run/secrets:ro
+      - ${FINANCE_ADMIN_PASSWORD_HOST_FILE:?FINANCE_ADMIN_PASSWORD_HOST_FILE is required}:/run/secrets/finance-admin-password:ro
     networks: [app]
 
   finance-core:
@@ -112,7 +123,7 @@ services:
     environment:
       <<: *finance-database-environment
       EBK_BASE_URL: ${EBK_BASE_URL:-http://ezbookkeeping:8080/api/v1}
-      EBK_API_TOKEN: ${EBK_API_TOKEN:-}
+      EBK_API_TOKEN_FILE: /run/secrets/ezbookkeeping-api-token
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       PORTFOLIO_VALUATION_STALE_AFTER: ${PORTFOLIO_VALUATION_STALE_AFTER:-720h}
       PORTFOLIO_FX_STALE_AFTER: ${PORTFOLIO_FX_STALE_AFTER:-72h}
@@ -129,17 +140,21 @@ services:
       MCP_MAX_CONCURRENT: ${MCP_MAX_CONCURRENT:-4}
       MCP_REQUESTS_PER_MINUTE: ${MCP_REQUESTS_PER_MINUTE:-60}
       MCP_MAX_BODY_BYTES: ${MCP_MAX_BODY_BYTES:-262144}
-      FINANCE_AUTH_KEY_FILE: ${FINANCE_AUTH_KEY_FILE:-/run/secrets/finance-auth-key}
+      FINANCE_AUTH_KEY_FILE: /run/secrets/finance-auth-key
       FINANCE_LISTEN_ADDR: ${FINANCE_LISTEN_ADDR:-:8000}
       FINANCE_HEALTHCHECK_URL: ${FINANCE_HEALTHCHECK_URL:-http://127.0.0.1:8000/healthz}
     volumes:
-      - ./secrets:/run/secrets:ro
+      - ${FINANCE_AUTH_KEY_HOST_FILE:?FINANCE_AUTH_KEY_HOST_FILE is required}:/run/secrets/finance-auth-key:ro
+      - ${EBK_API_TOKEN_HOST_FILE:?EBK_API_TOKEN_HOST_FILE is required}:/run/secrets/ezbookkeeping-api-token:ro
+      - ${MCP_TOKEN_HOST_FILE:-/dev/null}:/run/secrets/finance-mcp-token:ro
     healthcheck:
       test: ["CMD", "/finance-core", "healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 5
-    networks: [app]
+    networks:
+      app:
+        ipv4_address: 172.30.0.30
 
   caddy:
     build:
@@ -151,8 +166,6 @@ services:
     environment:
       EBK_DOMAIN: ${EBK_DOMAIN}
       FINANCE_DOMAIN: ${FINANCE_DOMAIN}
-      FINANCE_AUTH_USER: ${FINANCE_AUTH_USER:?FINANCE_AUTH_USER is required}
-      FINANCE_AUTH_HASH: ${FINANCE_AUTH_HASH:?FINANCE_AUTH_HASH is required}
     ports:
       - "80:80"
       - "443:443"
@@ -161,11 +174,16 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    networks: [app]
+    networks:
+      app:
+        ipv4_address: 172.30.0.10
 
 networks:
   app:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   postgres_data:
