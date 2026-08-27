@@ -73,7 +73,6 @@ func TestBuildApplicationHandlerWiresPortfolioSnapshotsIntegration(t *testing.T)
 	}
 	cfg := applicationMCPTestConfig(t)
 	cfg.Ledger.BaseURL = ledgerServer.URL + "/api/v1"
-	cfg.Ledger.APIToken = "test-token"
 	cfg.MCP = config.MCPConfig{
 		Enabled:           true,
 		TokenFile:         tokenPath,
