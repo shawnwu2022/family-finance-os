@@ -64,6 +64,10 @@ done
 grep -Fq 'EBK_API_TOKEN_FILE:' compose.yaml || fail "Finance Core must receive only an ezBookkeeping API token file path"
 grep -Fq 'EBK_SECURITY_SECRET_KEY_FILE:' compose.yaml || fail "ezBookkeeping wrapper must receive only a secret-key file path"
 grep -Fq 'EBK_SECURITY_SECRET_KEY_FILE' infra/ezbookkeeping/docker-entrypoint.sh || fail "ezBookkeeping secret-file wrapper is missing"
+grep -Fq -- '--conf-path' infra/ezbookkeeping/docker-entrypoint.sh || fail "ezBookkeeping wrapper must use the pinned upstream --conf-path flag"
+if grep -Eq -- '(^|[[:space:]])--config([[:space:]]|=)' infra/ezbookkeeping/docker-entrypoint.sh; then
+  fail "ezBookkeeping wrapper must not invent unsupported --config flag"
+fi
 
 for host_key in FINANCE_AUTH_KEY_HOST_FILE FINANCE_ADMIN_PASSWORD_HOST_FILE EBK_API_TOKEN_HOST_FILE EBK_SECURITY_SECRET_KEY_HOST_FILE; do
   grep -Fq "${host_key}=" .env.example || fail ".env.example must document ${host_key}"

@@ -21,6 +21,7 @@ required=(
   scripts/ci/restore-verify.sh
   scripts/ci/container-verify.sh
   scripts/ci/test-preflight-secret-permissions.sh
+  scripts/ci/test-application-preflight-security.sh
   scripts/ci/test-workflow-action-pins.sh
   scripts/ci/test-workflow-action-pins-regression.sh
   scripts/ci/test-production-supply-chain.sh
@@ -85,6 +86,7 @@ fi
 grep -Fq '[[ -f "$SOURCE_ROOT/go.mod" ]]' scripts/ci/mcp-security.sh || fail "MCP security verifier must validate the mounted source tree by go.mod"
 
 bash scripts/ci/test-preflight-secret-permissions.sh
+bash scripts/ci/test-application-preflight-security.sh
 bash scripts/ci/test-workflow-action-pins.sh
 bash scripts/ci/test-workflow-action-pins-regression.sh
 bash scripts/ci/test-production-supply-chain.sh
