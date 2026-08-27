@@ -19,16 +19,20 @@
 
 ## 当前集成状态
 
-当前 `main` 已集成：
+当前代码线已集成：
 
 - V1 Finance Core 确定性财务闭环；
 - V1.3 显式 Portfolio asset snapshot + Dashboard 管理 UI；
+- Finance Core application-native authentication：Argon2id 密码、强制 TOTP、服务端 Session、CSRF、household authorization、登录限流与离线恢复命令；
+- 浏览器不再提交或持久化 `household_id` 作为授权依据；
 - V2 Agent Adapter + 12 个只读/模拟 Finance tools；
-- Caddy `/mcp` Streamable HTTP + Bearer/Origin/限流/并发/超时/审计边界；
+- MCP Streamable HTTP 使用与浏览器 Session 完全独立的 Bearer/Origin/限流/并发/超时/审计边界；
+- Caddy 只负责 TLS、反向代理和非权威的防御性响应头，不参与 Finance 用户认证；
+- ezBookkeeping 保持独立账号体系，并启用 2FA 能力、关闭 steady-state 注册、限制登录失败、固定 trusted proxy 和 Finance API-token 来源 IP；
 - 真实 OpenClaw + Ollama 临时环境 release acceptance；
-- repository-native `make verify` / `make verify-*` 质量门禁。
+- repository-native `make verify` / `make verify-*` 质量门禁，包括独立 `make verify-auth-security`。
 
-工程集成通过不等于生产发布完成。最终 release 仍受 `docs/acceptance/v1-production-evidence.md` 约束，必须完成真实账单完整月 reconciliation、真实灾备恢复、真实手机/PWA、secret hygiene 等现实环境证据。
+工程集成通过不等于生产发布完成。最终 release 仍受 `docs/acceptance/v1-production-evidence.md` 约束，必须完成真实账单完整月 reconciliation、真实灾备恢复、真实手机/PWA、真实 ezBookkeeping owner 2FA enrollment、secret hygiene 等现实环境证据。
 
 ## V1 架构
 
@@ -38,6 +42,7 @@ flowchart TD
     OC[OpenClaw / MCP Client] -->|HTTPS /mcp Bearer| C
     C --> EBK[ezBookkeeping 1.6.1]
     C --> FC[Finance Core]
+    FC --> AUTH[密码 + TOTP + Session + CSRF]
     EBK --> PG[(PostgreSQL 18.6)]
     FC --> PG
     FC -->|HTTP API / Bearer Token| EBK
@@ -68,10 +73,10 @@ Python 仅在后续本地 OCR/VLM/P40 Worker 中使用；Rust 不进入 V1。
 
 | 组件 | 当前职责 | 是否权威数据源 |
 |---|---|---|
-| ezBookkeeping | 账户、交易、分类、标签、附件、导入、对账、手机记账 | **交易账本权威源** |
-| Finance Core | 家庭画像、预算、债务合同、目标、资产快照、确定性计算、情景模拟、AI 顾问、MCP tools | **规划域权威源** |
-| PostgreSQL | 两个逻辑数据库 | 是 |
-| Caddy | TLS/反向代理；Finance Basic Auth；`/mcp` Bearer 边界 | 否 |
+| ezBookkeeping | 账户、交易、分类、标签、附件、导入、对账、手机记账；独立登录/2FA | **交易账本权威源** |
+| Finance Core | 家庭画像、预算、债务合同、目标、资产快照、确定性计算、情景模拟、AI 顾问、浏览器认证/授权、MCP tools | **规划域权威源** |
+| PostgreSQL | 两个逻辑数据库 + Finance 认证状态 | 是 |
+| Caddy | TLS、HTTP 反向代理和防御性响应头；不参与 Finance 用户身份认证 | 否 |
 | LLM | 解释、建议、计划叙述 | **绝不是数字权威源** |
 | 本地服务器 | V1 异地备份/恢复演练 | 灾备副本 |
 | P40 | 当前不依赖；后续本地 OCR/脱敏/小模型 | 否 |
@@ -85,12 +90,11 @@ Python 仅在后续本地 OCR/VLM/P40 Worker 中使用；Rust 不进入 V1。
 4. [`docs/02-domain-model.md`](docs/02-domain-model.md) — 财务领域模型。
 5. [`docs/04-finance-engine.md`](docs/04-finance-engine.md) — 确定性财务算法与口径。
 6. [`docs/05-ai-advisor.md`](docs/05-ai-advisor.md) — AI 边界、Tool 合约、模型路由。
-7. [`docs/07-operations.md`](docs/07-operations.md) — 部署、备份、升级与恢复。
-8. [`docs/09-roadmap.md`](docs/09-roadmap.md) — V0~V4 路线、进入/退出条件。
-9. [`docs/superpowers/plans/2026-08-15-v1-implementation-plan.md`](docs/superpowers/plans/2026-08-15-v1-implementation-plan.md) — V1 实施历史计划。
-10. [`docs/11-research-baseline-2026-08-15.md`](docs/11-research-baseline-2026-08-15.md) — 规划核验过的一手资料。
-11. [`docs/12-model-strategy-2026-08-15.md`](docs/12-model-strategy-2026-08-15.md) — 当前模型角色、候选和项目自有 Eval 方法。
-12. [`docs/acceptance/v1-production-evidence.md`](docs/acceptance/v1-production-evidence.md) — 正式 production release 的现实环境证据总账。
+7. [`docs/06-security-privacy.md`](docs/06-security-privacy.md) — application-native auth、安全边界与威胁模型。
+8. [`docs/07-operations.md`](docs/07-operations.md) — 部署、secret、备份、升级与恢复。
+9. [`docs/08-testing-acceptance.md`](docs/08-testing-acceptance.md) — 自动化与真实生产验收门禁。
+10. [`docs/09-roadmap.md`](docs/09-roadmap.md) — V0~V4 路线、进入/退出条件。
+11. [`docs/acceptance/v1-production-evidence.md`](docs/acceptance/v1-production-evidence.md) — 正式 production release 的现实环境证据总账。
 
 ## 仓库原生验证
 
@@ -100,7 +104,7 @@ Python 仅在后续本地 OCR/VLM/P40 Worker 中使用；Rust 不进入 V1。
 make verify
 ```
 
-该命令使用锁定的 Go 1.26.6、Node 24.19.0、PostgreSQL 18.6、sqlc 1.31.1、goose 3.27.3 和 govulncheck 1.7.0，执行迁移 up/down/up、备份恢复演练、Go 单元/集成/race/security 检查、Web 测试与构建、MCP Security、Edge Security、production-ops contract 和最终容器构建。
+该命令使用锁定的 Go 1.26.6、Node 24.19.0、PostgreSQL 18.6、sqlc 1.31.1、goose 3.27.3 和 govulncheck 1.7.0，执行迁移 up/down/up、备份恢复演练、Go 单元/集成/race/security 检查、Finance 真实 HTTP 认证 smoke、Web 测试与构建、MCP Security、Edge Security、production-ops contract 和最终容器构建。
 
 快速检查验证架构本身、无需启动 Docker：
 
@@ -112,6 +116,7 @@ make verify-contract
 
 ```bash
 make verify-go
+make verify-auth-security
 make verify-web
 make verify-mcp-security
 make verify-edge-security
@@ -128,11 +133,7 @@ make verify-container
 cp .env.example .env
 ```
 
-生成 ezBookkeeping Secret：
-
-```bash
-openssl rand -base64 32
-```
+生产 secret 不写进 `.env`。Finance auth key、管理员初始密码、ezBookkeeping signing secret、Finance 专用 ezBookkeeping API token，以及启用 MCP 时的 Bearer token，都通过仓库外私有文件注入；参考路径和权限见 [`docs/07-operations.md`](docs/07-operations.md)。
 
 至少需要两个域名：
 
@@ -141,7 +142,7 @@ book.example.com      -> ezBookkeeping
 finance.example.com   -> Finance Core
 ```
 
-部署流程和 API Token bootstrap 见 [`docs/07-operations.md`](docs/07-operations.md)。
+部署、首次账号/TOTP enrollment、API Token bootstrap 和 fail-closed 升级流程见 [`docs/07-operations.md`](docs/07-operations.md)。
 
 ## 设计纪律
 
