@@ -1,4 +1,4 @@
-import { clearAuthState, getCSRFToken } from './auth'
+import { clearAuthState, getCSRFToken } from './auth.ts'
 import type {
   AdvisorResponse,
   DashboardData,
