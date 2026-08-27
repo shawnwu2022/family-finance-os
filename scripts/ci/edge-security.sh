@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 
 bash scripts/check-edge-security.sh
 bash scripts/ci/application-auth-edge-contract.sh
+bash scripts/ci/application-auth-doc-contract.sh
 bash scripts/ci/test-finance-frame-protection.sh
 
 docker compose version >/dev/null
