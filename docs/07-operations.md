@@ -1,207 +1,293 @@
 # V1 运维手册
 
-## 1. 主机最低前提
+本文只描述当前 application-native authentication 架构。Finance Core 自己负责浏览器登录、TOTP、session、CSRF 与 household authorization；Caddy 只做 TLS / HTTP 反向代理。ezBookkeeping 保持独立账号体系和强制 2FA。
 
-### 生产 VPS
+## 1. 生产主机前提
 
-- Linux 云服务器；
+### 1.1 Application Host
+
+- Linux VPS；
 - Docker Engine + Docker Compose plugin；
-- 公网只开放 80/443 给 Caddy；
-- ezBookkeeping 与 Finance Core 各有一个 DNS A/AAAA 记录；
+- 公网只由 Caddy 监听 80/tcp、443/tcp、443/udp；
+- `book.<domain>` 指向 ezBookkeeping，`finance.<domain>` 指向 Finance Core；
+- PostgreSQL、ezBookkeeping、Finance Core 不映射宿主端口；
 - 系统时钟同步；
-- 宿主机安装 `restic`，用于创建加密离站备份；
-- 如启用 MCP，Bearer secret 以仓库外私有文件提供。
+- 宿主机安装 `openssl`、`restic`；
+- 生产 secret 放在 Git 仓库外的专用目录；
+- 如启用 MCP，Bearer token 同样使用仓库外私有文件。
 
-### 独立 Backup / Maintenance Host
+参考 Compose 使用固定私有网段 `172.30.0.0/24`：Caddy `172.30.0.10`、ezBookkeeping `172.30.0.20`、Finance Core `172.30.0.30`、PostgreSQL `172.30.0.40`。Finance Core 的 `FINANCE_TRUSTED_PROXY_CIDR` 在参考 Compose 中固定为 `172.30.0.10/32`；这是登录限流的客户端 IP 解析边界，不是身份认证机制，也不应通过 `.env` 放宽。
 
-生产发布还要求一个与生产 VPS 分离的恢复域：
+### 1.2 独立 Backup / Maintenance Host
+
+生产发布还要求一个与 application host 分离的恢复域：
 
 - 持久化保存 restic repository；
 - 运行带认证的 `rest-server`；
-- 对生产凭据启用 `--append-only`；
-- 推荐同时启用 `--private-repos` 做 producer 隔离；
+- 对生产 producer 凭据启用 `--append-only`；
+- 推荐同时启用 `--private-repos`；
 - 通过 HTTPS 暴露 REST backend；
-- 系统时钟同步，maintenance retention 以该受信任时钟为准；
-- 安装 `restic`、`rest-server`、`openssl`、提供 `htpasswd` 的系统包，以及用于 TLS 终止的 Caddy（或已经受验证的等价 HTTPS reverse proxy）；
-- 只有该主机的受保护维护上下文拥有本地 repository 的完整删除/重写权限；
-- 生产 VPS 不得拥有 backup host 文件系统、full-access REST endpoint 或其它可以删除全部离站恢复点的凭据。
+- 系统时钟同步；
+- 安装 `restic`、`rest-server`、`openssl`、提供 `htpasswd` 的系统包，以及 TLS reverse proxy；
+- 只有受保护 maintenance 身份拥有 repository 删除 / 重写权限；
+- application host 不得持有可以删除全部离站恢复点的凭据。
 
-当前参考 rest-server 版本为 `0.14.0`；部署时必须记录实际版本。rest-server 当前官方语义中，`--append-only` 允许创建新备份但禁止删除/修改已有备份；`--private-repos` 要求用户名与 URL 的第一个 repository path component 对应。
+当前参考 `rest-server` 版本为 `0.14.0`；实际部署必须记录真实版本。
 
-资源不在文档中硬写“最低 CPU/RAM”，因为真实负载受数据、LLM、附件影响。家庭 V1 先在现有 VPS 运行并监控 RSS/CPU/磁盘，只有出现压力再扩容。
+## 2. Secret 模型
 
-## 2. 首次部署顺序
+`.env` 只保存域名、数据库配置、非 secret 运行参数和 **secret 文件路径**。以下四项不得把明文值放入 `.env`：
 
-1. `cp .env.example .env`；
-2. 填域名、PostgreSQL 管理密码、两个应用数据库独立密码及 ezBookkeeping Secret；
-3. 为 Finance Core 公网入口设置 `FINANCE_AUTH_USER`，并交互式生成 Caddy bcrypt hash：
+- `FINANCE_AUTH_KEY_HOST_FILE`：Finance TOTP / CSRF 等加密材料使用的 32-byte key；容器内路径固定为 `/run/secrets/finance-auth-key`；
+- `FINANCE_ADMIN_PASSWORD_HOST_FILE`：bootstrap 管理员初始密码；容器内路径 `/run/secrets/finance-admin-password`；
+- `EBK_API_TOKEN_HOST_FILE`：Finance Core 专用 ezBookkeeping API token；容器内路径 `/run/secrets/ezbookkeeping-api-token`；
+- `EBK_SECURITY_SECRET_KEY_HOST_FILE`：ezBookkeeping signing secret；容器内路径 `/run/secrets/ezbookkeeping-secret-key`。
 
-   ```bash
-   docker run --rm -it caddy:2.11.4-alpine caddy hash-password --algorithm bcrypt
-   ```
-
-   把输出以**单引号**写入 `.env`，例如 `FINANCE_AUTH_HASH='$2a$...'`，不要保存明文密码；
-4. `chmod 600 .env`，然后执行 `./scripts/preflight.sh`；
-5. `mkdir -p data/ezbookkeeping-storage backups`；
-6. `sudo chown -R 1000:1000 data/ezbookkeeping-storage`；
-7. `docker compose up -d postgres ezbookkeeping caddy`；此时先保证 ezBookkeeping 可通过 HTTPS 访问。Finance 域在 finance-core 尚未启动时暂时不可用是正常的；
-8. 打开 ezBookkeeping，创建首个用户并启用 2FA；
-9. 在 ezBookkeeping 开启 API Token 后生成 Finance Core 专用 Token；
-10. 写入 `.env` 的 `EBK_API_TOKEN`；
-11. 在 `.env` 中设置 `EBK_USER_ENABLE_REGISTER=false`，并执行 `docker compose up -d --force-recreate ezbookkeeping` 关闭公开注册；
-12. 在 `.env` 中确认 `FINANCE_BOOTSTRAP_NAME`、`FINANCE_BOOTSTRAP_CURRENCY`、`FINANCE_BOOTSTRAP_TIMEZONE` 和 `FINANCE_BOOTSTRAP_LIQUIDITY_FLOOR_MINOR`；
-13. `docker compose up --build finance-bootstrap`。Compose 会先用 PostgreSQL 镜像内嵌的初始化脚本创建应用数据库，再运行 `finance-migrate`；只有全部内嵌 goose migrations 成功后才运行幂等 bootstrap，任一任务失败都会阻止 Finance Core 启动；
-14. 查看 `docker compose logs finance-bootstrap` 并保存输出的 `household_id`；启用 MCP 时，`MCP_HOUSEHOLD_ID` 必须使用该值；
-15. `docker compose up -d finance-core`；该服务仍依赖已成功完成的 `finance-bootstrap`，直接执行 `docker compose up -d --build finance-core` 也不能绕过迁移/初始化链；
-16. 访问 `https://<FINANCE_DOMAIN>/healthz`，应先出现 Caddy Basic Auth，认证后返回健康状态；再检查 `/readyz`；
-17. 在独立 backup host 上部署并初始化 append-only restic REST repository，见第 5 节；
-18. 在生产 VPS 配置 REST producer 凭据并再次执行 `./scripts/preflight.sh`；
-19. 执行第一次 `./scripts/backup.sh`；
-20. 从生产凭据验证 destructive operation 被拒绝；
-21. 在 backup host 执行 `restic check` 和 maintenance dry-run；
-22. 在独立恢复环境执行真实 snapshot restore；
-23. 把真实执行证据记录到 `docs/acceptance/v1-production-evidence.md`。
-
-Caddy 不依赖 finance-core 启动，这是刻意设计的首次部署 bootstrap 边界：必须先能访问 ezBookkeeping 才能生成 `EBK_API_TOKEN`。Finance Core 仍只在内部 Docker network 上被 Caddy 反向代理，没有新增 host 端口。
-
-### 数据库角色隔离
-
-V1 仍然只运行一个 PostgreSQL 实例，但 Finance Core 与 ezBookkeeping 使用不同数据库和不同登录角色。`POSTGRES_USER` 仅用于初始化与备份，不下发给应用容器。这样不增加新的基础设施，同时避免任一应用数据库凭据天然拥有另一财务域数据库的访问权限。
-
-## 3. Secret
-
-通用随机 Secret 生成：
+参考 runtime UID：Finance Core `65532`，ezBookkeeping `1000`。secret 文件推荐 `0600`，group/other 必须为 0。最终 `scripts/preflight.sh` 会检查普通文件、非空、权限、仓库外路径和可读性；如果文件已按 runtime UID 收紧，使用具有检查权限的运维身份执行最终 preflight，例如：
 
 ```bash
-openssl rand -base64 32
+sudo ./scripts/preflight.sh
 ```
 
-Finance Core 的公网 Basic Auth 密码不要写进 `.env`；`.env` 只存 Caddy 生成的 bcrypt hash，且该值应使用单引号包裹，避免 hash 中的 `$` 被 Compose 解释。
+不要把 `.env`、secret files、数据库 dump、附件、原始支付宝/微信/银行账单或带凭据的验收日志提交到 Git。
+
+## 3. 首次部署
+
+### 3.1 准备 `.env` 与基础 secret
 
 ```bash
+cp .env.example .env
 chmod 600 .env
+sudo install -d -m 0700 /etc/family-finance/secrets
 ```
 
-启用离站备份时有两个不同 secret：
+编辑 `.env`，至少填写真实域名、PostgreSQL 管理密码、Finance/ezBookkeeping 独立数据库密码以及四个 `*_HOST_FILE` 路径。保持：
 
-- `RESTIC_PASSWORD_FILE`：restic repository 的加密密码；生产 VPS 创建 snapshot 时需要它，backup/maintenance host 做恢复和维护时也需要它；
-- `RESTIC_REST_PASSWORD_FILE`：生产 producer 登录 append-only REST endpoint 的认证密码。它只用于 REST 认证，不等于 repository 加密密码。
+```text
+EBK_USER_ENABLE_REGISTER=false
+FINANCE_ADMIN_USERNAME=finance
+```
 
-`RESTIC_REST_USERNAME` 不是 secret，可以位于 `.env`；REST 密码本身不得写入 `.env`、repository URL、命令行、Git 或验收证据。**不得在 `.env` 或宿主环境预设原生 `RESTIC_REST_PASSWORD`**；`scripts/preflight.sh` 和 `scripts/backup.sh` 会拒绝它。`scripts/backup.sh` 只在调用 restic 子进程时从 `RESTIC_REST_PASSWORD_FILE` 读取并临时注入原生 `RESTIC_REST_PASSWORD`。
-
-两个 password file 都必须：
-
-- 位于 Git 仓库外；
-- 是普通文件；
-- 对执行备份/维护的账号可读；
-- group / other 权限均关闭，推荐 `0600`。
-
-`scripts/preflight.sh` 在部署前校验这些条件，`scripts/backup.sh` 在每次真正使用 secret 前再次校验文件类型、可读性和 group/other 权限，防止 preflight 后权限漂移仍继续备份。
-
-不要把以下内容加入 Git：
-
-- `.env`；
-- restic repository password file；
-- rest-server producer password file；
-- SSH private key；
-- PostgreSQL dump；
-- ezBookkeeping storage；
-- 原始支付宝/微信/银行账单；
-- 含账户号、身份证、手机号、API key、token 的验收日志。
-
-验收文档只保存脱敏摘要、hash、时间、版本与结果，不保存原始财务数据。
-
-## 4. 日常操作
+生成基础 secret。以下命令避免把 secret 本身放进 shell 参数：
 
 ```bash
-docker compose ps
-docker compose logs --tail=200 finance-core
-docker compose logs --tail=200 ezbookkeeping
-docker compose pull
-docker compose up -d --build
+sudo sh -c 'umask 077; openssl rand -hex 16 | tr -d "\n" > /etc/family-finance/secrets/finance-auth-key'
+sudo sh -c 'umask 077; openssl rand -base64 36 | tr -d "\n" > /etc/family-finance/secrets/finance-admin-password'
+sudo sh -c 'umask 077; openssl rand -base64 32 | tr -d "\n" > /etc/family-finance/secrets/ezbookkeeping-secret-key'
+
+sudo chown 65532:65532 /etc/family-finance/secrets/finance-auth-key
+sudo chown 65532:65532 /etc/family-finance/secrets/finance-admin-password
+sudo chown 1000:1000 /etc/family-finance/secrets/ezbookkeeping-secret-key
+sudo chmod 600 /etc/family-finance/secrets/finance-auth-key \
+  /etc/family-finance/secrets/finance-admin-password \
+  /etc/family-finance/secrets/ezbookkeeping-secret-key
 ```
 
-公网暴露面应始终满足：
+`EBK_API_TOKEN_HOST_FILE` 此时可以只配置目标路径，文件要等 ezBookkeeping owner 建立后再写入。因此**首次 bootstrap 的这一阶段不要运行最终 preflight**；先验证 Compose 语法：
 
-- Caddy：宿主 80/tcp、443/tcp、443/udp；
-- PostgreSQL：无宿主端口；
-- ezBookkeeping：无宿主端口；
-- Finance Core：无宿主端口；
-- 所有应用服务禁止 `network_mode: host`。
+```bash
+sudo docker compose config >/dev/null
+```
 
-CI 的 `scripts/check-edge-security.sh` 会把上述约束作为硬门禁。
+### 3.2 启动账本入口
 
-## 5. Append-only 加密离站备份
+```bash
+mkdir -p data/ezbookkeeping-storage backups
+sudo chown -R 1000:1000 data/ezbookkeeping-storage
+sudo docker compose up -d postgres ezbookkeeping caddy
+```
 
-仓库提供两个职责明确分离的脚本：
+先验证 `https://<EBK_DOMAIN>/` 可访问。Finance 域此时尚未启动是正常状态。
 
-- `scripts/backup.sh`：**生产 VPS producer**；只创建本地 backup payload 并向 append-only REST backend 新增 restic snapshot；
-- `scripts/backup-maintenance.sh`：**独立 backup/maintenance host**；只针对本机 repository 路径执行 retention / prune / check。
+生产 steady-state 不开放公开注册。首个 owner 推荐用 ezBookkeeping CLI 创建，避免临时扩大公网注册面：
 
-生产 VPS 不执行 `restic forget`、`restic prune` 或完整 repository `restic check`。这是安全边界，不是运维偏好：即使生产 VPS 被攻陷，其 producer credential 也不应足以删除已有离站恢复点。
+```bash
+sudo docker compose exec ezbookkeeping /ezbookkeeping/ezbookkeeping userdata user-add \
+  --username '<OWNER>' \
+  --email '<OWNER_EMAIL>' \
+  --nickname '<OWNER_NAME>' \
+  --password '<INTERACTIVE_OR_PROTECTED_VALUE>' \
+  --default-currency CNY
+```
 
-### 5.1 生产 producer 做什么
+如果实际操作环境无法安全避免密码进入 shell history，应改用受保护交互流程，不要把上述示例中的占位符直接替换为真实 secret 并长期留在 history。
 
-每次执行 `scripts/backup.sh` 会：
+打开 ezBookkeeping，使用 owner 登录并立即完成 2FA enrollment。上线验收必须人工确认 owner 2FA 已启用。
 
-- 用 PostgreSQL 管理角色分别对 Finance Core 和 ezBookkeeping 数据库执行 custom-format `pg_dump -Fc`；
-- 用 `pg_restore --list` 检查 dump 可读；
-- 打包 `data/ezbookkeeping-storage`；
-- 为两份 dump 和 storage archive 生成 `SHA256SUMS`；
-- 如果配置了离站 backup，则通过 `rest:https://...` 向 append-only REST backend 执行 `restic snapshots` 和 `restic backup`；
-- 独立清理生产 VPS 上过期的本地 staging backup。
+### 3.3 生成 Finance 专用 ezBookkeeping API token
 
-`BACKUP_RETENTION_DAYS` 只影响生产 VPS 自己的 staging 目录；它没有任何离站 repository 删除权限。
+在已认证的 ezBookkeeping owner 会话中创建一枚只供 Finance Core 使用的 API token。不要把 token 写进 `.env`。将它一次性写入 `EBK_API_TOKEN_HOST_FILE`，例如：
 
-### 5.2 Backup host：rest-server append-only endpoint
+```bash
+sudo sh -c 'umask 077; cat > /etc/family-finance/secrets/ezbookkeeping-api-token'
+# 粘贴 token 后按 Ctrl-D；不要把 token 放进命令参数或 Git。
+sudo chown 65532:65532 /etc/family-finance/secrets/ezbookkeeping-api-token
+sudo chmod 600 /etc/family-finance/secrets/ezbookkeeping-api-token
+```
 
-V1 推荐在独立 backup host 上运行 `rest-server 0.14.0` 或部署时明确记录的更新版本，并启用：
+参考 Compose 将 API token 的网络来源限制为 Finance Core `172.30.0.30`；不要为了手工调试把生产白名单放宽到 Caddy 或公网客户端。
+
+### 3.4 最终 preflight、迁移与 Finance bootstrap
+
+四个 application secret 文件都存在后执行最终 preflight：
+
+```bash
+sudo ./scripts/preflight.sh
+```
+
+确认 `.env` 中的家庭 bootstrap 参数：
+
+```text
+FINANCE_BOOTSTRAP_NAME
+FINANCE_BOOTSTRAP_CURRENCY
+FINANCE_BOOTSTRAP_TIMEZONE
+FINANCE_BOOTSTRAP_LIQUIDITY_FLOOR_MINOR
+FINANCE_ADMIN_USERNAME
+```
+
+然后执行：
+
+```bash
+sudo docker compose up --build finance-bootstrap
+sudo docker compose logs finance-bootstrap
+```
+
+`finance-bootstrap` 依赖 `finance-migrate`，迁移失败会阻止 bootstrap。bootstrap 是幂等的，会创建/复用家庭并创建/复用 Finance 管理员；初始密码来自 `FINANCE_ADMIN_PASSWORD_HOST_FILE`，不应出现在日志中。
+
+保存 bootstrap 输出的 `household_id` 只用于运维和可选 MCP `MCP_HOUSEHOLD_ID`；浏览器 UI 不应要求用户输入它。
+
+启动 Finance Core：
+
+```bash
+sudo docker compose up -d --build finance-core
+curl -fsS https://<FINANCE_DOMAIN>/healthz
+curl -fsS https://<FINANCE_DOMAIN>/readyz
+```
+
+`/healthz` 是最小公开健康端点，不需要浏览器登录。业务 API 仍受 Finance Core session 认证保护。
+
+### 3.5 Finance 首次登录
+
+1. 打开 `https://<FINANCE_DOMAIN>/`；
+2. 用户名使用 `FINANCE_ADMIN_USERNAME`；
+3. 密码来自 `FINANCE_ADMIN_PASSWORD_HOST_FILE` 中的初始管理员密码；
+4. 首次登录必须完成 TOTP enrollment；
+5. 把一次性返回的 recovery codes 保存到独立密码管理器或其它受保护介质；
+6. 完成 TOTP 后进入家庭总览；
+7. 验证退出登录后原 session 不再可用。
+
+Finance Core 的浏览器 session 使用 `__Host-finance_session`，unsafe API 还要求 CSRF token。MCP Bearer 与浏览器 session 是两个独立认证域。
+
+## 4. 登录凭据维护
+
+密码重置、TOTP 重置属于服务器侧维护命令，不提供公网管理 HTTP endpoint。执行前先做可恢复备份，并记录操作时间和原因。重置密码或 TOTP 后应验证旧 session 已撤销，再用新凭据登录并重新保存恢复材料。
+
+管理员初始密码文件用于 bootstrap/维护，不代表浏览器 session；不要用反向代理凭据替代应用认证。
+
+## 5. 日常运行
+
+```bash
+sudo docker compose ps
+sudo docker compose logs --tail=200 finance-core
+sudo docker compose logs --tail=200 ezbookkeeping
+sudo docker compose up -d --build
+```
+
+公网暴露面必须始终满足：
+
+- Caddy：80/tcp、443/tcp、443/udp；
+- PostgreSQL：无 host port；
+- ezBookkeeping：无 host port；
+- Finance Core：无 host port；
+- 禁止 `network_mode: host`。
+
+参考网络的安全约束：
+
+- ezBookkeeping trusted proxy：仅 `172.30.0.10/32`；
+- ezBookkeeping API token 来源：仅 `172.30.0.30`；
+- Finance `FINANCE_TRUSTED_PROXY_CIDR`：仅 `172.30.0.10/32`；
+- MCP 默认关闭；启用时使用独立外部 Bearer secret 文件。
+
+每次升级前后至少执行：
+
+```bash
+make verify
+```
+
+应用认证改动还必须执行专用认证安全门禁（Task 7 引入后）：
+
+```bash
+make verify-auth-security
+```
+
+## 6. Append-only 加密离站备份
+
+仓库将职责分成两个脚本：
+
+- `scripts/backup.sh`：application host producer，只创建本地 payload 并向 append-only REST backend 新增 snapshot；
+- `scripts/backup-maintenance.sh`：独立 backup/maintenance host，执行 retention / prune / check。
+
+application host 不执行离站 repository 的 `restic forget`、`restic prune` 或 full-access maintenance。这是安全边界：生产主机被攻陷时，producer credential 也不应能删除已有离站恢复点。
+
+### 6.1 Producer 配置
+
+`.env` 中只配置：
+
+```text
+RESTIC_REPOSITORY=rest:https://backup.example.com/family-finance-prod/
+RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password
+RESTIC_REST_USERNAME=family-finance-prod
+RESTIC_REST_PASSWORD_FILE=/etc/family-finance/rest-server-password
+```
+
+两个密码文件必须位于仓库外、是普通文件、group/other 无权限。不得在 `.env`、URL、命令行或 Git 中保存 `RESTIC_REST_PASSWORD` 明文。
+
+生产 `RESTIC_REPOSITORY` 必须使用 `rest:https://`，第一层 repository path 必须与 `RESTIC_REST_USERNAME` 一致，以匹配 `--private-repos`。
+
+运行：
+
+```bash
+sudo ./scripts/preflight.sh
+sudo ./scripts/backup.sh
+```
+
+`backup.sh` 会：
+
+- 对 Finance 与 ezBookkeeping 数据库执行 `pg_dump -Fc`；
+- 用 `pg_restore --list` 验证 dump；
+- 打包 ezBookkeeping storage；
+- 生成 `SHA256SUMS`；
+- 配置离站时通过 restic HTTPS REST backend 创建新 snapshot；
+- 仅清理 application host 自己的 staging backup。
+
+`BACKUP_RETENTION_DAYS` 只影响本地 staging，不授予任何离站删除能力。
+
+### 6.2 Backup host
+
+推荐在独立主机运行 `rest-server 0.14.0` 或部署时记录的更新版本，并启用：
 
 ```text
 --append-only
 --private-repos
 ```
 
-认证必须开启。不得使用 `--no-auth` 暴露生产 endpoint。生产 `RESTIC_REPOSITORY` 必须始终使用 `rest:https://...`。
+认证必须开启。不得用 `--no-auth` 暴露生产 endpoint。
 
-本手册采用的标准部署是：rest-server 仅监听 `127.0.0.1:8000`，由同机 Caddy 负责公网 TLS。**HTTPS reverse proxy is a prerequisite**；如果 backup host 已有受验证的等价反向代理，可以替换 Caddy，但必须满足相同的 HTTPS、证书、loopback upstream 和端口暴露约束。
+本手册的标准部署是：rest-server 只监听 `127.0.0.1:8000`，由同机 Caddy 或等价受验证代理负责 TLS。**HTTPS reverse proxy is a prerequisite**。
 
-若 producer 用户名为：
-
-```text
-family-finance-prod
-```
-
-则在 `--private-repos` 模式下，repository URL 的第一层 path 与用户名保持一致，例如：
-
-```text
-rest:https://backup.example.com/family-finance-prod/
-```
-
-生产 `preflight.sh` 会验证这个关系；username/path 不一致会在真正访问 rest-server 前直接失败。
-
-backup host 的持久化 data root、认证文件、TLS 私钥和 repository 目录都不得暴露给生产 VPS。
-
-### 5.3 Repository、producer 账号与 rest-server 初始化
-
-Repository 初始化属于 backup administrator 的 full-access 操作，**在 backup host 本地完成**，不要让生产 producer 负责创建 full-access repository。
-
-以下示例假定已经按官方 release 校验并安装 `rest-server 0.14.0` 到 `/usr/local/bin/rest-server`，系统存在专用 `restic` 用户/组，并安装了提供 `htpasswd` 的工具。Debian/Ubuntu 通常由 `apache2-utils` 提供 `htpasswd`。
-
-先创建受保护目录和 repository encryption password：
+初始化 repository：
 
 ```bash
 sudo install -d -o restic -g restic -m 0700 /srv/restic/family-finance-prod
 sudo install -d -o restic -g restic -m 0700 /etc/family-finance
 sudo -u restic sh -c 'umask 077; openssl rand -base64 48 > /etc/family-finance/restic-password'
-
 sudo -u restic env \
   RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
   RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
   restic init
 ```
 
-为生产 producer 生成**独立的 REST Basic Auth password**，并写入 bcrypt htpasswd database。输入重定向必须在 `restic` 身份的 shell 内执行；不能把 `< /etc/family-finance/...` 留给普通管理员 shell：
+创建 producer HTTP Basic credential（这里只属于 backup REST endpoint，不属于 Finance 浏览器认证）：
 
 ```bash
 sudo -u restic sh -c 'umask 077; openssl rand -base64 48 > /etc/family-finance/rest-server-producer-password'
@@ -210,291 +296,82 @@ sudo chmod 0600 /etc/family-finance/rest-server.htpasswd
 sudo chown restic:restic /etc/family-finance/rest-server.htpasswd
 ```
 
-将 `/etc/family-finance/rest-server-producer-password` 的内容通过受保护渠道**一次性**复制到生产 VPS 的 `/etc/family-finance/rest-server-password`，生产文件由实际执行 `backup.sh` 的账号持有并设为 `0600`。确认生产凭据已落地后，删除 backup host 上这份 producer plaintext；backup host 长期只需保留 bcrypt htpasswd hash：
+把 producer password 和 repository encryption password 通过受保护渠道分别复制到 application host 的 `RESTIC_REST_PASSWORD_FILE` / `RESTIC_PASSWORD_FILE`。确认复制完成后，backup host 上临时 producer plaintext 可以删除；长期保留 bcrypt htpasswd hash 即可。
+
+启动 HTTPS endpoint 后验证：
 
 ```bash
-sudo rm -f /etc/family-finance/rest-server-producer-password
-```
-
-repository encryption password 也需要安全复制一份到生产 VPS 的独立 `RESTIC_PASSWORD_FILE`，因为 producer 创建加密 snapshot 时需要它；不要把 backup-host 文件系统权限或 full-access maintenance authority 一并复制到生产机。
-
-#### systemd service
-
-rest-server 本体只绑定 loopback。创建 `/etc/systemd/system/rest-server.service`：
-
-```ini
-[Unit]
-Description=Family Finance append-only rest-server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=restic
-Group=restic
-UMask=0077
-ExecStart=/usr/local/bin/rest-server --path /srv/restic --listen 127.0.0.1:8000 --append-only --private-repos --htpasswd-file /etc/family-finance/rest-server.htpasswd
-Restart=on-failure
-RestartSec=5s
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=true
-ProtectSystem=strict
-ReadWritePaths=/srv/restic
-ReadOnlyPaths=/etc/family-finance/rest-server.htpasswd
-
-[Install]
-WantedBy=multi-user.target
-```
-
-然后：
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now rest-server
-sudo systemctl status --no-pager rest-server
-```
-
-#### HTTPS reverse proxy
-
-backup DNS（例如 `backup.example.com`）先指向 backup host，公网防火墙只允许 Caddy 所需的 80/443；不得开放 rest-server 的 8000/tcp。若没有现成的受验证 HTTPS proxy，使用 Caddy。示例 `/etc/caddy/Caddyfile`：
-
-```caddyfile
-backup.example.com {
-    @root path /
-    respond @root "ok" 200
-    reverse_proxy 127.0.0.1:8000
-}
-```
-
-应用并验证：
-
-```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl enable --now caddy
-sudo systemctl reload caddy
 curl -fsS https://backup.example.com/
 ```
 
-最后一条必须通过正常的公网 DNS 和受信任证书返回 `ok`。它只验证 TLS/反代入口；真正的 restic repository 路径仍由 rest-server 的 htpasswd 认证保护。然后从生产 VPS 通过 `rest:https://backup.example.com/family-finance-prod/` 做第一次真实 producer smoke。
+### 6.3 Maintenance
 
-无论使用 Caddy 还是已受验证的等价 HTTPS proxy，生产端 `RESTIC_REPOSITORY` 都必须是 `rest:https://...`；不得为了省事使用 `--no-auth`、公网明文 HTTP，或把 8000/tcp 直接暴露到 Internet。
-
-启动后检查日志，必须看到 append-only/private-repositories 已启用；并确认服务使用 `/etc/family-finance/rest-server.htpasswd` 成功加载认证数据。初始化完成后，backup host 本地 full-access maintenance context 应能执行：
+所有 destructive maintenance 只在 backup host 的授权账户执行。先 dry-run：
 
 ```bash
-sudo -u restic env \
-  RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
+sudo -u restic env RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
   RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
-  restic snapshots
+  restic forget --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --dry-run
 ```
 
-### 5.4 生产 VPS producer 配置
-
-在生产 VPS 的 `.env` 中只保存非 secret 的 repository URL 和 username；两个密码通过仓库外私有文件提供。`RESTIC_REPOSITORY` URL 本身不得包含 `user:password@host` 形式的 userinfo：
-
-```env
-RESTIC_REPOSITORY=rest:https://backup.example.com/family-finance-prod/
-RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password
-RESTIC_REST_USERNAME=family-finance-prod
-RESTIC_REST_PASSWORD_FILE=/etc/family-finance/rest-server-password
-BACKUP_RETENTION_DAYS=14
-```
-
-`--private-repos` 模式下，`RESTIC_REPOSITORY` 的第一层 repository path 必须和 `RESTIC_REST_USERNAME` 完全一致；`preflight.sh` 会拒绝不一致配置。不要额外设置 `RESTIC_REST_PASSWORD`。
-
-创建 password file 后，确保文件由实际执行 producer backup 的账号可读且 group/other 无权限：
-
-```bash
-sudo chmod 0600 /etc/family-finance/restic-password
-sudo chmod 0600 /etc/family-finance/rest-server-password
-./scripts/preflight.sh
-```
-
-旧变量：
-
-```text
-BACKUP_KEEP_DAILY
-BACKUP_KEEP_WEEKLY
-BACKUP_KEEP_MONTHLY
-```
-
-在生产 producer 上已经废弃，preflight 会拒绝它们。离站 retention 不再由生产 VPS 控制。
-
-首次 producer backup：
-
-```bash
-./scripts/backup.sh
-```
-
-成功标准是本地 dump/archive/checksum 创建成功，并且 append-only endpoint 接受新的 `restic backup` snapshot。生产脚本不负责 prune/check。
-
-### 5.5 必须验证生产凭据不能删除已有 snapshot
-
-生产上线验收必须从生产 producer 上尝试一个**不会泄露 secret 的受控 destructive probe**，确认 append-only endpoint 拒绝删除/覆盖已有 repository data。
-
-不要在证据文件记录密码、URL 中的凭据或原始财务数据。只记录：
-
-- 时间；
-- sanitized snapshot ID；
-- destructive operation 被拒绝；
-- HTTP/restic 脱敏错误类别或退出码。
-
-若生产凭据能成功执行删除/覆盖，M-03 为 FAIL，生产 release 必须保持 BLOCKED。
-
-### 5.6 Backup host maintenance
-
-离站 retention、prune、完整 check 只在独立 backup host 上执行。该主机使用**本地 repository path**，不使用生产 REST producer credential。因为 `/etc/family-finance` 由 `restic:restic` 以 `0700` 持有，maintenance 必须在 `restic` 身份下执行：
-
-```bash
-sudo -u restic env \
-  RESTIC_MAINTENANCE_REPOSITORY=/srv/restic/family-finance-prod \
-  RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
-  BACKUP_KEEP_WITHIN=2y \
-  bash scripts/backup-maintenance.sh
-```
-
-如果上述变量已经通过受保护的 systemd `Environment=` / `EnvironmentFile=` 注入，实际执行体必须保持为：
+再运行仓库维护脚本：
 
 ```bash
 sudo -u restic bash scripts/backup-maintenance.sh
 ```
 
-不要以普通管理员账号直接运行该脚本，也不要放宽 `/etc/family-finance` 权限来迁就错误的执行身份。
+必须验证 application host 的 append-only producer credential 无法删除历史 snapshot，而 maintenance 身份可以执行受控 retention。
 
-脚本执行：
+## 7. Restore drill
 
-```text
+生产发布前必须在独立恢复环境做真实恢复，不接受“备份命令成功”替代 restore 证据。
+
+基本检查：
+
+```bash
 restic snapshots
-restic forget --group-by '' --keep-within <duration> --prune
 restic check
 ```
 
-producer 每次备份的是不同 UTC 时间戳目录。如果使用 restic 默认的 `host,paths` grouping，每个 timestamp path 会形成独立 snapshot group，使 retention 无法按预期淘汰历史 snapshot。因此 producer backup 和 maintenance forget 都显式使用 `--group-by ''`，把这个专用 repository 的 Family Finance snapshots 作为一个 retention set。
+从目标 snapshot restore 到隔离目录后，使用仓库 `scripts/restore-drill.sh` / 对应恢复流程验证：
 
-V1 append-only retention 只允许基于 `--keep-within` 的保护窗口，不使用 `--keep-daily`、`--keep-weekly`、`--keep-monthly` 或 `--keep-last` 等计数型 producer retention。原因是受攻陷 producer 可以生成带恶意时间戳/数量的 snapshot；restic 官方对 append-only repository 明确建议使用 `--keep-within`，并由独立安全 client 执行 `forget/prune`。
+- Finance dump checksum；
+- ezBookkeeping dump checksum；
+- storage archive checksum；
+- `pg_restore` 到隔离 scratch databases；
+- 关键表存在；
+- 恢复后的应用数据可读。
 
-restic 的 duration-based `--keep-within` 会忽略相对于 maintenance host 当前时间位于未来的 snapshot；这些未来 snapshot 本身不会被自动删除，也不会作为合法 retention cutoff。该安全性质依赖 maintenance host 时钟可信，因此 backup/maintenance host 必须保持系统时间同步，并在 destructive maintenance 前检查异常 snapshot 数量和时间。
+生产验收证据只记录日期、版本、snapshot id/hash、脱敏结果，不保存原始财务内容。
 
-默认：
+## 8. 认证架构升级 / 回滚顺序
 
-```text
-BACKUP_KEEP_WITHIN=2y
-```
+已有旧部署升级到 application-native auth 时必须保持 fail-closed，顺序如下：
 
-第一次真实 destructive maintenance 前，以 `restic` 身份运行 dry-run 并人工检查异常 snapshot 数量/时间：
+1. 先备份并完成一次 restore 可用性确认；
+2. 部署 auth migration、Finance Core 新版本和 secret 文件，但暂时保留旧 edge 认证保护；
+3. 执行 migration 与幂等 bootstrap，创建 Finance 管理员；
+4. 在仅受控访问范围验证 Finance Core 自身会拒绝无 session 业务 API；
+5. 使用管理员密码完成首次登录、TOTP enrollment，并保存 recovery codes；
+6. 验证 logout、CSRF、household authorization、session expiry/revocation；
+7. 验证 ezBookkeeping owner 2FA、注册关闭、API token 来源限制；
+8. 只有 application-native auth 验证通过后，才移除旧 edge 身份层；
+9. 重新运行完整 CI / auth / MCP / edge / runtime 安全门禁；
+10. 任何一步失败都保持或恢复外层保护，不得留下无认证业务 API。
 
-```bash
-sudo -u restic env RESTIC_REPOSITORY=/srv/restic/family-finance-prod \
-  RESTIC_PASSWORD_FILE=/etc/family-finance/restic-password \
-  restic forget --group-by '' --keep-within 2y --dry-run
-```
+回滚时，数据库 auth migration 和应用版本必须按已验证的兼容路径处理；不要仅回滚反向代理配置并假定数据层自动兼容。
 
-确认结果符合预期后，再调度 `scripts/backup-maintenance.sh`。维护窗口应避开生产 backup 时间，因为 prune 会锁定 repository。
+## 9. Production acceptance 证据
 
-### 5.7 从旧 SFTP 模型迁移
+CI 通过只证明仓库门禁，不等于 production-ready。正式发布至少需要把以下真实证据更新到 `docs/acceptance/v1-production-evidence.md`：
 
-如果已有旧 restic/SFTP repository，迁移时不要原地替换后立即删除旧副本：
+- 真实完整月份账本对账；
+- Finance 登录：密码 → TOTP → session → logout 的真实 smoke；
+- ezBookkeeping owner 2FA 已启用的人工确认；
+- 浏览器 / PWA 移动端验证；
+- secret hygiene 与公网暴露面检查；
+- append-only producer destructive operation 被拒绝；
+- backup host maintenance / `restic check`；
+- 独立恢复环境 restore 成功。
 
-1. 部署独立 append-only rest-server；
-2. 在 backup host 本地初始化新的 REST repository；
-3. 创建并验证带认证的 producer account，确认 rest-server 以 `--append-only --private-repos` 启动；
-4. 在生产 VPS 配置新的 `rest:https://...` producer 凭据；
-5. 执行 `./scripts/preflight.sh`；
-6. 执行 `./scripts/backup.sh` 并确认新 snapshot；
-7. 从生产凭据证明 destructive operation 被拒绝；
-8. 在 backup host 执行 `restic check` 和 `forget --group-by '' --keep-within 2y --dry-run`；
-9. 在独立环境完成真实 snapshot restore；
-10. 只有新边界和恢复证据全部通过后，才按旧 repository 自己的保留策略退役 SFTP 副本。
-
-仓库代码变更不会自动删除、转换或迁移现有 SFTP repository。
-
-### 5.8 调度
-
-生产 producer 建议每天由 systemd timer 或 cron 运行：
-
-```bash
-./scripts/backup.sh
-```
-
-对**非零退出码**发通知。不要把完整 backup 日志上传到第三方日志系统；日志只需记录时间、退出码、snapshot ID/脱敏摘要。
-
-Backup host maintenance 与生产 producer 使用不同调度、不同权限。不要把 full-access maintenance credential 复制到生产 VPS。
-
-## 6. 恢复演练
-
-### 6.1 同机隔离恢复验证
-
-`scripts/restore-drill.sh` 不覆盖生产库。它会：
-
-1. 校验 `SHA256SUMS`；
-2. 创建两个唯一命名的 scratch databases；
-3. 对两份 custom-format dump 执行真实 `pg_restore`；
-4. 验证恢复后存在 public tables；
-5. 检查 storage tar 路径，拒绝绝对路径/`..` traversal；
-6. 解包到临时目录并验证 `ezbookkeeping-storage`；
-7. 自动删除 scratch databases 和临时目录。
-
-执行：
-
-```bash
-./scripts/restore-drill.sh backups/<UTC_TIMESTAMP>
-```
-
-CI 会用 disposable PostgreSQL 自动执行同一恢复脚本；这证明脚本和 dump/restore 链路可工作，但**不能替代生产 backup 的真实异机恢复演练**。
-
-### 6.2 异机灾备恢复
-
-生产 V1 发布前至少执行一次异机恢复：
-
-1. 在独立恢复主机安装兼容版本的 restic、Docker Engine 和 Docker Compose；
-2. 使用受保护的 recovery/maintenance authority 从真实 repository 恢复一个 snapshot 到临时目录；生产 append-only credential 不是 full-access 恢复管理凭据；
-3. 校验 `SHA256SUMS`；
-4. 恢复两份数据库和 ezBookkeeping storage；
-5. 拉起 ezBookkeeping、Finance Core、Caddy；
-6. 验证 `/healthz`、`/readyz`；
-7. 抽查账户数、交易时间范围、最近月 Dashboard/月报；
-8. 验证 scheduler 重启后不会重复生成同一计划任务；
-9. 记录 RTO、恢复 snapshot ID、软件版本、执行人和脱敏结果。
-
-异机演练结果写入验收证据文件；没有真实执行记录时不得标记 V1 restore gate 通过。
-
-## 7. 升级策略
-
-### PostgreSQL minor
-
-保持所选 major 的受支持 minor。升级前：backup → 阅读 release notes → 拉新镜像 → 重启 → 健康检查 → restore drill。
-
-### PostgreSQL major
-
-不自动跟随。单独建立升级任务、backup 和 `pg_upgrade`/dump-restore 演练。
-
-### ezBookkeeping
-
-固定具体版本。升级前查看 release notes，尤其 breaking changes、API 字段要求、PWA/代理行为变化；升级后重新做真实账单导入 smoke。
-
-### Finance Core
-
-每次部署必须先通过 CI；数据库迁移使用内嵌于 `finance-core` 的 goose SQL migrations，迁移脚本进入 Git。`finance-migrate → finance-bootstrap → finance-core` 是 Compose 的强制依赖链，升级时 `docker compose up -d --build` 会先重建并完成两个一次性任务，失败时不会启动新应用；不得用“应用启动正常”替代任务日志和迁移证据。
-
-### rest-server / restic
-
-- rest-server 固定已验证版本；升级前阅读 changelog，重点检查 append-only、private-repos、认证和 TLS 行为；
-- restic client 升级前检查 repository format/backend compatibility；
-- 升级后重新验证 producer 可以 append、不能 destructive delete，并在 maintenance host 执行 `restic check`。
-
-## 8. 监控 V1
-
-不部署 Prometheus/Grafana。先用：
-
-- Docker healthcheck；
-- `docker compose ps`；
-- Caddy/应用日志；
-- 磁盘使用率定时检查；
-- 生产 `backup.sh` 退出码/通知；
-- 最近 append-only restic snapshot 时间；
-- maintenance host 最近 `restic check` 结果；
-- backup host repository 磁盘容量；
-- scheduler `job_runs` 中的 failed 状态。
-
-只有实际需要趋势图/告警集中化时再加监控栈。
+只有这些 evidence 完成后才能讨论 production-ready 标记。
