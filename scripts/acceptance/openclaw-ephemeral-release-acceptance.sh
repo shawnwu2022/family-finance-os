@@ -10,7 +10,7 @@ fail() {
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$ROOT_DIR"
 
-for command_name in docker curl openssl jq sha256sum sed grep awk getent npm node; do
+for command_name in docker curl openssl jq sha256sum sed grep awk getent npm node sudo; do
   command -v "$command_name" >/dev/null || fail "$command_name is required"
 done
 docker compose version >/dev/null || fail "Docker Compose v2 is required"
@@ -38,6 +38,11 @@ hosts_added=0
 ollama_container=""
 ollama_proxy_pid=""
 ollama_proxy_diag="$workdir/ollama-boundary.jsonl"
+
+finance_auth_key_host_file="$container_secrets_dir/finance-auth-key"
+finance_admin_password_host_file="$container_secrets_dir/finance-admin-password"
+ebk_api_token_host_file="$container_secrets_dir/ezbookkeeping-api-token"
+ebk_security_secret_key_host_file="$container_secrets_dir/ezbookkeeping-secret-key"
 
 export FINANCE_ACCEPTANCE_SECRETS_DIR="$container_secrets_dir"
 
@@ -80,23 +85,26 @@ random_hex() {
 postgres_password="$(random_hex 24)"
 finance_db_password="$(random_hex 24)"
 ebk_db_password="$(random_hex 24)"
-finance_auth_password="$(random_hex 18)"
+finance_admin_password="$(random_hex 18)"
 ebk_user_password="$(random_hex 18)"
 ebk_security_secret="$(openssl rand -base64 32 | tr -d '\n')"
 mcp_token="$(random_hex 32)"
+
 printf '%s' "$mcp_token" >"$smoke_secrets_dir/finance-mcp-token"
 chmod 0600 "$smoke_secrets_dir/finance-mcp-token"
 printf '%s' "$mcp_token" >"$container_secrets_dir/finance-mcp-token"
 chmod 0444 "$container_secrets_dir/finance-mcp-token"
 
-finance_auth_hash="$(docker run --rm caddy:2.11.4-alpine caddy hash-password --algorithm bcrypt --plaintext "$finance_auth_password")"
-[[ -n "$finance_auth_hash" ]] || fail "could not generate Caddy Basic Auth hash"
+printf '%s' "$(random_hex 16)" >"$finance_auth_key_host_file"
+printf '%s' "$finance_admin_password" >"$finance_admin_password_host_file"
+printf '%s' "$ebk_security_secret" >"$ebk_security_secret_key_host_file"
+chmod 0600 "$finance_auth_key_host_file" "$finance_admin_password_host_file" "$ebk_security_secret_key_host_file"
+sudo chown 65532:65532 "$finance_auth_key_host_file" "$finance_admin_password_host_file"
+sudo chown 1000:1000 "$ebk_security_secret_key_host_file"
 
 cat >"$env_file" <<EOF_ENV
 EBK_DOMAIN=ebk.localhost
 FINANCE_DOMAIN=finance.localhost
-FINANCE_AUTH_USER=acceptance
-FINANCE_AUTH_HASH='$finance_auth_hash'
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$postgres_password
 POSTGRES_DB=postgres
@@ -106,8 +114,12 @@ FINANCE_DB_PASSWORD=$finance_db_password
 EBK_DB_NAME=ezbookkeeping
 EBK_DB_USER=ezbookkeeping_app
 EBK_DB_PASSWORD=$ebk_db_password
-EBK_SECURITY_SECRET_KEY=$ebk_security_secret
-EBK_API_TOKEN=
+FINANCE_AUTH_KEY_HOST_FILE=$finance_auth_key_host_file
+FINANCE_ADMIN_PASSWORD_HOST_FILE=$finance_admin_password_host_file
+EBK_API_TOKEN_HOST_FILE=$ebk_api_token_host_file
+EBK_SECURITY_SECRET_KEY_HOST_FILE=$ebk_security_secret_key_host_file
+EBK_USER_ENABLE_REGISTER=false
+FINANCE_ADMIN_USERNAME=acceptance
 FINANCE_LISTEN_ADDR=:8000
 FINANCE_HEALTHCHECK_URL=http://127.0.0.1:8000/healthz
 DB_HOST=postgres
@@ -218,7 +230,9 @@ ebk_api_token="$(sed -n 's/^\[NewToken\] //p' "$workdir/ebk-session.stdout" | ta
 if printf '%s' "$ebk_api_token" | grep -q '[[:space:]]'; then
   fail "ezBookkeeping API token contains whitespace"
 fi
-export EBK_API_TOKEN="$ebk_api_token"
+printf '%s' "$ebk_api_token" >"$ebk_api_token_host_file"
+chmod 0600 "$ebk_api_token_host_file"
+sudo chown 65532:65532 "$ebk_api_token_host_file"
 
 printf 'header = "Authorization: %s %s"\n' "Bearer" "$ebk_api_token" >"$workdir/ebk-auth.curl"
 chmod 0600 "$workdir/ebk-auth.curl"
@@ -240,8 +254,7 @@ jq -e '.success == true and (.result.id != null)' "$workdir/account-response.jso
 finance_ready=0
 for _ in $(seq 1 30); do
   if curl --silent --show-error --fail --connect-timeout 3 --max-time 5 \
-    --cacert "$caddy_root" --user "acceptance:${finance_auth_password}" \
-    https://finance.localhost/healthz >/dev/null 2>&1; then
+    --cacert "$caddy_root" https://finance.localhost/healthz >/dev/null 2>&1; then
     finance_ready=1
     break
   fi
