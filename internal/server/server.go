@@ -29,10 +29,8 @@ func NewHandler(options ...HandlerOption) http.Handler {
 	registerPortfolioFinanceAPI(apiMux, cfg.api)
 	if cfg.auth != nil {
 		registerBrowserAuth(mux, cfg.auth)
-		mux.Handle("/api/v1/", requireBrowserAuth(cfg.auth, apiMux))
-	} else {
-		mux.Handle("/api/v1/", apiMux)
 	}
+	mux.Handle("/api/v1/", requireBrowserAuth(cfg.auth, apiMux))
 	if cfg.mcp != nil {
 		mux.Handle("/mcp", cfg.mcp)
 	}
