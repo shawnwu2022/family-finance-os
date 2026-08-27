@@ -8,6 +8,7 @@ bash scripts/ci/contract-test.sh
 docker compose version >/dev/null
 
 make verify-go
+make verify-auth-security
 make verify-mcp-security
 make verify-web
 make verify-edge-security

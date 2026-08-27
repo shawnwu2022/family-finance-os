@@ -1,4 +1,4 @@
-.PHONY: test test-race fmt fmt-check vet build config preflight up down logs backup verify verify-contract verify-go verify-web verify-mcp-security verify-edge-security verify-container
+.PHONY: test test-race fmt fmt-check vet build config preflight up down logs backup verify verify-contract verify-go verify-auth-security verify-web verify-mcp-security verify-edge-security verify-container
 
 test:
 	go test ./...
@@ -45,6 +45,9 @@ verify-contract:
 
 verify-go:
 	bash scripts/ci/go-stack-verify.sh
+
+verify-auth-security:
+	bash scripts/ci/auth-security.sh
 
 verify-web:
 	@set -eu; \
