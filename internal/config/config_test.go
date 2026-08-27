@@ -14,7 +14,7 @@ func TestLoadDefaultsAndMapsRuntimeSettings(t *testing.T) {
 		"DB_NAME":            "finance",
 		"DB_USER":            "finance_app",
 		"DB_PASSWORD":        "secret",
-		"EBK_API_TOKEN":      "ledger-token",
+		"EBK_API_TOKEN_FILE": "/run/secrets/ezbookkeeping-api-token",
 		"LLM_BASE_URL":       "https://llm.example.com/v1",
 		"LLM_API_KEY":        "llm-key",
 		"LLM_FAST_MODEL":     "fast-model",
@@ -40,8 +40,8 @@ func TestLoadDefaultsAndMapsRuntimeSettings(t *testing.T) {
 	if cfg.Ledger.BaseURL != "http://ezbookkeeping:8080/api/v1" {
 		t.Fatalf("Ledger BaseURL = %q", cfg.Ledger.BaseURL)
 	}
-	if cfg.Ledger.APIToken != "ledger-token" {
-		t.Fatalf("Ledger APIToken = %q", cfg.Ledger.APIToken)
+	if cfg.Ledger.APITokenFile != "/run/secrets/ezbookkeeping-api-token" {
+		t.Fatalf("Ledger APITokenFile = %q", cfg.Ledger.APITokenFile)
 	}
 	if cfg.LLM.BaseURL != "https://llm.example.com/v1" || cfg.LLM.APIKey != "llm-key" {
 		t.Fatalf("LLM config = %#v", cfg.LLM)
@@ -51,6 +51,19 @@ func TestLoadDefaultsAndMapsRuntimeSettings(t *testing.T) {
 	}
 	if cfg.Portfolio.ValuationStaleAfter != 30*24*time.Hour || cfg.Portfolio.FXStaleAfter != 72*time.Hour {
 		t.Fatalf("Portfolio freshness = %#v", cfg.Portfolio)
+	}
+}
+
+func TestLoadRejectsPlaintextLedgerTokenEnvironment(t *testing.T) {
+	t.Parallel()
+	_, err := Load(mapGetenv(map[string]string{
+		"DB_NAME":       "finance",
+		"DB_USER":       "finance_app",
+		"DB_PASSWORD":   "secret",
+		"EBK_API_TOKEN": "must-not-be-accepted",
+	}))
+	if err == nil || !strings.Contains(err.Error(), "EBK_API_TOKEN") {
+		t.Fatalf("plaintext ledger token error = %v", err)
 	}
 }
 
