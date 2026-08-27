@@ -20,6 +20,7 @@ require_private_file() {
   local label="$2"
   [[ -f "$path" ]] || { echo "ERROR: ${label} must be a regular file." >&2; exit 1; }
   [[ -r "$path" ]] || { echo "ERROR: ${label} must be readable by the deployment account." >&2; exit 1; }
+  [[ -s "$path" ]] || { echo "ERROR: ${label} must not be empty." >&2; exit 1; }
 
   local mode
   mode="$(stat -Lc '%a' "$path")" || { echo "ERROR: could not inspect ${label} file mode." >&2; exit 1; }
@@ -31,6 +32,22 @@ require_private_file() {
     echo "ERROR: ${label} permissions are too broad (mode ${mode}); group and other access must be disabled." >&2
     exit 1
   fi
+}
+
+require_external_private_file() {
+  local path="$1"
+  local label="$2"
+  [[ -n "$path" ]] || { echo "ERROR: ${label} path must be set." >&2; exit 1; }
+  require_private_file "$path" "$label"
+
+  local resolved
+  resolved="$(readlink -f -- "$path")" || { echo "ERROR: could not resolve ${label} path." >&2; exit 1; }
+  case "$resolved" in
+    "$ROOT_DIR"/*)
+      echo "ERROR: ${label} must live outside the repository." >&2
+      exit 1
+      ;;
+  esac
 }
 
 if [[ ! -f .env ]]; then
@@ -52,9 +69,9 @@ if grep -Eq '^[[:space:]]*(export[[:space:]]+)?RESTIC_REST_PASSWORD[[:space:]]*=
   exit 1
 fi
 
-for key in FINANCE_AUTH_USER FINANCE_AUTH_HASH; do
-  if ! grep -Eq "^${key}=[^[:space:]]+" .env; then
-    echo "ERROR: ${key} must be set for the public Finance Core edge." >&2
+for legacy in FINANCE_AUTH_USER FINANCE_AUTH_HASH EBK_API_TOKEN EBK_SECURITY_SECRET_KEY; do
+  if [[ -n "${!legacy:-}" ]] || grep -Eq "^[[:space:]]*(export[[:space:]]+)?${legacy}[[:space:]]*=" .env; then
+    echo "ERROR: ${legacy} is forbidden in the application-native auth deployment; use the documented secret-file boundary instead." >&2
     exit 1
   fi
 done
@@ -68,6 +85,32 @@ if [[ -n "${RESTIC_REST_PASSWORD:-}" ]]; then
   echo "ERROR: RESTIC_REST_PASSWORD must not be set; use RESTIC_REST_PASSWORD_FILE." >&2
   exit 1
 fi
+
+for legacy in FINANCE_AUTH_USER FINANCE_AUTH_HASH EBK_API_TOKEN EBK_SECURITY_SECRET_KEY; do
+  if [[ -n "${!legacy:-}" ]]; then
+    echo "ERROR: ${legacy} is forbidden in the application-native auth deployment; use the documented secret-file boundary instead." >&2
+    exit 1
+  fi
+done
+
+case "${EBK_USER_ENABLE_REGISTER:-false}" in
+  false|FALSE|False|0|f|F) ;;
+  *)
+    echo "ERROR: EBK_USER_ENABLE_REGISTER must be false for steady-state production; use a one-time explicit override only while creating the first owner." >&2
+    exit 1
+    ;;
+esac
+
+for spec in \
+  "FINANCE_AUTH_KEY_HOST_FILE:Finance auth key host file" \
+  "FINANCE_ADMIN_PASSWORD_HOST_FILE:Finance administrator password host file" \
+  "EBK_API_TOKEN_HOST_FILE:ezBookkeeping API token host file" \
+  "EBK_SECURITY_SECRET_KEY_HOST_FILE:ezBookkeeping security secret host file"; do
+  key="${spec%%:*}"
+  label="${spec#*:}"
+  path="${!key:-}"
+  require_external_private_file "$path" "$label"
+done
 
 if [[ -n "${BACKUP_REMOTE:-}" ]]; then
   echo "ERROR: BACKUP_REMOTE is deprecated; use RESTIC_REPOSITORY and backup secret files." >&2
@@ -102,40 +145,18 @@ if [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   rest_private_repo="${rest_path%%/*}"
   [[ "$rest_private_repo" == "$RESTIC_REST_USERNAME" ]] || { echo "ERROR: RESTIC_REPOSITORY first path component must match RESTIC_REST_USERNAME for --private-repos." >&2; exit 1; }
 
-  require_private_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
-  require_private_file "$RESTIC_REST_PASSWORD_FILE" "RESTIC_REST_PASSWORD_FILE"
-
-  for secret_file in "$RESTIC_PASSWORD_FILE" "$RESTIC_REST_PASSWORD_FILE"; do
-    secret_path="$(readlink -f -- "$secret_file")" || {
-      echo "ERROR: could not resolve backup secret file path." >&2
-      exit 1
-    }
-    case "$secret_path" in
-      "$ROOT_DIR"/*)
-        echo "ERROR: backup secret files must live outside the repository." >&2
-        exit 1
-        ;;
-    esac
-  done
+  require_external_private_file "$RESTIC_PASSWORD_FILE" "RESTIC_PASSWORD_FILE"
+  require_external_private_file "$RESTIC_REST_PASSWORD_FILE" "RESTIC_REST_PASSWORD_FILE"
 fi
 
 case "${MCP_ENABLED:-false}" in
   true|TRUE|True|1|t|T)
-    mcp_container_token="${MCP_TOKEN_FILE:-/run/secrets/finance-mcp-token}"
-    case "$mcp_container_token" in
-      /run/secrets/*)
-        mcp_token_name="${mcp_container_token#/run/secrets/}"
-        ;;
-      *)
-        echo "ERROR: MCP_TOKEN_FILE must reference the Compose-mounted /run/secrets directory." >&2
-        exit 1
-        ;;
-    esac
-    if [[ -z "$mcp_token_name" || "$mcp_token_name" == "." || "$mcp_token_name" == ".." || "$mcp_token_name" == */* ]]; then
-      echo "ERROR: MCP_TOKEN_FILE must reference one file directly under /run/secrets." >&2
-      exit 1
-    fi
-    require_private_file "$ROOT_DIR/secrets/$mcp_token_name" "MCP bearer host file"
+    require_external_private_file "${MCP_TOKEN_HOST_FILE:-}" "MCP bearer host file"
+    ;;
+  false|FALSE|False|0|f|F|'') ;;
+  *)
+    echo "ERROR: MCP_ENABLED must be a boolean." >&2
+    exit 1
     ;;
 esac
 

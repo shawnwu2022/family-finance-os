@@ -8,7 +8,7 @@
 
     header {
         X-Frame-Options "DENY"
-        Content-Security-Policy "frame-ancestors 'none'"
+        +Content-Security-Policy "frame-ancestors 'none'"
     }
 
     @mcp path /mcp

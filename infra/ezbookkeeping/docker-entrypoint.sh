@@ -35,6 +35,6 @@ export EBK_SECURITY_SECRET_KEY
 unset EBK_SECURITY_SECRET_KEY_FILE
 
 if [ -n "${EBK_CONF_PATH:-}" ]; then
-  exec /ezbookkeeping/ezbookkeeping server run --config "$EBK_CONF_PATH"
+  exec /ezbookkeeping/ezbookkeeping server run --conf-path="$EBK_CONF_PATH"
 fi
 exec /ezbookkeeping/ezbookkeeping server run
