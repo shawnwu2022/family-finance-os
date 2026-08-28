@@ -16,7 +16,7 @@ func TestValidateRuntimeAIConfigModes(t *testing.T) {
 		{name: "disabled", cfg: config.LLMConfig{Mode: config.LLMModeDisabled}, want: false},
 		{name: "implicit disabled remains compatible", cfg: config.LLMConfig{}, want: false},
 		{name: "local loopback without API key", cfg: config.LLMConfig{Mode: config.LLMModeLocal, BaseURL: "http://127.0.0.1:11434/v1", FastModel: "local-fast", PlannerModel: "local-planner", ReviewerModel: "local-reviewer"}, want: true},
-		{name: "local cannot carry a remote HTTPS endpoint", cfg: config.LLMConfig{Mode: config.LLMModeLocal, BaseURL: "https://llm.example/v1", FastModel: "fast", PlannerModel: "planner", ReviewerModel: "reviewer"}, err: true},
+		{name: "local secure LAN endpoint without API key", cfg: config.LLMConfig{Mode: config.LLMModeLocal, BaseURL: "https://p40-ai.example/v1", FastModel: "fast", PlannerModel: "planner", ReviewerModel: "reviewer"}, want: true},
 		{name: "external requires API key", cfg: config.LLMConfig{Mode: config.LLMModeExternal, BaseURL: "https://llm.example/v1", FastModel: "fast", PlannerModel: "planner", ReviewerModel: "reviewer"}, err: true},
 		{name: "external complete", cfg: config.LLMConfig{Mode: config.LLMModeExternal, BaseURL: "https://llm.example/v1", APIKey: "secret", FastModel: "fast", PlannerModel: "planner", ReviewerModel: "reviewer"}, want: true},
 		{name: "legacy complete config remains external-compatible", cfg: config.LLMConfig{BaseURL: "https://llm.example/v1", APIKey: "secret", FastModel: "fast", PlannerModel: "planner", ReviewerModel: "reviewer"}, want: true},
