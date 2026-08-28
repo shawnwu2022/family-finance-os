@@ -42,11 +42,22 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-endpoint="${base_url%/}/chat/completions"
-payload=$(printf '{"model":"%s","messages":[{"role":"system","content":"Return the marker FAMILY_FINANCE_LOCAL_AI_OK in your response."},{"role":"user","content":"Synthetic local AI benchmark. No financial data is included."}],"stream":false}' "$model")
+provider_root="${base_url%/}"
+case "$provider_root" in
+  */responses)
+    endpoint="$provider_root"
+    ;;
+  */v1)
+    endpoint="$provider_root/responses"
+    ;;
+  *)
+    endpoint="$provider_root/v1/responses"
+    ;;
+esac
+payload=$(printf '{"model":"%s","instructions":"Return the marker FAMILY_FINANCE_LOCAL_AI_OK in your response.","input":"Synthetic local AI benchmark. No financial data is included.","store":false,"parallel_tool_calls":false,"stream":false}' "$model")
 
 elapsed_seconds="$(curl --silent --show-error --fail \
-  --proto '=http,https' \
+  --proto '=http,https' --proto-redir '=https' \
   --connect-timeout 10 --max-time 120 \
   --header 'Content-Type: application/json' \
   --data-binary "$payload" \
@@ -55,8 +66,8 @@ elapsed_seconds="$(curl --silent --show-error --fail \
   "$endpoint")" || fail "provider request failed"
 
 [[ -s "$response_file" ]] || fail "provider returned an empty response"
-grep -Fq '"choices"' "$response_file" || fail "provider response is missing choices"
-grep -Fq '"content"' "$response_file" || fail "provider response is missing content"
+grep -Fq '"output"' "$response_file" || fail "provider response is missing output"
+grep -Fq '"output_text"' "$response_file" || fail "provider response is missing output_text"
 grep -Fq 'FAMILY_FINANCE_LOCAL_AI_OK' "$response_file" || fail "provider response did not satisfy the synthetic marker check"
 
 response_sha256="$(sha256sum "$response_file" | awk '{print $1}')"
