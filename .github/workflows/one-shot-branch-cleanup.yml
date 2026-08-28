@@ -1,0 +1,145 @@
+name: Finalize merged branch cleanup
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  finalize:
+    name: Delete merged refs after cleanup-workflow removal PR merges
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'chore/remove-one-shot-branch-cleanup'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Wait for final cleanup PR merge and delete refs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          api="https://api.github.com/repos/${GH_REPO}"
+          deployment_branch='chore/cleanup-all-merged-refs'
+          final_branch='chore/remove-one-shot-branch-cleanup'
+
+          gh_curl() {
+            curl --silent --show-error \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "$@"
+          }
+
+          merged='false'
+          for attempt in $(seq 1 120); do
+            pr_json="$(gh_curl --fail-with-body "${api}/pulls/${PR_NUMBER}")"
+            merged_at="$(jq -r '.merged_at // empty' <<<"$pr_json")"
+            state="$(jq -r '.state' <<<"$pr_json")"
+            if [[ -n "$merged_at" ]]; then
+              merged='true'
+              break
+            fi
+            if [[ "$state" == 'closed' ]]; then
+              echo "Final cleanup PR #${PR_NUMBER} closed without merge" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          if [[ "$merged" != 'true' ]]; then
+            echo "Timed out waiting for final cleanup PR #${PR_NUMBER} to merge" >&2
+            exit 1
+          fi
+
+          ref_json() {
+            local branch="$1"
+            gh_curl \
+              --output /tmp/ref-response.json \
+              --write-out '%{http_code}' \
+              "${api}/git/ref/heads/${branch}"
+          }
+
+          verify_expected_head() {
+            local branch="$1"
+            local expected_sha="$2"
+            local status actual_sha
+            status="$(ref_json "$branch")"
+            if [[ "$status" == '404' ]]; then
+              echo "Already absent: ${branch}"
+              return 0
+            fi
+            if [[ "$status" != '200' ]]; then
+              cat /tmp/ref-response.json >&2 || true
+              echo "Unable to inspect ${branch}: HTTP ${status}" >&2
+              exit 1
+            fi
+            actual_sha="$(jq -r '.object.sha // empty' /tmp/ref-response.json)"
+            if [[ "$actual_sha" != "$expected_sha" ]]; then
+              echo "Ref moved unexpectedly: ${branch} actual=${actual_sha} expected=${expected_sha}" >&2
+              exit 1
+            fi
+          }
+
+          delete_ref_if_present() {
+            local branch="$1"
+            local status
+            status="$(ref_json "$branch")"
+            if [[ "$status" == '404' ]]; then
+              echo "Already absent: ${branch}"
+              return 0
+            fi
+            if [[ "$status" != '200' ]]; then
+              cat /tmp/ref-response.json >&2 || true
+              echo "Unable to inspect ${branch}: HTTP ${status}" >&2
+              return 1
+            fi
+
+            echo "Deleting ${branch}"
+            status="$(gh_curl \
+              --output /tmp/delete-response.json \
+              --write-out '%{http_code}' \
+              --request DELETE \
+              "${api}/git/refs/heads/${branch}")"
+            if [[ "$status" != '204' ]]; then
+              cat /tmp/delete-response.json >&2 || true
+              echo "Failed to delete ${branch}: HTTP ${status}" >&2
+              return 1
+            fi
+          }
+
+          verify_expected_head 'security/app-native-auth-boundary' '26fb9534d6b27d8a2cd4b38b6216655f754b2bf0'
+          verify_expected_head 'security/finance-app-auth' '09574f0ed5e3e5b08254ab11fe2961102e4d4e9d'
+          verify_expected_head 'docs/auth-runtime-evidence' '1efbe7c553ed66c4471d4b940f4e14afaad28075'
+
+          branches=(
+            'security/app-native-auth-boundary'
+            'security/finance-app-auth'
+            'docs/auth-runtime-evidence'
+            "$deployment_branch"
+            "$final_branch"
+          )
+
+          for branch in "${branches[@]}"; do
+            delete_ref_if_present "$branch"
+          done
+
+          for branch in "${branches[@]}"; do
+            status="$(ref_json "$branch")"
+            if [[ "$status" != '404' ]]; then
+              cat /tmp/ref-response.json >&2 || true
+              echo "Branch still resolves after cleanup: ${branch} (HTTP ${status})" >&2
+              exit 1
+            fi
+          done
+
+          echo 'Merged branch cleanup completed; only main should remain.'
