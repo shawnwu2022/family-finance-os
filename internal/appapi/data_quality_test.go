@@ -21,7 +21,9 @@ func (dataQualityPlanner) BudgetPlan(context.Context, int64, string) (budget.Bud
 	return budget.BudgetPlan{}, nil
 }
 func (dataQualityPlanner) Debts(context.Context, int64) ([]DebtSnapshot, error) { return nil, nil }
-func (dataQualityPlanner) Goals(context.Context, int64) ([]goals.FinancialGoal, error) { return nil, nil }
+func (dataQualityPlanner) Goals(context.Context, int64) ([]goals.FinancialGoal, error) {
+	return nil, nil
+}
 
 type dataQualityLedger struct {
 	query ledger.TransactionQuery
