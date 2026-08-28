@@ -175,7 +175,7 @@ func duplicateGroups(transactions []ledger.Transaction, window time.Duration) []
 		start := 0
 		for start < len(txs) {
 			end := start + 1
-			for end < len(txs) && txs[end].OccurredAt.Sub(txs[end-1].OccurredAt) <= window {
+			for end < len(txs) && txs[end].OccurredAt.Sub(txs[start].OccurredAt) <= window {
 				end++
 			}
 			if end-start >= 2 {
