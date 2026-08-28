@@ -75,6 +75,7 @@ grep -Fq 'finance_auth_smoke=PASS' "$finance_auth_smoke" || fail "Finance auth s
 grep -Fq 'session_sha256=' "$finance_auth_smoke" || fail "Finance auth smoke must hash session evidence instead of printing the session"
 
 grep -Fq 'V1_PRODUCTION_EVIDENCE_DIR' "$v1_live_acceptance" || fail "V1 live acceptance must write evidence to an explicit external directory"
+grep -Fq 'must be an HTTPS origin without path, query, fragment, or credentials' "$v1_live_acceptance" || fail "V1 live acceptance must only accept credential-free HTTPS origins"
 grep -Fq 'docker compose ps' "$v1_live_acceptance" || fail "V1 live acceptance must inspect the deployed Compose topology"
 grep -Fq '/healthz' "$v1_live_acceptance" || fail "V1 live acceptance must verify Finance health"
 grep -Fq '/readyz' "$v1_live_acceptance" || fail "V1 live acceptance must verify Finance readiness"
