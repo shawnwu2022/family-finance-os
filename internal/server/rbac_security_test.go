@@ -67,7 +67,7 @@ func TestViewerCanReadAndSimulateButCannotPersistFinanceChanges(t *testing.T) {
 		t.Fatalf("viewer advisor status=%d body=%s", advisorRec.Code, advisorRec.Body.String())
 	}
 
-	writeReq := authenticatedRequest(http.MethodPut, "/api/v1/portfolio/assets/fund", []byte(`{"name":"Fund","category":"fund","value":{"minor":"10000","currency":"CNY"},"value_as_of":"2026-08-28T00:00:00Z"}`))
+	writeReq := authenticatedRequest(http.MethodPut, "/api/v1/portfolio/assets/fund", []byte(`{"name":"Fund","asset_class":"fund","value_minor":"10000","currency":"CNY","source_currency":"CNY","valuation_as_of":"2026-08-28T00:00:00Z","source_kind":"manual"}`))
 	writeRec := httptest.NewRecorder()
 	handler.ServeHTTP(writeRec, writeReq)
 	if writeRec.Code != http.StatusForbidden {
@@ -80,7 +80,7 @@ func TestViewerCanReadAndSimulateButCannotPersistFinanceChanges(t *testing.T) {
 
 func TestEditorCanPersistFinanceChanges(t *testing.T) {
 	handler := NewHandler(WithAPI(rbacPortfolioAPI{}), WithBrowserAuth(roleAuthenticatedFake(financeauth.RoleEditor)))
-	writeReq := authenticatedRequest(http.MethodPut, "/api/v1/portfolio/assets/fund", []byte(`{"name":"Fund","category":"fund","value":{"minor":"10000","currency":"CNY"},"value_as_of":"2026-08-28T00:00:00Z"}`))
+	writeReq := authenticatedRequest(http.MethodPut, "/api/v1/portfolio/assets/fund", []byte(`{"name":"Fund","asset_class":"fund","value_minor":"10000","currency":"CNY","source_currency":"CNY","valuation_as_of":"2026-08-28T00:00:00Z","source_kind":"manual"}`))
 	writeRec := httptest.NewRecorder()
 	handler.ServeHTTP(writeRec, writeReq)
 	if writeRec.Code != http.StatusOK {
