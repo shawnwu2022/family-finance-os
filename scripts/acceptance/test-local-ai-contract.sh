@@ -11,11 +11,12 @@ fail() {
 
 benchmark="scripts/acceptance/local-ai-benchmark.sh"
 env_example=".env.example"
+compose="compose.yaml"
 config_go="internal/config/config.go"
 application_go="cmd/finance-core/application.go"
 provider_go="internal/llm/openai_compatible.go"
 
-for path in "$benchmark" "$env_example" "$config_go" "$application_go" "$provider_go"; do
+for path in "$benchmark" "$env_example" "$compose" "$config_go" "$application_go" "$provider_go"; do
   [[ -f "$path" ]] || fail "required file is missing: $path"
 done
 bash -n "$benchmark" || fail "benchmark shell syntax is invalid"
@@ -26,6 +27,7 @@ done
 grep -Fq 'https://' "$benchmark" || fail "benchmark must allow HTTPS local providers"
 grep -Fq '127.0.0.1' "$benchmark" || fail "benchmark must allow IPv4 loopback HTTP"
 grep -Fq '::1' "$benchmark" || fail "benchmark must allow IPv6 loopback HTTP"
+grep -Fq '/responses' "$benchmark" || fail "benchmark must exercise the Responses API used by Finance Core"
 if grep -Eq '(Authorization:[[:space:]]*Bearer|LLM_API_KEY|LOCAL_AI_API_KEY)' "$benchmark"; then
   fail "benchmark must remain credential-free"
 fi
@@ -37,6 +39,7 @@ grep -Fq 'LLM_MODE' "$env_example" || fail ".env.example must document LLM_MODE"
 grep -Fq 'LLM_MODE=external' "$env_example" || fail ".env.example must provide the default external example"
 grep -Fq 'LLM_MODE=local' "$env_example" || fail ".env.example must document a local-AI example"
 grep -Fq 'https://p40-ai.example/v1' "$env_example" || fail ".env.example must show a TLS LAN/P40 local-AI endpoint"
+grep -Fq 'LLM_MODE: ${LLM_MODE:-}' "$compose" || fail "Compose must pass LLM_MODE into finance-core"
 
 grep -Fq 'LLM_MODE=local requires' "$application_go" || fail "runtime must validate local mode"
 grep -Fq 'LLM_MODE=external requires' "$application_go" || fail "runtime must validate external mode"
