@@ -32,8 +32,8 @@ ebk_url="${EBK_PUBLIC_URL:-}"
 for spec in "FINANCE_PUBLIC_URL:$finance_url" "EBK_PUBLIC_URL:$ebk_url"; do
   label="${spec%%:*}"
   value="${spec#*:}"
-  [[ "$value" == https://* ]] || fail "$label must use https://"
-  [[ "$value" != *"@"* ]] || fail "$label must not embed credentials"
+  [[ "$value" =~ ^https://[^/?#@]+/?$ ]] \
+    || fail "$label must be an HTTPS origin without path, query, fragment, or credentials"
 done
 finance_url="${finance_url%/}"
 ebk_url="${ebk_url%/}"
