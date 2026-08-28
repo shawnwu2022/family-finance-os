@@ -13,12 +13,14 @@ edge="scripts/check-edge-security.sh"
 operations="docs/07-operations.md"
 compose="compose.yaml"
 live_smoke="scripts/acceptance/ezbookkeeping-live-smoke.sh"
+finance_auth_smoke="scripts/acceptance/finance-auth-live-smoke.sh"
+v1_live_acceptance="scripts/acceptance/v1-production-live.sh"
 openclaw_smoke="scripts/acceptance/openclaw-mcp-live-smoke.sh"
 ollama_schema_contract="scripts/acceptance/test-ollama-schema-probe.sh"
 openclaw_release_contract="scripts/acceptance/test-openclaw-release-acceptance.sh"
 backup_append_only_contract="scripts/ci/test-backup-append-only-contract.sh"
 
-for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$openclaw_smoke" "$ollama_schema_contract" "$openclaw_release_contract" "$backup_append_only_contract"; do
+for script in "$backup" "$restore" "$preflight" "$edge" "$live_smoke" "$finance_auth_smoke" "$v1_live_acceptance" "$openclaw_smoke" "$ollama_schema_contract" "$openclaw_release_contract" "$backup_append_only_contract"; do
   [[ -f "$script" ]] || fail "required script is missing: $script"
   bash -n "$script" || fail "shell syntax is invalid: $script"
 done
@@ -68,6 +70,20 @@ grep -Fq 'network_mode' "$edge" || fail "edge security must reject host networki
 grep -Fq 'https://' "$live_smoke" || fail "live ezBookkeeping smoke must require HTTPS"
 grep -Fq 'sha256sum' "$live_smoke" || fail "live ezBookkeeping smoke must emit only hashed response evidence"
 grep -Fq 'transaction ledger is empty' "$live_smoke" || fail "live ezBookkeeping smoke must reject an empty ledger by default"
+
+grep -Fq 'finance_auth_smoke=PASS' "$finance_auth_smoke" || fail "Finance auth smoke must emit an explicit PASS marker"
+grep -Fq 'session_sha256=' "$finance_auth_smoke" || fail "Finance auth smoke must hash session evidence instead of printing the session"
+
+grep -Fq 'V1_PRODUCTION_EVIDENCE_DIR' "$v1_live_acceptance" || fail "V1 live acceptance must write evidence to an explicit external directory"
+grep -Fq 'must be an HTTPS origin without path, query, fragment, or credentials' "$v1_live_acceptance" || fail "V1 live acceptance must only accept credential-free HTTPS origins"
+grep -Fq 'docker compose ps' "$v1_live_acceptance" || fail "V1 live acceptance must inspect the deployed Compose topology"
+grep -Fq '/healthz' "$v1_live_acceptance" || fail "V1 live acceptance must verify Finance health"
+grep -Fq '/readyz' "$v1_live_acceptance" || fail "V1 live acceptance must verify Finance readiness"
+grep -Fq 'sha256sum' "$v1_live_acceptance" || fail "V1 live acceptance must hash captured evidence"
+grep -Fq 'NOT_RUN' "$v1_live_acceptance" || fail "V1 live acceptance must preserve manual gates as NOT_RUN rather than inventing PASS"
+if grep -Eq '(password|token|secret|recovery_code|session_token)=' "$v1_live_acceptance"; then
+  fail "V1 live acceptance must not print secret-bearing key/value material"
+fi
 
 grep -Fq 'openclaw mcp probe' "$openclaw_smoke" || fail "OpenClaw live smoke must run a real MCP probe"
 grep -Fq 'openclaw agent --local' "$openclaw_smoke" || fail "OpenClaw live smoke must run real stable local agent turns"
