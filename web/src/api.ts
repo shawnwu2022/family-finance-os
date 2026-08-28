@@ -1,7 +1,11 @@
 import { clearAuthState, getCSRFToken } from './auth.ts'
 import type {
   AdvisorResponse,
+  CreateHouseholdMemberRequest,
   DashboardData,
+  HouseholdMemberResponse,
+  HouseholdMembersResponse,
+  HouseholdRole,
   PortfolioAssetResponse,
   PortfolioAssetsResponse,
   PortfolioAssetUpsertRequest,
@@ -48,6 +52,30 @@ export async function upsertPortfolioAsset(
 export async function deletePortfolioAsset(assetRef: string): Promise<void> {
   const encodedAssetRef = encodeURIComponent(assetRef)
   await requestResponse(`/api/v1/portfolio/assets/${encodedAssetRef}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function listHouseholdMembers(): Promise<HouseholdMembersResponse> {
+  return requestJSON<HouseholdMembersResponse>('/api/v1/household/members')
+}
+
+export async function createHouseholdMember(request: CreateHouseholdMemberRequest): Promise<HouseholdMemberResponse> {
+  return requestJSON<HouseholdMemberResponse>('/api/v1/household/members', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function updateHouseholdMemberRole(userId: number, role: HouseholdRole): Promise<HouseholdMemberResponse> {
+  return requestJSON<HouseholdMemberResponse>(`/api/v1/household/members/${encodeURIComponent(String(userId))}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  })
+}
+
+export async function disableHouseholdMember(userId: number): Promise<void> {
+  await requestResponse(`/api/v1/household/members/${encodeURIComponent(String(userId))}`, {
     method: 'DELETE',
   })
 }
