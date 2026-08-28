@@ -231,24 +231,50 @@ func loadLedgerAPIToken(cfg config.LedgerConfig) ([]byte, error) {
 }
 
 func validateRuntimeAIConfig(cfg config.LLMConfig) (bool, error) {
-	values := []string{
-		cfg.BaseURL,
-		cfg.APIKey,
-		cfg.FastModel,
-		cfg.PlannerModel,
-		cfg.ReviewerModel,
-	}
-	configured := 0
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			configured++
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	fastModel := strings.TrimSpace(cfg.FastModel)
+	plannerModel := strings.TrimSpace(cfg.PlannerModel)
+	reviewerModel := strings.TrimSpace(cfg.ReviewerModel)
+
+	if cfg.Mode == "" {
+		values := []string{baseURL, apiKey, fastModel, plannerModel, reviewerModel}
+		configured := 0
+		for _, value := range values {
+			if value != "" {
+				configured++
+			}
 		}
+		if configured == 0 {
+			return false, nil
+		}
+		if configured != len(values) {
+			return false, errors.New("LLM configuration must be fully specified or fully disabled")
+		}
+		return true, nil
 	}
-	if configured == 0 {
+
+	requiredModels := baseURL != "" && fastModel != "" && plannerModel != "" && reviewerModel != ""
+	switch cfg.Mode {
+	case config.LLMModeDisabled:
+		if baseURL != "" || apiKey != "" || fastModel != "" || plannerModel != "" || reviewerModel != "" {
+			return false, errors.New("LLM_MODE=disabled cannot include provider configuration")
+		}
 		return false, nil
+	case config.LLMModeLocal:
+		if !requiredModels {
+			return false, errors.New("LLM_MODE=local requires base URL and all model IDs")
+		}
+		if !isLoopbackProviderBaseURL(baseURL) {
+			return false, errors.New("LLM_MODE=local requires an IP-literal loopback provider URL")
+		}
+		return true, nil
+	case config.LLMModeExternal:
+		if !requiredModels || apiKey == "" {
+			return false, errors.New("LLM_MODE=external requires base URL, API key, and all model IDs")
+		}
+		return true, nil
+	default:
+		return false, errors.New("unsupported LLM runtime mode")
 	}
-	if configured != len(values) {
-		return false, errors.New("LLM configuration must be fully specified or fully disabled")
-	}
-	return true, nil
 }
