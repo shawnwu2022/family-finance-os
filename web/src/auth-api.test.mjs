@@ -22,7 +22,7 @@ it('dashboard contains no household id and session bootstrap selects authenticat
   globalThis.fetch = async (url, init = {}) => {
     requests.push({ url, init })
     if (url === '/api/v1/auth/session') {
-      return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, csrf_token: 'csrf' }), {
+      return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, role: 'owner', csrf_token: 'csrf' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -37,6 +37,7 @@ it('dashboard contains no household id and session bootstrap selects authenticat
   const dashboard = await loadDashboard('2026-08')
 
   assert.equal(currentAuthState().phase, 'authenticated')
+  assert.equal(currentAuthState().role, 'owner')
   assert.equal(requests[1].url, '/api/v1/dashboard?period=2026-08')
   assert.ok(!String(requests[1].url).includes('household_id'))
   assert.equal(dashboard.cashflow.period, '2026-08')
@@ -47,7 +48,7 @@ it('unsafe finance request adds csrf after authentication and 401 clears auth st
   globalThis.fetch = async (url, init = {}) => {
     requests.push({ url, init })
     if (url === '/api/v1/auth/session') {
-      return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, csrf_token: 'csrf' }), {
+      return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, role: 'owner', csrf_token: 'csrf' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -71,6 +72,7 @@ it('unsafe finance request adds csrf after authentication and 401 clears auth st
   await assert.rejects(() => loadDashboard('2026-08'), /unauthenticated/)
   assert.equal(currentAuthState().phase, 'login')
   assert.equal(currentAuthState().csrfToken, '')
+  assert.equal(currentAuthState().role, null)
 })
 
 it('login selects totp state and logout clears csrf state', async () => {
@@ -84,7 +86,7 @@ it('login selects totp state and logout clears csrf state', async () => {
       })
     }
     if (url === '/api/v1/auth/session') {
-      return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, csrf_token: 'csrf' }), {
+      return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, role: 'owner', csrf_token: 'csrf' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -103,6 +105,21 @@ it('login selects totp state and logout clears csrf state', async () => {
   assert.equal(new Headers(logoutRequest.init.headers).get('X-CSRF-Token'), 'csrf')
   assert.equal(currentAuthState().phase, 'login')
   assert.equal(currentAuthState().csrfToken, '')
+  assert.equal(currentAuthState().role, null)
+})
+
+it('authenticated session without a valid role is rejected', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    authenticated: true,
+    username: 'owner',
+    household_id: 7,
+    csrf_token: 'csrf',
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+  await assert.rejects(() => bootstrapSession(), /invalid_session/)
 })
 
 it('unauthenticated bootstrap selects login state', async () => {
@@ -113,4 +130,5 @@ it('unauthenticated bootstrap selects login state', async () => {
   const result = await bootstrapSession()
   assert.equal(result.phase, 'login')
   assert.equal(result.authenticated, false)
+  assert.equal(result.role, null)
 })
