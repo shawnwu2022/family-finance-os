@@ -40,9 +40,12 @@ grep -Fq 'https://p40-ai.example/v1' "$env_example" || fail ".env.example must s
 
 grep -Fq 'LLM_MODE=local requires' "$application_go" || fail "runtime must validate local mode"
 grep -Fq 'LLM_MODE=external requires' "$application_go" || fail "runtime must validate external mode"
-grep -Fq 'plaintext HTTP LLM endpoints are only allowed for IP-literal loopback addresses' "$provider_go" \
-  || fail "provider must preserve the plaintext loopback-only boundary"
-grep -Fq 'redirected to insecure HTTP endpoint' "$provider_go" \
-  || fail "provider must preserve HTTPS downgrade rejection"
+grep -Fq 'func allowedProviderEndpoint' "$provider_go" || fail "provider endpoint policy is missing"
+grep -Fq 'func allowedProviderRedirect' "$provider_go" || fail "provider redirect policy is missing"
+grep -Fq 'func isLoopbackHTTPProviderURL' "$provider_go" || fail "provider loopback HTTP policy is missing"
+grep -Fq 'strings.EqualFold(endpoint.Scheme, "https")' "$provider_go" || fail "provider must allow secure HTTPS endpoints"
+grep -Fq 'ip.IsLoopback()' "$provider_go" || fail "provider must restrict plaintext HTTP to loopback IPs"
+grep -Fq 'return isLoopbackHTTPProviderURL(origin) && isLoopbackHTTPProviderURL(target)' "$provider_go" \
+  || fail "provider redirects must not downgrade a secure origin to plaintext HTTP"
 
 echo "Local AI contract OK"
