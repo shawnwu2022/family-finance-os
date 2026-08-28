@@ -9,9 +9,9 @@ type DataQualityIssueResponse struct {
 }
 
 type DuplicateCandidateResponse struct {
-	TransactionIDs  []string `json:"transaction_ids"`
-	Type            string   `json:"type"`
-	Amount          MoneyDTO `json:"amount"`
+	TransactionIDs  []string  `json:"transaction_ids"`
+	Type            string    `json:"type"`
+	Amount          MoneyDTO  `json:"amount"`
 	FirstOccurredAt time.Time `json:"first_occurred_at"`
 	LastOccurredAt  time.Time `json:"last_occurred_at"`
 }
