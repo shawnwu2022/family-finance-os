@@ -27,6 +27,7 @@ func NewHandler(options ...HandlerOption) http.Handler {
 	apiMux := http.NewServeMux()
 	registerFinanceAPI(apiMux, cfg.api)
 	registerPortfolioFinanceAPI(apiMux, cfg.api)
+	registerDataQualityAPI(apiMux, cfg.api)
 	if cfg.auth != nil {
 		registerBrowserAuth(mux, cfg.auth)
 	}
