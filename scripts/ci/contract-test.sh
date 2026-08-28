@@ -17,6 +17,8 @@ required=(
   scripts/ci/go-verify.sh
   scripts/ci/auth-security.sh
   scripts/acceptance/finance-auth-live-smoke.sh
+  scripts/acceptance/local-ai-benchmark.sh
+  scripts/acceptance/test-local-ai-contract.sh
   scripts/ci/web-verify.sh
   scripts/ci/mcp-security.sh
   scripts/ci/edge-security.sh
@@ -93,6 +95,7 @@ if grep -Fq '.git' scripts/ci/mcp-security.sh; then
 fi
 grep -Fq '[[ -f "$SOURCE_ROOT/go.mod" ]]' scripts/ci/mcp-security.sh || fail "MCP security verifier must validate the mounted source tree by go.mod"
 
+bash scripts/acceptance/test-local-ai-contract.sh
 bash scripts/ci/test-preflight-secret-permissions.sh
 bash scripts/ci/test-application-preflight-security.sh
 bash scripts/ci/test-workflow-action-pins.sh
