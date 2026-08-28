@@ -1,4 +1,4 @@
-import type { AuthLoginResponse, AuthSessionResponse } from './types'
+import type { AuthLoginResponse, AuthSessionResponse, HouseholdRole } from './types'
 
 export type AuthPhase = 'checking' | 'login' | 'enroll_totp' | 'verify_totp' | 'authenticated'
 
@@ -7,6 +7,7 @@ export interface AuthState {
   authenticated: boolean
   username: string
   householdId: number | null
+  role: HouseholdRole | null
   csrfToken: string
   challenge: string
   totpSecret: string
@@ -116,7 +117,12 @@ async function finishSession(issue: AuthSessionResponse): Promise<AuthState> {
 }
 
 function authenticatedState(session: AuthSessionResponse, recoveryCodes: string[]): AuthState {
-  if (!session.csrf_token || !Number.isSafeInteger(session.household_id) || (session.household_id ?? 0) <= 0) {
+  if (
+    !session.csrf_token ||
+    !Number.isSafeInteger(session.household_id) ||
+    (session.household_id ?? 0) <= 0 ||
+    !isHouseholdRole(session.role)
+  ) {
     throw new Error('invalid_session')
   }
   return {
@@ -124,12 +130,17 @@ function authenticatedState(session: AuthSessionResponse, recoveryCodes: string[
     authenticated: true,
     username: session.username ?? '',
     householdId: session.household_id ?? null,
+    role: session.role,
     csrfToken: session.csrf_token,
     challenge: '',
     totpSecret: '',
     otpauthURI: '',
     recoveryCodes: [...recoveryCodes],
   }
+}
+
+function isHouseholdRole(value: unknown): value is HouseholdRole {
+  return value === 'owner' || value === 'editor' || value === 'viewer'
 }
 
 async function authRequestJSON<T>(url: string, init: RequestInit = {}): Promise<T> {
@@ -167,6 +178,7 @@ function emptyState(phase: AuthPhase): AuthState {
     authenticated: false,
     username: '',
     householdId: null,
+    role: null,
     csrfToken: '',
     challenge: '',
     totpSecret: '',

@@ -34,7 +34,7 @@ describe('portfolio API', () => {
     let captured
     globalThis.fetch = async (url, init = {}) => {
       if (url === '/api/v1/auth/session') {
-        return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, csrf_token: 'csrf' }), {
+        return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, role: 'owner', csrf_token: 'csrf' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -71,7 +71,7 @@ describe('portfolio API', () => {
     let captured
     globalThis.fetch = async (url, init = {}) => {
       if (url === '/api/v1/auth/session') {
-        return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, csrf_token: 'csrf' }), {
+        return new Response(JSON.stringify({ authenticated: true, username: 'owner', household_id: 7, role: 'owner', csrf_token: 'csrf' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })

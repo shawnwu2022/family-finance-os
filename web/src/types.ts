@@ -132,6 +132,26 @@ export interface PortfolioAssetsResponse {
   items: PortfolioAssetResponse[]
 }
 
+export type HouseholdRole = 'owner' | 'editor' | 'viewer'
+
+export interface HouseholdMemberResponse {
+  user_id: number
+  username: string
+  role: HouseholdRole
+  disabled: boolean
+  totp_enrolled: boolean
+}
+
+export interface HouseholdMembersResponse {
+  items: HouseholdMemberResponse[]
+}
+
+export interface CreateHouseholdMemberRequest {
+  username: string
+  password: string
+  role: HouseholdRole
+}
+
 export interface DashboardData {
   overview: OverviewResponse
   cashflow: CashflowResponse
@@ -144,6 +164,7 @@ export interface AuthSessionResponse {
   authenticated: boolean
   username?: string
   household_id?: number
+  role?: HouseholdRole
   csrf_token?: string
   recovery_codes?: string[]
 }

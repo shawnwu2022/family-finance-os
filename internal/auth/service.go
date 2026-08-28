@@ -47,6 +47,7 @@ type SessionIdentity struct {
 	UserID      int64
 	Username    string
 	HouseholdID int64
+	Role        Role
 	CSRFToken   string
 }
 
@@ -243,6 +244,13 @@ func (s *Service) AuthenticateSession(ctx context.Context, rawSessionToken strin
 		_ = s.store.RevokeSession(ctx, tokenHash[:], now)
 		return SessionIdentity{}, ErrUnauthenticated
 	}
+	role, err := s.store.GetUserRole(ctx, session.UserID)
+	if errors.Is(err, ErrNotFound) {
+		return SessionIdentity{}, ErrUnauthenticated
+	}
+	if err != nil {
+		return SessionIdentity{}, fmt.Errorf("load auth session role: %w", err)
+	}
 	csrf, err := s.secretBox.Open(session.CSRFTokenCiphertext)
 	if err != nil {
 		return SessionIdentity{}, ErrUnauthenticated
@@ -256,6 +264,7 @@ func (s *Service) AuthenticateSession(ctx context.Context, rawSessionToken strin
 		UserID:      session.UserID,
 		Username:    session.Username,
 		HouseholdID: session.HouseholdID,
+		Role:        role,
 		CSRFToken:   string(csrf),
 	}, nil
 }

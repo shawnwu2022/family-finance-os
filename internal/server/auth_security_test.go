@@ -74,7 +74,11 @@ func (f fakeBrowserAuth) AuthenticateSession(ctx context.Context, token string, 
 	if f.authenticate == nil {
 		return financeauth.SessionIdentity{}, financeauth.ErrUnauthenticated
 	}
-	return f.authenticate(ctx, token, now)
+	identity, err := f.authenticate(ctx, token, now)
+	if err == nil && identity.Role == "" {
+		identity.Role = financeauth.RoleOwner
+	}
+	return identity, err
 }
 func (f fakeBrowserAuth) Logout(ctx context.Context, token string, now time.Time) error {
 	if f.logout == nil {
@@ -201,7 +205,7 @@ func TestSessionCookieAttributesAndSessionEndpoint(t *testing.T) {
 	if err := json.Unmarshal(sessionRec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode session response: %v", err)
 	}
-	if got["authenticated"] != true || got["csrf_token"] != "csrf-token" {
+	if got["authenticated"] != true || got["csrf_token"] != "csrf-token" || got["role"] != "owner" {
 		t.Fatalf("session response = %#v", got)
 	}
 }

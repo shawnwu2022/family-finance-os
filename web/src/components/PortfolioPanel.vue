@@ -13,6 +13,7 @@ import type { PortfolioAssetClass, PortfolioAssetResponse, PortfolioSnapshotSour
 
 const props = defineProps<{
   defaultCurrency: string
+  readOnly?: boolean
 }>()
 
 const items = ref<PortfolioAssetResponse[]>([])
@@ -61,6 +62,7 @@ async function reload() {
 }
 
 function openNew() {
+  if (props.readOnly) return
   Object.assign(form, newFormState(props.defaultCurrency))
   editingRef.value = ''
   formError.value = ''
@@ -68,6 +70,7 @@ function openNew() {
 }
 
 function openEdit(asset: PortfolioAssetResponse) {
+  if (props.readOnly) return
   Object.assign(form, formFromPortfolioAsset(asset))
   editingRef.value = asset.asset_ref
   formError.value = ''
@@ -82,6 +85,7 @@ function closeForm() {
 }
 
 async function submit() {
+  if (props.readOnly) return
   const result = buildPortfolioAssetRequest(form)
   if (!result.ok) {
     formError.value = formErrorMessage(result.error)
@@ -103,6 +107,7 @@ async function submit() {
 }
 
 async function remove(asset: PortfolioAssetResponse) {
+  if (props.readOnly) return
   if (!window.confirm(`确认删除资产快照「${asset.name}」？此操作不会删除账本交易。`)) return
 
   deletingRef.value = asset.asset_ref
@@ -172,6 +177,13 @@ watch(
   },
 )
 
+watch(
+  () => props.readOnly,
+  (readOnly) => {
+    if (readOnly) closeForm()
+  },
+)
+
 onMounted(() => {
   void reload()
 })
@@ -185,7 +197,8 @@ onMounted(() => {
         <h2 id="portfolio-heading">资产快照</h2>
         <p class="portfolio-copy">录入当前资产事实；Finance Core 负责确定性分类汇总，不在浏览器计算投资组合。</p>
       </div>
-      <button type="button" class="portfolio-add" :disabled="loading || saving" @click="openNew">新增资产</button>
+      <button v-if="!readOnly" type="button" class="portfolio-add" :disabled="loading || saving" @click="openNew">新增资产</button>
+      <span v-else class="portfolio-readonly">Viewer · 只读</span>
     </div>
 
     <div v-if="errorCode" class="portfolio-error" role="alert">
@@ -193,7 +206,7 @@ onMounted(() => {
       <button type="button" class="button-link" @click="reload">重试</button>
     </div>
 
-    <form v-if="formOpen" class="portfolio-form" @submit.prevent="submit">
+    <form v-if="formOpen && !readOnly" class="portfolio-form" @submit.prevent="submit">
       <div class="portfolio-form__heading">
         <strong>{{ editingRef ? '编辑资产快照' : '新增资产快照' }}</strong>
         <button type="button" class="button-secondary" :disabled="saving" @click="closeForm">取消</button>
@@ -272,7 +285,7 @@ onMounted(() => {
         </div>
         <div class="portfolio-row__side">
           <strong class="portfolio-value">{{ formatMoney({ minor: asset.value_minor, currency: asset.currency }) }}</strong>
-          <div class="portfolio-actions">
+          <div v-if="!readOnly" class="portfolio-actions">
             <button type="button" class="button-secondary" :disabled="saving || Boolean(deletingRef)" @click="openEdit(asset)">编辑</button>
             <button type="button" class="button-danger" :disabled="saving || Boolean(deletingRef)" @click="remove(asset)">
               {{ deletingRef === asset.asset_ref ? '删除中…' : '删除' }}
@@ -304,10 +317,18 @@ onMounted(() => {
 .portfolio-copy,
 .portfolio-hint,
 .portfolio-meta,
-.portfolio-empty {
+.portfolio-empty,
+.portfolio-readonly {
   color: var(--muted);
   font-size: 0.8rem;
   line-height: 1.55;
+}
+
+.portfolio-readonly {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  white-space: nowrap;
 }
 
 .portfolio-error,

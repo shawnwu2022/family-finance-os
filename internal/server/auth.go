@@ -46,6 +46,7 @@ type authSessionResponse struct {
 	Authenticated bool     `json:"authenticated"`
 	Username      string   `json:"username,omitempty"`
 	HouseholdID   int64    `json:"household_id,omitempty"`
+	Role          string   `json:"role,omitempty"`
 	CSRFToken     string   `json:"csrf_token,omitempty"`
 	RecoveryCodes []string `json:"recovery_codes,omitempty"`
 }
@@ -68,10 +69,16 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 			writeJSON(w, http.StatusOK, authSessionResponse{Authenticated: false})
 			return
 		}
+		role, err := financeauth.ParseRole(string(identity.Role))
+		if err != nil {
+			writeJSON(w, http.StatusOK, authSessionResponse{Authenticated: false})
+			return
+		}
 		writeJSON(w, http.StatusOK, authSessionResponse{
 			Authenticated: true,
 			Username:      identity.Username,
 			HouseholdID:   identity.HouseholdID,
+			Role:          string(role),
 			CSRFToken:     identity.CSRFToken,
 		})
 	})
@@ -180,6 +187,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 		writeNoContent(w)
 	})
 	mux.Handle("POST /api/v1/auth/logout", requireBrowserAuth(auth, logout))
+	registerHouseholdMembers(mux, auth)
 }
 
 func requireBrowserAuth(auth BrowserAuth, next http.Handler) http.Handler {
@@ -194,7 +202,8 @@ func requireBrowserAuth(auth BrowserAuth, next http.Handler) http.Handler {
 			return
 		}
 		identity, err := auth.AuthenticateSession(r.Context(), cookie.Value, time.Now().UTC())
-		if err != nil || identity.UserID <= 0 || identity.HouseholdID <= 0 || strings.TrimSpace(identity.CSRFToken) == "" {
+		role, roleErr := financeauth.ParseRole(string(identity.Role))
+		if err != nil || roleErr != nil || identity.UserID <= 0 || identity.HouseholdID <= 0 || strings.TrimSpace(identity.CSRFToken) == "" {
 			writeAPIError(w, http.StatusUnauthorized, "unauthenticated", "authentication required")
 			return
 		}
@@ -202,10 +211,27 @@ func requireBrowserAuth(auth BrowserAuth, next http.Handler) http.Handler {
 			writeAPIError(w, http.StatusForbidden, "invalid_csrf", "invalid CSRF token")
 			return
 		}
+		if requiresFinanceEditRole(r) && !role.CanEditFinance() {
+			writeAPIError(w, http.StatusForbidden, "insufficient_role", "insufficient role")
+			return
+		}
 		ctx := requestscope.WithUserID(r.Context(), identity.UserID)
 		ctx = requestscope.WithHouseholdID(ctx, identity.HouseholdID)
+		ctx = requestscope.WithRole(ctx, string(role))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func requiresFinanceEditRole(r *http.Request) bool {
+	if !isUnsafeAPIRequest(r) || r == nil || r.URL == nil {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/v1/advisor", "/api/v1/scenarios", "/api/v1/auth/logout":
+		return false
+	default:
+		return true
+	}
 }
 
 func writeAuthRateLimited(w http.ResponseWriter) {

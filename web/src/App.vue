@@ -10,12 +10,13 @@ import {
   type AuthState,
 } from './auth'
 import CashflowChart from './components/CashflowChart.vue'
+import HouseholdMembersPanel from './components/HouseholdMembersPanel.vue'
 import LoginPanel from './components/LoginPanel.vue'
 import MetricCard from './components/MetricCard.vue'
 import PortfolioPanel from './components/PortfolioPanel.vue'
 import TOTPPanel from './components/TOTPPanel.vue'
 import { chartValue, formatMoney, formatPercent } from './money'
-import type { AdvisorResponse, DashboardData } from './types'
+import type { AdvisorResponse, DashboardData, HouseholdRole } from './types'
 
 const authState = ref<AuthState>(currentAuthState())
 const period = ref(currentPeriod())
@@ -130,6 +131,15 @@ function goalStatus(value: string): string {
   return labels[value] ?? value
 }
 
+function roleLabel(role: HouseholdRole | null): string {
+  const labels: Record<HouseholdRole, string> = {
+    owner: 'Owner',
+    editor: 'Editor',
+    viewer: 'Viewer',
+  }
+  return role ? labels[role] : '—'
+}
+
 watch(
   () => [authState.value.authenticated, authState.value.recoveryCodes.length] as const,
   ([authenticated, recoveryCodeCount]) => {
@@ -174,7 +184,7 @@ onMounted(async () => {
         <p class="subtle">确定性计算为准，AI 只负责解释与规划。</p>
       </div>
       <div class="topbar-actions">
-        <span class="signed-in-user">{{ authState.username || 'Finance 用户' }}</span>
+        <span class="signed-in-user">{{ authState.username || 'Finance 用户' }} · {{ roleLabel(authState.role) }}</span>
         <form class="context-controls" @submit.prevent="refresh">
           <label>
             <span>月份</span>
@@ -303,7 +313,12 @@ onMounted(async () => {
           </section>
         </div>
 
-        <PortfolioPanel :default-currency="data.overview.net_worth.currency" />
+        <PortfolioPanel
+          :default-currency="data.overview.net_worth.currency"
+          :read-only="authState.role === 'viewer'"
+        />
+
+        <HouseholdMembersPanel v-if="authState.role === 'owner'" />
 
         <section class="panel advisor-panel">
           <div class="panel-heading">
