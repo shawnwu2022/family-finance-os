@@ -37,6 +37,26 @@ func TestAnalyzeDetectsDeterministicDuplicateCandidates(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDuplicateWindowIsMeasuredFromGroupStart(t *testing.T) {
+	t0 := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	accounts := []ledger.Account{{ID: "cash"}}
+	categories := []ledger.Category{{ID: "food", Type: ledger.CategoryTypeExpense}}
+	txs := []ledger.Transaction{
+		{ID: "tx-a", Type: ledger.TransactionTypeExpense, CategoryID: "food", OccurredAt: t0, SourceAccountID: "cash", SourceAmount: money.Money{Minor: 1280, Currency: "CNY"}, Comment: "lunch"},
+		{ID: "tx-b", Type: ledger.TransactionTypeExpense, CategoryID: "food", OccurredAt: t0.Add(4 * time.Minute), SourceAccountID: "cash", SourceAmount: money.Money{Minor: 1280, Currency: "CNY"}, Comment: "lunch"},
+		{ID: "tx-c", Type: ledger.TransactionTypeExpense, CategoryID: "food", OccurredAt: t0.Add(8 * time.Minute), SourceAccountID: "cash", SourceAmount: money.Money{Minor: 1280, Currency: "CNY"}, Comment: "lunch"},
+	}
+
+	report := Analyze(accounts, categories, txs, Options{DuplicateWindow: 5 * time.Minute})
+	if len(report.DuplicateGroups) != 1 {
+		t.Fatalf("duplicate groups=%d want 1", len(report.DuplicateGroups))
+	}
+	group := report.DuplicateGroups[0]
+	if len(group.TransactionIDs) != 2 || group.TransactionIDs[0] != "tx-a" || group.TransactionIDs[1] != "tx-b" {
+		t.Fatalf("transitive clustering over-grouped transactions: %#v", group.TransactionIDs)
+	}
+}
+
 func TestAnalyzeFlagsReferenceAndShapeProblems(t *testing.T) {
 	t0 := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	accounts := []ledger.Account{{ID: "cash"}}
