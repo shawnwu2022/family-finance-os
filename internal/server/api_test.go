@@ -28,7 +28,7 @@ func TestFinanceAPIOverviewContract(t *testing.T) {
 			GoalCount:       2,
 		},
 	}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/overview?household_id=42", nil)
 	resp := httptest.NewRecorder()
 	handler.ServeHTTP(resp, req)
@@ -60,7 +60,7 @@ func TestFinanceAPIOverviewContract(t *testing.T) {
 
 func TestFinanceAPIDashboardContract(t *testing.T) {
 	fake := &fakeFinanceAPI{dashboard: DashboardResponse{Cashflow: CashflowResponse{Period: "2026-08"}}}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard?household_id=42&period=2026-08", nil)
 	resp := httptest.NewRecorder()
 
@@ -83,7 +83,7 @@ func TestFinanceAPIDashboardContract(t *testing.T) {
 
 func TestFinanceAPIRejectsInvalidQueryBeforeBackend(t *testing.T) {
 	fake := &fakeFinanceAPI{}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	for _, target := range []string{
 		"/api/v1/overview",
 		"/api/v1/overview?household_id=0",
@@ -108,7 +108,7 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 		scenario: ScenarioResponse{Kind: "purchase", Result: json.RawMessage(`{"affordable":true}`)},
 		advisor:  AdvisorResponse{Text: "可以购买，但会降低安全可消费余额。", Reviewed: true, Review: "审查通过"},
 	}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 
 	t.Run("scenario", func(t *testing.T) {
 		body := `{"household_id":7,"kind":"purchase","input":{"amount_minor":899900,"currency":"CNY"}}`
@@ -146,7 +146,7 @@ func TestFinanceAPIScenarioAndAdvisorStrictJSON(t *testing.T) {
 
 func TestFinanceAPIDoesNotLeakBackendErrors(t *testing.T) {
 	fake := &fakeFinanceAPI{overviewErr: errors.New("SECRET_DATABASE_FAILURE")}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	resp := httptest.NewRecorder()
 	handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/v1/overview?household_id=1", nil))
 	if resp.Code != http.StatusInternalServerError {

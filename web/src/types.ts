@@ -139,3 +139,18 @@ export interface DashboardData {
   debts: DebtsResponse
   goals: GoalsResponse
 }
+
+export interface AuthSessionResponse {
+  authenticated: boolean
+  username?: string
+  household_id?: number
+  csrf_token?: string
+  recovery_codes?: string[]
+}
+
+export interface AuthLoginResponse {
+  challenge: string
+  step: 'enroll_totp' | 'verify_totp'
+  totp_secret?: string
+  otpauth_uri?: string
+}

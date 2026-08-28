@@ -17,15 +17,17 @@
 - Data quality；
 - Advisor tool routing；
 - Monthly report；
-- Scheduler/idempotency。
+- Scheduler/idempotency；
+- Finance authentication cryptography/state machine/session authorization。
 
 Finance pure function 优先 table-driven test；测试不允许依赖真实云 LLM。
 
 ### Race / Fuzz / Property
 
 - CI 运行 `go test -race ./...`；
+- 独立认证门禁额外运行 `go test -race ./internal/auth ./internal/server ./cmd/finance-core -count=1`；
 - Money、Safe-to-Spend、Debt 等核心算法覆盖 fuzz/property tests；
-- 典型不变量：增加一次未承诺消费不能增加 Safe-to-Spend；额外还款在其他条件不变时不能增加债务本金或把 payoff date 推迟。
+- 典型不变量：增加一次未承诺消费不能增加 Safe-to-Spend；额外还款在其他条件不变时不能增加债务本金或把 payoff date 推迟；TOTP/recovery challenge 不得因并发而被重复消费。
 
 ### Contract Test
 
@@ -38,6 +40,15 @@ Finance pure function 优先 table-driven test；测试不允许依赖真实云 
 - transaction type；
 - pagination/time range。
 
+认证/边缘契约还必须验证：
+
+- Caddy 不包含 Finance 用户 Basic Auth；
+- Finance Core 直接访问受保护 API 时，无应用 Session 返回 401；
+- 浏览器 Session 与 MCP Bearer 互不替代；
+- steady-state ezBookkeeping 注册关闭，2FA 能力开启；
+- trusted proxy 与 Finance 专用 API-token 来源 IP 使用固定私网边界；
+- secret 通过仓库外私有文件注入。
+
 ### Integration Test
 
 - Finance Core + disposable PostgreSQL；
@@ -46,6 +57,8 @@ Finance pure function 优先 table-driven test；测试不允许依赖真实云 
 - scheduler `job_runs` 重启恢复与幂等；
 - backup dump + checksum + `restore-drill.sh` 的真实 `pg_restore`；
 - Finance Core + ezBookkeeping staging；
+- Finance HTTP 正向认证链：password → mandatory TOTP enrollment → server-side session → dashboard → logout；
+- Session idle timeout、absolute expiry、TOTP replay、recovery-code reuse、CSRF、household override 均有负面集成证据；
 - LLM Adapter 使用 fake `httptest.Server` 验证 tool path/SSE/JSON，真实云模型不是 CI 必需依赖。
 
 ### Static / Supply-chain
@@ -110,23 +123,34 @@ Finance pure function 优先 table-driven test；测试不允许依赖真实云 
 9. backup restore drill；
 10. `go test -race ./...`；
 11. Go binary build；
-12. 前端 `npm ci`；
-13. 前端 unit test；
-14. PWA contract；
-15. TypeScript typecheck；
-16. frontend production build；
-17. Docker image build；
-18. Edge Security workflow；
-19. `scripts/test-production-ops.sh`；
-20. `scripts/check-edge-security.sh`。
+12. `make verify-auth-security`：认证 race、真实 HTTP password/TOTP/session/dashboard/logout smoke、Session expiry 与负面授权边界；
+13. 前端 `npm ci`；
+14. 前端 unit test；
+15. PWA contract；
+16. TypeScript typecheck；
+17. frontend production build；
+18. Docker image build；
+19. Edge Security workflow；
+20. MCP Security workflow；
+21. `scripts/test-production-ops.sh`；
+22. `scripts/check-edge-security.sh`；
+23. OpenClaw Release Acceptance，包括真实临时 OpenClaw/Ollama/MCP 路径。
 
-CI 绿色只代表**可重复的软件/运维契约**通过，不等价于真实家庭数据和真实生产主机已经验收。
+规范命令：
+
+```bash
+make verify-auth-security
+make verify
+```
+
+CI 绿色只代表**可重复的软件/运维契约**通过，不等价于真实家庭数据、真实手机、真实生产主机或真实 owner 已完成 2FA enrollment。
 
 ## 5. V0 Exit Criteria
 
 - 手机 PWA 可登录、截图、手工记账；
 - 至少成功导入一种真实中国账单；
-- 2FA 已启用；
+- Finance 管理员已完成 mandatory TOTP enrollment；
+- ezBookkeeping owner 2FA 已实际启用；
 - 每日备份可产生有效 dump；
 - 完成一次异机恢复。
 
@@ -184,14 +208,21 @@ CI 绿色只代表**可重复的软件/运维契约**通过，不等价于真实
 - 人为制造/模拟 interrupted `running` 后重启，能够恢复为 failed 并允许重试；
 - 不保存原始 secret-bearing error text。
 
-### 6.6 PWA 与公网安全
+### 6.6 PWA、认证与公网安全
 
 - 至少在一台真实手机上通过 HTTPS 安装/添加 PWA；
-- Finance 域先经过 Caddy Basic Auth；
+- Finance 域显示应用自己的登录页，正确密码后仍必须完成 TOTP 才能访问 Dashboard；
+- 未登录和仅完成密码阶段访问受保护 Finance API 返回 401；
+- unsafe Finance API 在有效 Session 下仍要求有效 CSRF token；
+- 浏览器不得通过 query/body `household_id` 覆盖 Session 绑定的 household；
+- 登出后旧 Session 再访问受保护 API 返回 401；
+- 浏览器 Session cookie 不能认证 `/mcp`，MCP Bearer 不能认证浏览器 API；
 - ezBookkeeping/Finance Core/PostgreSQL 均无直接宿主端口；
-- 2FA 已在 ezBookkeeping 管理员账户启用；
+- **ezBookkeeping owner 2FA enrollment 必须人工确认**；仅设置 `EBK_AUTH_ENABLE_TWO_FACTOR=true` 不算 owner 已完成 2FA 的证据；
 - `.env`、API token、LLM key、restic password、SSH private key、原始账单不在 Git；
-- 日志和验收证据中不存在明文 secret/完整账户号等敏感数据。
+- 日志和验收证据中不存在明文 password、TOTP secret、recovery code、Session token、API token、完整账户号等敏感数据。
+
+生产证据只记录脱敏断言、时间、版本/commit、执行人和 PASS/FAIL，不保存原始认证材料。
 
 ## 7. V1 发布判定
 
@@ -200,9 +231,9 @@ CI 绿色只代表**可重复的软件/运维契约**通过，不等价于真实
 - 第 4 节全部 CI 自动门禁在目标 commit 绿色；
 - 第 5 节 V0 真实门禁已有有效证据；
 - 第 6 节所有生产门禁状态为 `PASS`；
-- 无 P0/P1 数据正确性问题；
+- 无 P0/P1 数据正确性或认证/授权问题；
 - 没有未解释的金额差异 > 0.01 CNY；
 - 没有未处理的高严重度可达漏洞；
 - 没有已知 secret 泄露。
 
-若缺少真实服务器、账单、LLM、手机、authenticated append-only REST producer 或独立 maintenance/recovery 凭据，只能把状态记为 `NOT RUN`/`BLOCKED`，不能推断为通过，也不能创建 V1 tag。
+若缺少真实服务器、账单、LLM、手机、真实 Finance TOTP/ezBookkeeping owner 2FA、authenticated append-only REST producer 或独立 maintenance/recovery 凭据，只能把状态记为 `NOT RUN`/`BLOCKED`，不能推断为通过，也不能创建 V1 tag。

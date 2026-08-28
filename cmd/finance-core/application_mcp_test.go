@@ -15,6 +15,9 @@ import (
 	storesqlc "github.com/shawnwu2022/family-finance-os/internal/store/sqlc"
 )
 
+// applicationTestAuthKey is a non-secret fixed fixture for production-handler integration tests.
+const applicationTestAuthKey = "0123456789abcdef0123456789abcdef"
+
 func TestBuildApplicationHandlerMountsMCPOnlyWhenEnabledIntegration(t *testing.T) {
 	pool := openMCPIntegrationPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -93,6 +96,14 @@ func applicationMCPTestConfig(t *testing.T) config.Config {
 	if err != nil {
 		t.Fatalf("parse TEST_POSTGRES_PORT: %v", err)
 	}
+	authKeyPath := filepath.Join(t.TempDir(), "finance-auth-key")
+	if err := os.WriteFile(authKeyPath, []byte(applicationTestAuthKey), 0o600); err != nil {
+		t.Fatalf("write auth key: %v", err)
+	}
+	ledgerTokenPath := filepath.Join(t.TempDir(), "ezbookkeeping-api-token")
+	if err := os.WriteFile(ledgerTokenPath, []byte("test-token"), 0o600); err != nil {
+		t.Fatalf("write ledger API token: %v", err)
+	}
 	return config.Config{
 		ListenAddr: ":8000",
 		Timezone:   "Asia/Shanghai",
@@ -105,8 +116,9 @@ func applicationMCPTestConfig(t *testing.T) config.Config {
 			SSLMode:  "disable",
 		},
 		Ledger: config.LedgerConfig{
-			BaseURL:  "http://ezbookkeeping.invalid:8080",
-			APIToken: "test-token",
+			BaseURL:      "http://ezbookkeeping.invalid:8080",
+			APITokenFile: ledgerTokenPath,
 		},
+		Auth: config.AuthConfig{KeyFile: authKeyPath},
 	}
 }

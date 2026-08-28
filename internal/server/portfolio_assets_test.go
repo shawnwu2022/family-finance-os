@@ -38,7 +38,7 @@ func TestPortfolioAssetsHTTPCRUDContract(t *testing.T) {
 			SourceKind:     "manual",
 		},
 	}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 
 	t.Run("GET", func(t *testing.T) {
 		resp := httptest.NewRecorder()
@@ -99,7 +99,7 @@ func TestPortfolioAssetsHTTPCRUDContract(t *testing.T) {
 
 func TestPortfolioAssetsHTTPRejectsInvalidRequestsBeforeBackend(t *testing.T) {
 	fake := &portfolioHTTPFake{}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 
 	tests := []struct {
 		name   string
@@ -129,7 +129,7 @@ func TestPortfolioAssetsHTTPRejectsInvalidRequestsBeforeBackend(t *testing.T) {
 
 func TestPortfolioAssetsHTTPDoesNotLeakBackendErrors(t *testing.T) {
 	fake := &portfolioHTTPFake{listErr: errors.New("SECRET_PORTFOLIO_FAILURE")}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	resp := httptest.NewRecorder()
 	handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/v1/portfolio/assets?household_id=42", nil))
 	if resp.Code != http.StatusInternalServerError {

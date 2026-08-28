@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
+	financeauth "github.com/shawnwu2022/family-finance-os/internal/auth"
 	"github.com/shawnwu2022/family-finance-os/internal/config"
 	"github.com/shawnwu2022/family-finance-os/internal/report"
 	"github.com/shawnwu2022/family-finance-os/internal/scheduler"
@@ -28,6 +31,15 @@ func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
 		t.Fatalf("parse TEST_POSTGRES_PORT: %v", err)
 	}
 
+	secretDir := t.TempDir()
+	authKeyFile := filepath.Join(secretDir, "finance-auth-key")
+	if err := os.WriteFile(authKeyFile, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+		t.Fatalf("write auth key: %v", err)
+	}
+	ledgerTokenFile := filepath.Join(secretDir, "ezbookkeeping-api-token")
+	if err := os.WriteFile(ledgerTokenFile, []byte("test-token"), 0o600); err != nil {
+		t.Fatalf("write ledger token: %v", err)
+	}
 	cfg := config.Config{
 		ListenAddr: ":8000",
 		Timezone:   "Asia/Shanghai",
@@ -40,9 +52,10 @@ func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
 			SSLMode:  "disable",
 		},
 		Ledger: config.LedgerConfig{
-			BaseURL:  "http://ezbookkeeping.invalid:8080",
-			APIToken: "test-token",
+			BaseURL:      "http://ezbookkeeping.invalid:8080",
+			APITokenFile: ledgerTokenFile,
 		},
+		Auth: config.AuthConfig{KeyFile: authKeyFile},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -60,6 +73,65 @@ func TestBuildApplicationHandlerWithoutLLMIntegration(t *testing.T) {
 	handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if resp.Code != http.StatusOK {
 		t.Fatalf("health status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	protected := httptest.NewRecorder()
+	handler.ServeHTTP(protected, httptest.NewRequest(http.MethodGet, "/api/v1/overview", nil))
+	if protected.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated finance API status=%d want=401 body=%s", protected.Code, protected.Body.String())
+	}
+}
+
+func TestLoadBrowserAuthSecretBoxRequiresPrivateExactKey(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	valid := filepath.Join(dir, "valid")
+	if err := os.WriteFile(valid, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+		t.Fatalf("write valid key: %v", err)
+	}
+	box, err := loadBrowserAuthSecretBox(config.AuthConfig{KeyFile: valid})
+	if err != nil || box == nil {
+		t.Fatalf("load valid auth key: box=%v err=%v", box, err)
+	}
+
+	short := filepath.Join(dir, "short")
+	if err := os.WriteFile(short, []byte("too-short"), 0o600); err != nil {
+		t.Fatalf("write short key: %v", err)
+	}
+	if _, err := loadBrowserAuthSecretBox(config.AuthConfig{KeyFile: short}); !errors.Is(err, financeauth.ErrInvalidSecretBoxKey) {
+		t.Fatalf("short auth key error=%v want ErrInvalidSecretBoxKey", err)
+	}
+
+	insecure := filepath.Join(dir, "insecure")
+	if err := os.WriteFile(insecure, []byte("0123456789abcdef0123456789abcdef"), 0o644); err != nil {
+		t.Fatalf("write insecure key: %v", err)
+	}
+	if _, err := loadBrowserAuthSecretBox(config.AuthConfig{KeyFile: insecure}); err == nil {
+		t.Fatal("loadBrowserAuthSecretBox accepted group/other-readable key")
+	}
+}
+
+func TestLoadLedgerAPITokenRequiresPrivateSecretFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	valid := filepath.Join(dir, "valid-token")
+	if err := os.WriteFile(valid, []byte("ledger-token\n"), 0o600); err != nil {
+		t.Fatalf("write valid token: %v", err)
+	}
+	token, err := loadLedgerAPIToken(config.LedgerConfig{APITokenFile: valid})
+	if err != nil || string(token) != "ledger-token" {
+		t.Fatalf("load valid ledger token: token=%q err=%v", token, err)
+	}
+	clear(token)
+
+	insecure := filepath.Join(dir, "insecure-token")
+	if err := os.WriteFile(insecure, []byte("ledger-token"), 0o644); err != nil {
+		t.Fatalf("write insecure token: %v", err)
+	}
+	if _, err := loadLedgerAPIToken(config.LedgerConfig{APITokenFile: insecure}); err == nil {
+		t.Fatal("loadLedgerAPIToken accepted group/other-readable token")
 	}
 }
 

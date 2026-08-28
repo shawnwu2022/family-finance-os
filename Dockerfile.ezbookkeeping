@@ -49,9 +49,8 @@ RUN apk upgrade --no-cache \
  && addgroup -S -g 1000 ezbookkeeping \
  && adduser -S -G ezbookkeeping -u 1000 ezbookkeeping \
  && apk --no-cache add tzdata
-COPY --from=source /src/docker/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod 0755 /docker-entrypoint.sh \
- && mkdir -p /ezbookkeeping/data /ezbookkeeping/log /ezbookkeeping/storage \
+COPY --chmod=0755 infra/ezbookkeeping/docker-entrypoint.sh /docker-entrypoint.sh
+RUN mkdir -p /ezbookkeeping/data /ezbookkeeping/log /ezbookkeeping/storage \
  && chown -R 1000:1000 /ezbookkeeping
 WORKDIR /ezbookkeeping
 COPY --from=be-builder --chown=1000:1000 /src/ezbookkeeping /ezbookkeeping/ezbookkeeping

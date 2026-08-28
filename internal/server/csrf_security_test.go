@@ -9,7 +9,7 @@ import (
 
 func TestFinanceAPIRejectsNonJSONContentTypeBeforeBackend(t *testing.T) {
 	fake := &fakeFinanceAPI{}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	body := `{"household_id":7,"question":"trigger advisor"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/advisor", strings.NewReader(body))
 	req.Header.Set("Content-Type", "text/plain")
@@ -27,7 +27,7 @@ func TestFinanceAPIRejectsNonJSONContentTypeBeforeBackend(t *testing.T) {
 
 func TestFinanceAPIRejectsCrossOriginUnsafeRequestBeforeBackend(t *testing.T) {
 	fake := &fakeFinanceAPI{}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	body := `{"household_id":7,"question":"trigger advisor"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/advisor", strings.NewReader(body))
 	req.Host = "finance.example.com"
@@ -48,7 +48,7 @@ func TestFinanceAPIRejectsCrossOriginUnsafeRequestBeforeBackend(t *testing.T) {
 
 func TestFinanceAPIRejectsCrossOriginDeleteBeforeBackend(t *testing.T) {
 	fake := &portfolioHTTPFake{}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/portfolio/assets/property:home?household_id=42", nil)
 	req.Host = "finance.example.com"
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -67,7 +67,7 @@ func TestFinanceAPIRejectsCrossOriginDeleteBeforeBackend(t *testing.T) {
 
 func TestFinanceAPIAcceptsSameOriginJSONRequest(t *testing.T) {
 	fake := &fakeFinanceAPI{advisor: AdvisorResponse{Text: "ok"}}
-	handler := NewHandler(WithAPI(fake))
+	handler := newFinanceAPIUnitHandler(fake)
 	body := `{"household_id":7,"question":"normal request"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/advisor", strings.NewReader(body))
 	req.Host = "finance.example.com"

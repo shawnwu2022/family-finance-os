@@ -15,12 +15,15 @@ required=(
   scripts/ci/verify.sh
   scripts/ci/go-stack-verify.sh
   scripts/ci/go-verify.sh
+  scripts/ci/auth-security.sh
+  scripts/acceptance/finance-auth-live-smoke.sh
   scripts/ci/web-verify.sh
   scripts/ci/mcp-security.sh
   scripts/ci/edge-security.sh
   scripts/ci/restore-verify.sh
   scripts/ci/container-verify.sh
   scripts/ci/test-preflight-secret-permissions.sh
+  scripts/ci/test-application-preflight-security.sh
   scripts/ci/test-workflow-action-pins.sh
   scripts/ci/test-workflow-action-pins-regression.sh
   scripts/ci/test-production-supply-chain.sh
@@ -32,13 +35,14 @@ done
 
 while IFS= read -r script; do
   bash -n "$script" || fail "shell syntax error: $script"
-done < <(find scripts/ci -type f -name '*.sh' -print | sort)
+done < <(find scripts/ci scripts/acceptance -type f -name '*.sh' -print | sort)
 
-for target in verify verify-contract verify-go verify-web verify-mcp-security verify-edge-security verify-container; do
+for target in verify verify-contract verify-go verify-auth-security verify-web verify-mcp-security verify-edge-security verify-container; do
   grep -Eq "^${target}:" Makefile || fail "Makefile target is missing: ${target}"
 done
 
 grep -Fq 'bash scripts/ci/go-stack-verify.sh' Makefile || fail "verify-go must delegate to the standalone Go stack verifier"
+grep -Fq 'bash scripts/ci/auth-security.sh' Makefile || fail "verify-auth-security must delegate to the standalone auth security verifier"
 grep -Fq 'bash scripts/ci/container-verify.sh' Makefile || fail "verify-container must include production operations verification"
 
 grep -Fq 'make verify' .github/workflows/ci.yml || fail "CI workflow must delegate to make verify"
@@ -60,16 +64,21 @@ for workflow in "${canonical_workflows[@]}"; do
   grep -Eq '^[[:space:]]*workflow_dispatch:' "$workflow" || fail "$workflow must support manual workflow_dispatch"
 done
 
-for target in verify-go verify-mcp-security verify-web verify-edge-security verify-container; do
+for target in verify-go verify-auth-security verify-mcp-security verify-web verify-edge-security verify-container; do
   grep -Fq "make ${target}" scripts/ci/verify.sh || fail "top-level verifier must delegate to make ${target}"
 done
-if grep -Eq 'bash scripts/ci/(go-stack-verify|mcp-security|web-verify|edge-security|container-verify)\.sh' scripts/ci/verify.sh; then
+if grep -Eq 'bash scripts/ci/(go-stack-verify|auth-security|mcp-security|web-verify|edge-security|container-verify)\.sh' scripts/ci/verify.sh; then
   fail "top-level verifier must not bypass canonical Make targets"
 fi
 
 grep -Fq 'goose -dir /src/db/migrations' scripts/ci/go-stack-verify.sh || fail "Go stack verifier must run migrations before integration tests"
 grep -Fq 'scripts/ci/restore-verify.sh' scripts/ci/go-stack-verify.sh || fail "Go stack verifier must include the backup/restore drill"
 grep -Fq 'scripts/test-production-ops.sh' scripts/ci/container-verify.sh || fail "container verifier must preserve the production operations contract"
+
+grep -Fq 'go test -race ./internal/auth ./internal/server ./cmd/finance-core -count=1' scripts/ci/auth-security.sh \
+  || fail "auth security verifier must run focused race-enabled authentication tests"
+grep -Fq 'scripts/acceptance/finance-auth-live-smoke.sh' scripts/ci/auth-security.sh \
+  || fail "auth security verifier must run the positive Finance authentication smoke"
 
 if grep -Fq 'git diff' scripts/ci/go-verify.sh || grep -Fq 'git ls-files' scripts/ci/go-verify.sh; then
   fail "Go verifier temp workspace must not depend on copied Git metadata"
@@ -85,6 +94,7 @@ fi
 grep -Fq '[[ -f "$SOURCE_ROOT/go.mod" ]]' scripts/ci/mcp-security.sh || fail "MCP security verifier must validate the mounted source tree by go.mod"
 
 bash scripts/ci/test-preflight-secret-permissions.sh
+bash scripts/ci/test-application-preflight-security.sh
 bash scripts/ci/test-workflow-action-pins.sh
 bash scripts/ci/test-workflow-action-pins-regression.sh
 bash scripts/ci/test-production-supply-chain.sh

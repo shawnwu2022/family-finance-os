@@ -29,6 +29,9 @@ finance_block="$({
 
 [[ -n "$finance_block" ]] || fail "FINANCE_DOMAIN site block is missing"
 grep -Eq '^[[:space:]]*X-Frame-Options[[:space:]]+"?DENY"?[[:space:]]*$' <<<"$finance_block" || fail "Finance edge must deny framing with X-Frame-Options"
-grep -Fq "Content-Security-Policy \"frame-ancestors 'none'\"" <<<"$finance_block" || fail "Finance edge must set CSP frame-ancestors 'none'"
+grep -Fq "+Content-Security-Policy \"frame-ancestors 'none'\"" <<<"$finance_block" || fail "Finance edge must append CSP frame-ancestors without replacing Finance Core CSP"
+if grep -Eq '^[[:space:]]*Content-Security-Policy[[:space:]]+' <<<"$finance_block"; then
+  fail "Finance edge must not overwrite the application Content-Security-Policy"
+fi
 
 echo "Finance frame-protection contract OK"

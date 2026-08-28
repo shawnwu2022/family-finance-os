@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/shawnwu2022/family-finance-os/internal/bootstrap"
@@ -118,20 +120,31 @@ func TestCheckHealthRejectsUnhealthyStatus(t *testing.T) {
 func TestRunDatabaseCommandsUseRuntimeConfigAndBootstrapArguments(t *testing.T) {
 	t.Parallel()
 
+	dir := t.TempDir()
+	passwordFile := filepath.Join(dir, "finance-admin-password")
+	if err := os.WriteFile(passwordFile, []byte("correct horse battery staple\n"), 0o600); err != nil {
+		t.Fatalf("write admin password: %v", err)
+	}
+
 	var migrated config.DatabaseConfig
 	var bootstrapped bootstrap.Input
+	var bootstrappedAdmin bootstrap.AdminInput
 	handlers := databaseCommandHandlers{
 		migrate: func(_ context.Context, cfg config.DatabaseConfig) error {
 			migrated = cfg
 			return nil
 		},
-		bootstrap: func(_ context.Context, _ config.DatabaseConfig, input bootstrap.Input) (bootstrap.Result, error) {
+		bootstrap: func(_ context.Context, _ config.DatabaseConfig, input bootstrap.Input, admin bootstrap.AdminInput) (bootstrap.Result, error) {
 			bootstrapped = input
-			return bootstrap.Result{HouseholdID: 7, BudgetPlanID: 9}, nil
+			bootstrappedAdmin = bootstrap.AdminInput{Username: admin.Username, Password: append([]byte(nil), admin.Password...)}
+			return bootstrap.Result{HouseholdID: 7, BudgetPlanID: 9, AdminUserID: 11}, nil
 		},
 	}
 
-	if err := runWithCommands([]string{"migrate"}, validRuntimeGetenv(nil), nil, nil, nil, io.Discard, handlers); err != nil {
+	getenv := validRuntimeGetenv(map[string]string{
+		"FINANCE_ADMIN_PASSWORD_FILE": passwordFile,
+	})
+	if err := runWithCommands([]string{"migrate"}, getenv, nil, nil, nil, io.Discard, handlers); err != nil {
 		t.Fatalf("run migrate: %v", err)
 	}
 	if migrated.Name != "finance" || migrated.User != "finance_app" {
@@ -146,11 +159,14 @@ func TestRunDatabaseCommandsUseRuntimeConfigAndBootstrapArguments(t *testing.T) 
 		"--period", "2026-08",
 		"--liquidity-floor-minor", "500000",
 	}
-	if err := runWithCommands(args, validRuntimeGetenv(nil), nil, nil, nil, io.Discard, handlers); err != nil {
+	if err := runWithCommands(args, getenv, nil, nil, nil, io.Discard, handlers); err != nil {
 		t.Fatalf("run bootstrap: %v", err)
 	}
 	if bootstrapped.Name != "家庭" || bootstrapped.Currency != "CNY" || bootstrapped.Timezone != "Asia/Shanghai" ||
 		bootstrapped.Period != "2026-08" || bootstrapped.LiquidityFloorMinor != 500000 {
 		t.Fatalf("bootstrap input = %#v", bootstrapped)
+	}
+	if bootstrappedAdmin.Username != "finance" || string(bootstrappedAdmin.Password) != "correct horse battery staple" {
+		t.Fatalf("bootstrap admin = username=%q password=%q", bootstrappedAdmin.Username, bootstrappedAdmin.Password)
 	}
 }

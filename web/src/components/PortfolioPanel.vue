@@ -12,7 +12,6 @@ import { formatMoney } from '../money'
 import type { PortfolioAssetClass, PortfolioAssetResponse, PortfolioSnapshotSourceKind } from '../types'
 
 const props = defineProps<{
-  householdId: number
   defaultCurrency: string
 }>()
 
@@ -49,16 +48,10 @@ const requiresFX = computed(() => {
 })
 
 async function reload() {
-  if (!Number.isSafeInteger(props.householdId) || props.householdId <= 0) {
-    items.value = []
-    errorCode.value = 'invalid_request'
-    return
-  }
-
   loading.value = true
   errorCode.value = ''
   try {
-    const response = await listPortfolioAssets(props.householdId)
+    const response = await listPortfolioAssets()
     items.value = response.items
   } catch (error) {
     errorCode.value = error instanceof Error ? error.message : 'request_failed'
@@ -94,15 +87,11 @@ async function submit() {
     formError.value = formErrorMessage(result.error)
     return
   }
-  if (!Number.isSafeInteger(props.householdId) || props.householdId <= 0) {
-    formError.value = '家庭 ID 无效。'
-    return
-  }
 
   saving.value = true
   formError.value = ''
   try {
-    await upsertPortfolioAsset(props.householdId, result.assetRef, result.request)
+    await upsertPortfolioAsset(result.assetRef, result.request)
     formOpen.value = false
     editingRef.value = ''
     await reload()
@@ -119,7 +108,7 @@ async function remove(asset: PortfolioAssetResponse) {
   deletingRef.value = asset.asset_ref
   errorCode.value = ''
   try {
-    await deletePortfolioAsset(props.householdId, asset.asset_ref)
+    await deletePortfolioAsset(asset.asset_ref)
     if (editingRef.value === asset.asset_ref) closeForm()
     await reload()
   } catch (error) {
@@ -170,19 +159,10 @@ function formErrorMessage(error: PortfolioFormError): string {
     invalid_valuation_as_of: '估值时间无效。',
     fx_as_of_required: '来源币种与报告币种不同时必须填写 FX 时间。',
     invalid_fx_as_of: 'FX 时间无效。',
-    invalid_source_kind: '来源类型无效。',
+    invalid_source_kind: '请选择有效的来源类型。',
   }
   return messages[error]
 }
-
-watch(
-  () => props.householdId,
-  () => {
-    formOpen.value = false
-    editingRef.value = ''
-    void reload()
-  },
-)
 
 watch(
   () => props.defaultCurrency,
@@ -310,20 +290,24 @@ onMounted(() => {
   margin-top: 0.9rem;
 }
 
-.portfolio-heading {
+.portfolio-heading,
+.portfolio-form__heading,
+.portfolio-form__actions,
+.portfolio-row__title,
+.portfolio-actions {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
 }
 
-.portfolio-copy {
-  max-width: 680px;
-  margin: 0.4rem 0 0;
+.portfolio-copy,
+.portfolio-hint,
+.portfolio-meta,
+.portfolio-empty {
   color: var(--muted);
   font-size: 0.8rem;
   line-height: 1.55;
-}
-
-.portfolio-add {
-  flex: 0 0 auto;
 }
 
 .portfolio-error,
@@ -332,7 +316,7 @@ onMounted(() => {
   border-radius: 10px;
   padding: 0.7rem 0.8rem;
   color: var(--danger);
-  background: #fff6f4;
+  background: var(--surface-muted);
   font-size: 0.82rem;
 }
 
@@ -352,60 +336,18 @@ onMounted(() => {
   padding: 0.9rem;
 }
 
-.portfolio-form__heading,
-.portfolio-form__actions,
-.portfolio-row__title,
-.portfolio-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.portfolio-form__heading {
-  justify-content: space-between;
-  margin-bottom: 0.8rem;
-}
-
 .portfolio-form__grid {
   display: grid;
-  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.8rem;
 }
 
-.portfolio-form label {
+.portfolio-form__grid label {
   display: grid;
-  gap: 0.32rem;
+  gap: 0.35rem;
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.portfolio-form input,
-.portfolio-form select {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  padding: 0.68rem 0.75rem;
-  font: inherit;
-  outline: none;
-}
-
-.portfolio-form input:focus,
-.portfolio-form select:focus {
-  outline: 3px solid rgb(37 99 235 / 20%);
-  outline-offset: 2px;
-}
-
-.portfolio-hint {
-  margin: 0.75rem 0 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.55;
-}
-
-.portfolio-form__error {
-  margin-top: 0.75rem;
 }
 
 .portfolio-form__actions {
@@ -415,100 +357,54 @@ onMounted(() => {
 
 .portfolio-list {
   display: grid;
+  gap: 0.65rem;
 }
 
 .portfolio-row {
-  display: grid;
-  gap: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   border-top: 1px solid var(--border);
-  padding: 0.9rem 0;
-}
-
-.portfolio-row:first-child {
-  border-top: 0;
-  padding-top: 0.1rem;
+  padding: 0.85rem 0;
 }
 
 .portfolio-row__identity,
 .portfolio-row__side {
   display: grid;
-  gap: 0.3rem;
-  min-width: 0;
+  gap: 0.35rem;
 }
 
-.portfolio-row__title {
-  flex-wrap: wrap;
+.portfolio-row__side {
+  justify-items: end;
+  text-align: right;
 }
 
 .portfolio-chip {
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: #eff6ff;
-  color: var(--accent-strong);
-  padding: 0.18rem 0.5rem;
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.portfolio-meta,
-.portfolio-empty {
+  padding: 0.15rem 0.45rem;
   color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.portfolio-empty {
-  margin: 0;
-  padding: 0.85rem 0;
+  font-size: 0.7rem;
 }
 
 .portfolio-value {
-  font-size: 1.05rem;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
-.portfolio-actions {
-  flex-wrap: wrap;
-}
-
-.button-secondary,
-.button-danger {
-  padding: 0.5rem 0.72rem;
-  font-size: 0.76rem;
-}
-
-.button-secondary {
-  border-color: var(--border);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.button-secondary:hover:not(:disabled) {
-  background: #eef2f7;
-}
-
-.button-danger {
-  border-color: #fecaca;
-  background: #fff7f7;
-  color: var(--danger);
-}
-
-.button-danger:hover:not(:disabled) {
-  background: #fee2e2;
-}
-
-@media (min-width: 720px) {
+@media (max-width: 680px) {
   .portfolio-form__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .portfolio-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .portfolio-row__side {
-    justify-items: end;
+    justify-items: start;
+    text-align: left;
   }
 }
 </style>

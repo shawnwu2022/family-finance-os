@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/shawnwu2022/family-finance-os/internal/auth"
 	"github.com/shawnwu2022/family-finance-os/internal/config"
 	"github.com/shawnwu2022/family-finance-os/internal/store"
 )
@@ -29,12 +30,36 @@ type Input struct {
 	LiquidityFloorMinor int64
 }
 
+type AdminInput struct {
+	Username string
+	Password []byte
+}
+
 type Result struct {
 	HouseholdID  int64
 	BudgetPlanID int64
+	AdminUserID  int64
+}
+
+type preparedAdmin struct {
+	username           string
+	normalizedUsername string
+	passwordHash       string
 }
 
 func Run(ctx context.Context, cfg config.DatabaseConfig, input Input) (Result, error) {
+	return run(ctx, cfg, input, nil)
+}
+
+func RunWithAdmin(ctx context.Context, cfg config.DatabaseConfig, input Input, admin AdminInput) (Result, error) {
+	prepared, err := prepareAdmin(admin)
+	if err != nil {
+		return Result{}, err
+	}
+	return run(ctx, cfg, input, &prepared)
+}
+
+func run(ctx context.Context, cfg config.DatabaseConfig, input Input, admin *preparedAdmin) (Result, error) {
 	input, err := Validate(input)
 	if err != nil {
 		return Result{}, err
@@ -49,7 +74,7 @@ func Run(ctx context.Context, cfg config.DatabaseConfig, input Input) (Result, e
 	if err != nil {
 		return Result{}, fmt.Errorf("begin bootstrap transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, advisoryLockID); err != nil {
 		return Result{}, fmt.Errorf("lock bootstrap transaction: %w", err)
 	}
@@ -90,10 +115,19 @@ func Run(ctx context.Context, cfg config.DatabaseConfig, input Input) (Result, e
 	if budgetCurrency != input.Currency {
 		return Result{}, fmt.Errorf("existing budget plan currency %s differs from bootstrap currency %s", budgetCurrency, input.Currency)
 	}
+
+	var adminUserID int64
+	if admin != nil {
+		adminUserID, err = ensureAdmin(ctx, tx, householdID, *admin)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return Result{}, fmt.Errorf("commit bootstrap transaction: %w", err)
 	}
-	return Result{HouseholdID: householdID, BudgetPlanID: budgetPlanID}, nil
+	return Result{HouseholdID: householdID, BudgetPlanID: budgetPlanID, AdminUserID: adminUserID}, nil
 }
 
 func Validate(input Input) (Input, error) {
@@ -118,6 +152,54 @@ func Validate(input Input) (Input, error) {
 		return Input{}, fmt.Errorf("%w: liquidity floor cannot be negative", ErrInvalidInput)
 	}
 	return input, nil
+}
+
+func prepareAdmin(input AdminInput) (preparedAdmin, error) {
+	username := strings.TrimSpace(input.Username)
+	normalized := strings.ToLower(username)
+	if normalized == "" || len([]byte(normalized)) > 128 {
+		return preparedAdmin{}, fmt.Errorf("%w: administrator username must be 1-128 bytes", ErrInvalidInput)
+	}
+	password := append([]byte(nil), input.Password...)
+	defer clear(password)
+	passwordHash, err := auth.HashPassword(string(password))
+	if err != nil {
+		return preparedAdmin{}, fmt.Errorf("%w: invalid administrator password: %v", ErrInvalidInput, err)
+	}
+	return preparedAdmin{username: username, normalizedUsername: normalized, passwordHash: passwordHash}, nil
+}
+
+func ensureAdmin(ctx context.Context, tx pgx.Tx, householdID int64, admin preparedAdmin) (int64, error) {
+	var userID int64
+	err := tx.QueryRow(ctx, `
+		INSERT INTO auth_users (username, normalized_username, password_hash, household_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (normalized_username) DO NOTHING
+		RETURNING id
+	`, admin.username, admin.normalizedUsername, admin.passwordHash, householdID).Scan(&userID)
+	if err == nil {
+		return userID, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("create finance administrator: %w", err)
+	}
+
+	var existingHouseholdID int64
+	var disabled bool
+	if err := tx.QueryRow(ctx, `
+		SELECT id, household_id, disabled_at IS NOT NULL
+		FROM auth_users
+		WHERE normalized_username = $1
+	`, admin.normalizedUsername).Scan(&userID, &existingHouseholdID, &disabled); err != nil {
+		return 0, fmt.Errorf("read existing finance administrator: %w", err)
+	}
+	if existingHouseholdID != householdID {
+		return 0, fmt.Errorf("existing finance administrator belongs to household %d, not bootstrap household %d", existingHouseholdID, householdID)
+	}
+	if disabled {
+		return 0, errors.New("existing finance administrator is disabled")
+	}
+	return userID, nil
 }
 
 func ensureHousehold(ctx context.Context, tx pgx.Tx, input Input) (int64, error) {
