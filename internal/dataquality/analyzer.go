@@ -19,13 +19,13 @@ const (
 type IssueKind string
 
 const (
-	IssueMissingSourceAccount      IssueKind = "missing_source_account"
-	IssueMissingDestinationAccount IssueKind = "missing_destination_account"
-	IssueMissingCategory           IssueKind = "missing_category"
-	IssueCategoryTypeMismatch      IssueKind = "category_type_mismatch"
+	IssueMissingSourceAccount       IssueKind = "missing_source_account"
+	IssueMissingDestinationAccount  IssueKind = "missing_destination_account"
+	IssueMissingCategory            IssueKind = "missing_category"
+	IssueCategoryTypeMismatch       IssueKind = "category_type_mismatch"
 	IssueTransferMissingDestination IssueKind = "transfer_missing_destination"
-	IssueHiddenAmount              IssueKind = "hidden_amount"
-	IssueMissingCurrency           IssueKind = "missing_currency"
+	IssueHiddenAmount               IssueKind = "hidden_amount"
+	IssueMissingCurrency            IssueKind = "missing_currency"
 )
 
 type Issue struct {
@@ -35,9 +35,9 @@ type Issue struct {
 }
 
 type DuplicateGroup struct {
-	TransactionIDs []string
-	Type           ledger.TransactionType
-	Amount         money.Money
+	TransactionIDs  []string
+	Type            ledger.TransactionType
+	Amount          money.Money
 	FirstOccurredAt time.Time
 	LastOccurredAt  time.Time
 }
@@ -139,16 +139,16 @@ func categoryMatchesTransaction(categoryType ledger.CategoryType, transactionTyp
 }
 
 type duplicateSignature struct {
-	typeID        ledger.TransactionType
-	categoryID    string
-	sourceID      string
-	destinationID string
-	sourceMinor   int64
-	sourceCurrency string
-	destinationMinor int64
-	destinationCurrency string
+	typeID               ledger.TransactionType
+	categoryID           string
+	sourceID             string
+	destinationID        string
+	sourceMinor          int64
+	sourceCurrency       string
+	destinationMinor     int64
+	destinationCurrency  string
 	hasDestinationAmount bool
-	comment       string
+	comment              string
 }
 
 func duplicateGroups(transactions []ledger.Transaction, window time.Duration) []DuplicateGroup {
@@ -185,11 +185,11 @@ func duplicateGroups(transactions []ledger.Transaction, window time.Duration) []
 				}
 				sort.Strings(ids)
 				groups = append(groups, DuplicateGroup{
-					TransactionIDs: ids,
-					Type: txs[start].Type,
-					Amount: txs[start].SourceAmount,
+					TransactionIDs:  ids,
+					Type:            txs[start].Type,
+					Amount:          txs[start].SourceAmount,
 					FirstOccurredAt: txs[start].OccurredAt,
-					LastOccurredAt: txs[end-1].OccurredAt,
+					LastOccurredAt:  txs[end-1].OccurredAt,
 				})
 			}
 			start = end
@@ -214,13 +214,13 @@ func duplicateGroups(transactions []ledger.Transaction, window time.Duration) []
 
 func signature(tx ledger.Transaction) duplicateSignature {
 	sig := duplicateSignature{
-		typeID: tx.Type,
-		categoryID: tx.CategoryID,
-		sourceID: tx.SourceAccountID,
-		destinationID: tx.DestinationAccountID,
-		sourceMinor: tx.SourceAmount.Minor,
+		typeID:         tx.Type,
+		categoryID:     tx.CategoryID,
+		sourceID:       tx.SourceAccountID,
+		destinationID:  tx.DestinationAccountID,
+		sourceMinor:    tx.SourceAmount.Minor,
 		sourceCurrency: tx.SourceAmount.Currency,
-		comment: strings.ToLower(strings.TrimSpace(tx.Comment)),
+		comment:        strings.ToLower(strings.TrimSpace(tx.Comment)),
 	}
 	if tx.DestinationAmount != nil {
 		sig.hasDestinationAmount = true
