@@ -36,7 +36,16 @@ type LedgerConfig struct {
 	APITokenFile string
 }
 
+type LLMMode string
+
+const (
+	LLMModeDisabled LLMMode = "disabled"
+	LLMModeLocal    LLMMode = "local"
+	LLMModeExternal LLMMode = "external"
+)
+
 type LLMConfig struct {
+	Mode          LLMMode
 	BaseURL       string
 	APIKey        string
 	FastModel     string
@@ -92,6 +101,10 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	llmMode, err := parseLLMMode(getenv("LLM_MODE"))
+	if err != nil {
+		return Config{}, err
+	}
 	mcp, err := parseMCPConfig(getenv)
 	if err != nil {
 		return Config{}, err
@@ -114,11 +127,12 @@ func Load(getenv func(string) string) (Config, error) {
 			APITokenFile: valueOrDefault(getenv("EBK_API_TOKEN_FILE"), "/run/secrets/ezbookkeeping-api-token"),
 		},
 		LLM: LLMConfig{
-			BaseURL:       getenv("LLM_BASE_URL"),
+			Mode:          llmMode,
+			BaseURL:       strings.TrimSpace(getenv("LLM_BASE_URL")),
 			APIKey:        getenv("LLM_API_KEY"),
-			FastModel:     getenv("LLM_FAST_MODEL"),
-			PlannerModel:  getenv("LLM_PLANNER_MODEL"),
-			ReviewerModel: getenv("LLM_REVIEWER_MODEL"),
+			FastModel:     strings.TrimSpace(getenv("LLM_FAST_MODEL")),
+			PlannerModel:  strings.TrimSpace(getenv("LLM_PLANNER_MODEL")),
+			ReviewerModel: strings.TrimSpace(getenv("LLM_REVIEWER_MODEL")),
 		},
 		MCP:       mcp,
 		Portfolio: portfolioConfig,
@@ -129,6 +143,21 @@ func Load(getenv func(string) string) (Config, error) {
 			TrustedProxyCIDR:  trustedProxyCIDR,
 		},
 	}, nil
+}
+
+func parseLLMMode(raw string) (LLMMode, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return "", nil
+	case string(LLMModeDisabled):
+		return LLMModeDisabled, nil
+	case string(LLMModeLocal):
+		return LLMModeLocal, nil
+	case string(LLMModeExternal):
+		return LLMModeExternal, nil
+	default:
+		return "", errors.New("LLM_MODE must be disabled, local, or external")
+	}
 }
 
 func parsePortfolioConfig(getenv func(string) string) (PortfolioConfig, error) {
