@@ -19,9 +19,14 @@ type AuthListener = (state: AuthState) => void
 
 const listeners = new Set<AuthListener>()
 let state: AuthState = emptyState('checking')
+let epoch = 0
 
 export function currentAuthState(): AuthState {
   return snapshot(state)
+}
+
+export function currentAuthEpoch(): number {
+  return epoch
 }
 
 export function subscribeAuthState(listener: AuthListener): () => void {
@@ -36,6 +41,10 @@ export function getCSRFToken(): string {
 
 export function clearAuthState(): void {
   replaceState(emptyState('login'))
+}
+
+export function clearAuthStateIfCurrent(expectedEpoch: number): void {
+  if (epoch === expectedEpoch) clearAuthState()
 }
 
 export function clearRecoveryCodes(): void {
@@ -168,6 +177,7 @@ async function stableErrorCode(response: Response): Promise<string> {
 }
 
 function replaceState(next: AuthState): void {
+  epoch += 1
   state = next
   for (const listener of listeners) listener(currentAuthState())
 }

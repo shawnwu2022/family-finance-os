@@ -3,9 +3,13 @@ import { onMounted, reactive, ref } from 'vue'
 import {
   createHouseholdMember,
   disableHouseholdMember,
+  enableHouseholdMember,
   listHouseholdMembers,
   updateHouseholdMemberRole,
 } from '../api'
+import { bootstrapSession } from '../auth'
+import { confirmAction } from '../confirm'
+import { errorText } from '../errors'
 import type { HouseholdMemberResponse, HouseholdRole } from '../types'
 
 const items = ref<HouseholdMemberResponse[]>([])
@@ -25,14 +29,16 @@ const roles: Array<{ value: HouseholdRole; label: string }> = [
   { value: 'viewer', label: 'Viewer · 只读' },
 ]
 
-async function reload() {
+async function reload(preserveError = false) {
   loading.value = true
-  errorCode.value = ''
+  if (!preserveError) errorCode.value = ''
   try {
     const response = await listHouseholdMembers()
     items.value = response.items
   } catch (error) {
-    errorCode.value = error instanceof Error ? error.message : 'request_failed'
+    const failure = error instanceof Error ? error.message : 'request_failed'
+    errorCode.value = failure
+    if (failure === 'insufficient_role') await bootstrapSession().catch(() => undefined)
   } finally {
     loading.value = false
   }
@@ -57,29 +63,70 @@ async function createMember() {
   }
 }
 
-async function changeRole(member: HouseholdMemberResponse) {
-  if (member.disabled) return
+// select 用 :value 而非 v-model:确认前不落地本地角色,取消时只需拨回 select
+async function onRoleChange(member: HouseholdMemberResponse, event: Event) {
+  const select = event.target as HTMLSelectElement
+  const nextRole = select.value as HouseholdRole
+  if (nextRole === member.role) return
+
+  const confirmed = await confirmAction({
+    title: '变更成员角色',
+    body: `确认将「${member.username}」的角色改为 ${roleLabel(nextRole)}？`,
+    confirmLabel: '确认变更',
+  })
+  if (!confirmed) {
+    select.value = member.role
+    return
+  }
+
   busyUserId.value = member.user_id
   errorCode.value = ''
   try {
-    await updateHouseholdMemberRole(member.user_id, member.role)
-    await reload()
+    await updateHouseholdMemberRole(member.user_id, nextRole)
+    const session = await bootstrapSession()
+    if (session.role === 'owner') await reload()
   } catch (error) {
-    errorCode.value = error instanceof Error ? error.message : 'request_failed'
-    await reload()
+    const failure = error instanceof Error ? error.message : 'request_failed'
+    await reload(true)
+    errorCode.value = failure
   } finally {
     busyUserId.value = null
   }
 }
 
 async function disableMember(member: HouseholdMemberResponse) {
-  if (member.disabled) return
-  if (!window.confirm(`确认停用家庭成员「${member.username}」？其现有 Finance 会话将立即失效。`)) return
+  if (member.disabled || busyUserId.value !== null) return
+  if (!(await confirmAction({
+    title: '停用成员',
+    body: `确认停用家庭成员「${member.username}」？其现有 Finance 会话将立即失效。`,
+    confirmLabel: '停用',
+    danger: true,
+  }))) return
 
   busyUserId.value = member.user_id
   errorCode.value = ''
   try {
     await disableHouseholdMember(member.user_id)
+    await reload()
+  } catch (error) {
+    errorCode.value = error instanceof Error ? error.message : 'request_failed'
+  } finally {
+    busyUserId.value = null
+  }
+}
+
+async function enableMember(member: HouseholdMemberResponse) {
+  if (!member.disabled || busyUserId.value !== null) return
+  if (!(await confirmAction({
+    title: '恢复成员',
+    body: `确认恢复成员「${member.username}」的访问？其需要重新登录。`,
+    confirmLabel: '恢复',
+  }))) return
+
+  busyUserId.value = member.user_id
+  errorCode.value = ''
+  try {
+    await enableHouseholdMember(member.user_id)
     await reload()
   } catch (error) {
     errorCode.value = error instanceof Error ? error.message : 'request_failed'
@@ -108,8 +155,8 @@ onMounted(() => {
     </div>
 
     <div v-if="errorCode" class="members-error" role="alert">
-      操作失败：{{ errorCode }}
-      <button type="button" class="button-link" @click="reload">重试</button>
+      操作失败：{{ errorText(errorCode) }}
+      <button type="button" class="button-link" @click="reload()">重试</button>
     </div>
 
     <form class="member-create" @submit.prevent="createMember">
@@ -131,7 +178,7 @@ onMounted(() => {
       </div>
       <div class="member-create__actions">
         <span class="members-copy">新成员首次登录必须完成 TOTP 绑定。</span>
-        <button type="submit" :disabled="saving || !form.username.trim() || !form.password">
+        <button type="submit" :disabled="saving || busyUserId !== null || !form.username.trim() || !form.password">
           {{ saving ? '创建中…' : '新增成员' }}
         </button>
       </div>
@@ -147,20 +194,30 @@ onMounted(() => {
         </div>
         <div class="member-actions">
           <select
-            v-model="member.role"
+            :value="member.role"
             aria-label="成员角色"
-            :disabled="member.disabled || busyUserId === member.user_id"
-            @change="changeRole(member)"
+            :disabled="busyUserId !== null"
+            @change="onRoleChange(member, $event)"
           >
             <option v-for="role in roles" :key="role.value" :value="role.value">{{ role.label }}</option>
           </select>
           <button
+            v-if="member.disabled"
+            type="button"
+            class="button-secondary"
+            :disabled="busyUserId !== null"
+            @click="enableMember(member)"
+          >
+            {{ busyUserId === member.user_id ? '处理中…' : '恢复' }}
+          </button>
+          <button
+            v-else
             type="button"
             class="button-danger"
-            :disabled="member.disabled || busyUserId === member.user_id"
+            :disabled="busyUserId !== null"
             @click="disableMember(member)"
           >
-            {{ busyUserId === member.user_id ? '处理中…' : member.disabled ? '已停用' : '停用' }}
+            {{ busyUserId === member.user_id ? '处理中…' : '停用' }}
           </button>
         </div>
       </article>
@@ -189,14 +246,6 @@ onMounted(() => {
   color: var(--danger);
   background: var(--surface-muted);
   font-size: 0.82rem;
-}
-
-.button-link {
-  margin-left: 0.35rem;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  padding: 0;
 }
 
 .member-create {
@@ -255,7 +304,7 @@ onMounted(() => {
   min-width: 10rem;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 719.98px) {
   .member-create__grid {
     grid-template-columns: 1fr;
   }

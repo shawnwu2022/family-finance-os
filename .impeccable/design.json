@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-28T23:59:00+08:00",
+  "title": "Design System: Family Finance OS",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "信号蓝",
+        "canonical": "#2563eb",
+        "tonalRamp": [
+          "#1a1860",
+          "#2438a0",
+          "#2847c7",
+          "#2b56e0",
+          "#2563eb",
+          "#5c8bf2",
+          "#93b4f7",
+          "#cfe0fc"
+        ]
+      },
+      "signal-blue-deep": {
+        "role": "primary",
+        "displayName": "信号蓝·深",
+        "canonical": "#1d4ed8",
+        "tonalRamp": [
+          "#131450",
+          "#1a2a8f",
+          "#1d3db4",
+          "#1d4ed8",
+          "#3b62e3",
+          "#6d8aec",
+          "#9fb3f4",
+          "#d0dcfc"
+        ]
+      },
+      "paper-mist": {
+        "role": "neutral",
+        "displayName": "纸雾",
+        "canonical": "#f5f7fb",
+        "tonalRamp": [
+          "#12151f",
+          "#2a3040",
+          "#414959",
+          "#5a6373",
+          "#7a8291",
+          "#a9afba",
+          "#d3d7de",
+          "#f5f7fb"
+        ]
+      },
+      "ledger-ink": {
+        "role": "neutral",
+        "displayName": "账本墨",
+        "canonical": "#172033",
+        "tonalRamp": [
+          "#0d1220",
+          "#172033",
+          "#2c3850",
+          "#43506b",
+          "#5e6a85",
+          "#8791a5",
+          "#b4bcc9",
+          "#e2e5eb"
+        ]
+      },
+      "ledger-ink-muted": {
+        "role": "neutral",
+        "displayName": "墨灰",
+        "canonical": "#616e85",
+        "tonalRamp": [
+          "#22293a",
+          "#333c50",
+          "#455066",
+          "#57637b",
+          "#616e85",
+          "#8a93a6",
+          "#b1b8c5",
+          "#dbdee5"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "瓷白",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#e2e5ea",
+          "#e9ebef",
+          "#eff1f4",
+          "#f4f5f8",
+          "#f8f9fb",
+          "#fbfcfd",
+          "#fdfeff",
+          "#ffffff"
+        ]
+      },
+      "surface-muted": {
+        "role": "neutral",
+        "displayName": "雾白",
+        "canonical": "#f8fafc",
+        "tonalRamp": [
+          "#d9dce2",
+          "#e0e3e8",
+          "#e8eaee",
+          "#eef0f3",
+          "#f3f5f8",
+          "#f7f9fb",
+          "#fafcfd",
+          "#f8fafc"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "发丝",
+        "canonical": "#e5eaf2",
+        "tonalRamp": [
+          "#aeb6c4",
+          "#bcc3cf",
+          "#cad0da",
+          "#d8dde5",
+          "#e5eaf2",
+          "#ebf0f5",
+          "#f1f5f9",
+          "#f7fafe"
+        ]
+      },
+      "audit-green": {
+        "role": "secondary",
+        "displayName": "审计绿",
+        "canonical": "#047857",
+        "tonalRamp": [
+          "#022c22",
+          "#064e3b",
+          "#047857",
+          "#059669",
+          "#10b981",
+          "#4ade80",
+          "#86efac",
+          "#d1fae5"
+        ]
+      },
+      "caution-amber": {
+        "role": "secondary",
+        "displayName": "谨慎琥珀",
+        "canonical": "#a16207",
+        "tonalRamp": [
+          "#422006",
+          "#713f12",
+          "#a16207",
+          "#ca8a04",
+          "#eab308",
+          "#facc15",
+          "#fde047",
+          "#fef9c3"
+        ]
+      },
+      "notice-amber-ink": {
+        "role": "secondary",
+        "displayName": "琥珀墨",
+        "canonical": "#6b5411",
+        "tonalRamp": [
+          "#2d2405",
+          "#453507",
+          "#5d460c",
+          "#6b5411",
+          "#8a6d1a",
+          "#a98f45",
+          "#c8b37a",
+          "#e7d9b8"
+        ]
+      },
+      "risk-red": {
+        "role": "secondary",
+        "displayName": "风险红",
+        "canonical": "#b42318",
+        "tonalRamp": [
+          "#45120c",
+          "#7a271a",
+          "#b42318",
+          "#d92d20",
+          "#f04438",
+          "#f97066",
+          "#fda29b",
+          "#fee4e2"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "页面标题，每屏最多一个。"
+      },
+      "metric": {
+        "displayName": "Metric",
+        "purpose": "指标卡金额数字——系统的视觉主角，任何界面优先保证其可读性。"
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "面板标题（现金流、预算、债务、目标）。"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "正文、AI 回答、提示；行高 1.55 保证中文长段可读。"
+      },
+      "label": {
+        "displayName": "Eyebrow",
+        "purpose": "大写档案标签——FAMILY FINANCE OS、CASHFLOW 等面板眉标。"
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "辅助说明与状态药丸文字。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "ambient",
+        "value": "0 12px 32px rgb(15 23 42 / 7%)",
+        "purpose": "全系统唯一阴影：环境柔光，让卡片从纸雾背景轻轻浮起恒定高度。hover 不加深、弹窗不更重。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-transition",
+        "value": "120ms ease",
+        "purpose": "按钮/控件的 background 与 transform 过渡；prefers-reduced-motion 下全局禁用。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "desktop",
+        "value": "720px"
+      },
+      {
+        "name": "desktop-mobile-pair",
+        "value": "max-width: 719.98px（移动侧配对值，720px 是唯一断点来源，见 DESIGN.md Layout）"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "实心信号蓝主按钮，700 字重白字，按下有 1px 下沉物理反馈。",
+      "html": "<button class=\"ds-btn-primary\">保存</button>",
+      "css": ".ds-btn-primary { background: var(--accent, #2563eb); color: #fff; font-weight: 700; padding: 0.68rem 1rem; border: 1px solid var(--accent, #2563eb); border-radius: 10px; cursor: pointer; transition: background 120ms ease, transform 120ms ease; } .ds-btn-primary:hover:not(:disabled) { background: #1d4ed8; } .ds-btn-primary:active:not(:disabled) { transform: translateY(1px); } .ds-btn-primary:disabled { cursor: not-allowed; opacity: 0.58; } .ds-btn-primary:focus-visible { outline: 3px solid rgb(37 99 235 / 20%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "白底墨字次级按钮，用于退出登录、取消等非主路径操作；hover 换雾白底、边框加深。",
+      "html": "<button class=\"ds-btn-secondary\">取消</button>",
+      "css": ".ds-btn-secondary { background: var(--surface, #fff); color: var(--text, #172033); font-weight: 600; padding: 0.68rem 1rem; border: 1px solid var(--border, #e5eaf2); border-radius: 10px; cursor: pointer; transition: background 120ms ease, border-color 120ms ease, transform 120ms ease; } .ds-btn-secondary:hover:not(:disabled) { border-color: var(--muted, #616e85); background: var(--surface-muted, #f8fafc); } .ds-btn-secondary:active:not(:disabled) { transform: translateY(1px); } .ds-btn-secondary:disabled { cursor: not-allowed; opacity: 0.58; } .ds-btn-secondary:focus-visible { outline: 3px solid rgb(37 99 235 / 20%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "破坏性操作按钮：默认白底红字红描边，hover 才填充实心风险红——危险必须比主要操作多一道视觉门槛（两步确认）。",
+      "html": "<button class=\"ds-btn-danger\">停用</button>",
+      "css": ".ds-btn-danger { background: var(--surface, #fff); color: var(--danger, #b42318); font-weight: 600; padding: 0.68rem 1rem; border: 1px solid rgb(180 35 24 / 45%); border-radius: 10px; cursor: pointer; transition: background 120ms ease, color 120ms ease, transform 120ms ease; } .ds-btn-danger:hover:not(:disabled) { background: var(--danger, #b42318); border-color: var(--danger, #b42318); color: #fff; } .ds-btn-danger:active:not(:disabled) { transform: translateY(1px); } .ds-btn-danger:disabled { cursor: not-allowed; opacity: 0.58; } .ds-btn-danger:focus-visible { outline: 3px solid rgb(37 99 235 / 20%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost / Link Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "行内文字按钮——透明底、信号蓝文字，用于面板内的管理入口等轻量操作。",
+      "html": "<button class=\"ds-btn-link\">管理</button>",
+      "css": ".ds-btn-link { margin: -0.6rem -0.35rem -0.6rem 0.35rem; min-height: 44px; border: 0; background: transparent; color: var(--accent, #2563eb); padding: 0.6rem 0.85rem; font: inherit; font-weight: 700; cursor: pointer; } .ds-btn-link:focus-visible { border-radius: 10px; outline: 3px solid rgb(37 99 235 / 20%); outline-offset: 0; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "白底发丝边框输入框，focus 时显示 3px 信号蓝环。",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"例如：本月餐饮预算\" />",
+      "css": ".ds-input { background: var(--surface, #fff); color: var(--text, #172033); padding: 0.68rem 0.75rem; border: 1px solid var(--border, #e5eaf2); border-radius: 10px; font: inherit; outline: none; } .ds-input:focus { outline: 3px solid rgb(37 99 235 / 20%); outline-offset: 2px; } .ds-input::placeholder { color: var(--muted, #67748a); }"
+    },
+    {
+      "name": "Textarea",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "全宽多行输入，用于 AI 顾问提问框；行高 1.55 保证中文可读。",
+      "html": "<textarea class=\"ds-textarea\" rows=\"3\" placeholder=\"这个月还能花多少？\"></textarea>",
+      "css": ".ds-textarea { width: 100%; background: var(--surface, #fff); color: var(--text, #172033); padding: 0.68rem 0.75rem; border: 1px solid var(--border, #e5eaf2); border-radius: 10px; font: inherit; line-height: 1.55; resize: vertical; outline: none; } .ds-textarea:focus { outline: 3px solid rgb(37 99 235 / 20%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Metric Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "系统标志性组件：label + 大数字 + hint 三段式，emphasis 变体标记最重要的指标。",
+      "html": "<article class=\"ds-metric-card ds-metric-card--emphasis\"><p class=\"ds-metric-card__label\">SAFE-TO-SPEND</p><p class=\"ds-metric-card__value\">¥12,480.00</p><p class=\"ds-metric-card__hint\">扣除已承诺支出后的本月可自由消费金额</p></article>",
+      "css": ".ds-metric-card { min-height: 118px; padding: 1rem; background: var(--surface, #fff); border: 1px solid var(--border, #e5eaf2); border-radius: 16px; box-shadow: 0 12px 32px rgb(15 23 42 / 7%); } .ds-metric-card--emphasis { border-color: rgb(37 99 235 / 25%); background: linear-gradient(145deg, #eff6ff, #ffffff 70%); } .ds-metric-card__label { margin: 0 0 0.7rem; color: var(--muted, #67748a); font-size: 0.78rem; font-weight: 700; } .ds-metric-card__value { margin: 0 0 0.4rem; font-size: clamp(1.2rem, 4.7vw, 1.75rem); font-weight: 800; letter-spacing: -0.035em; color: var(--text, #172033); overflow-wrap: anywhere; } .ds-metric-card__hint { margin: 0; color: var(--muted, #67748a); font-size: 0.79rem; line-height: 1.4; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "内容面板：eyebrow 标签 + 标题 + 右侧操作区，白底发丝边框环境阴影。",
+      "html": "<section class=\"ds-panel\"><header class=\"ds-panel__heading\"><div><p class=\"ds-eyebrow\">CASHFLOW</p><h2 class=\"ds-panel__title\">现金流</h2></div><button class=\"ds-btn-link\">明细</button></header><p class=\"ds-panel__body\">本月收入与支出的确定性汇总。</p></section>",
+      "css": ".ds-panel { padding: 1rem; background: var(--surface, #fff); border: 1px solid var(--border, #e5eaf2); border-radius: 16px; box-shadow: 0 12px 32px rgb(15 23 42 / 7%); } .ds-panel__heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.8rem; } .ds-panel__title { margin: 0; font-size: 1.03rem; font-weight: 700; letter-spacing: -0.01em; color: var(--text, #172033); } .ds-panel__body { margin: 0; color: var(--text, #172033); font-size: 0.85rem; line-height: 1.55; } .ds-eyebrow { margin: 0 0 0.25rem; color: var(--accent, #2563eb); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "status-pill-ok",
+      "description": "数据质量状态药丸——产品诚实性承诺的视觉锚点：绿=健康，琥珀=partial/stale，红=错误。",
+      "html": "<span class=\"ds-pill ds-pill--ok\">数据完整</span> <span class=\"ds-pill ds-pill--warn\">部分数据</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; min-height: 1.65rem; border-radius: 999px; padding: 0.2rem 0.6rem; font-size: 0.75rem; font-weight: 800; } .ds-pill--ok { background: #e8f7ef; color: var(--success, #047857); } .ds-pill--warn { background: #fff7df; color: var(--warning, #a16207); } .ds-pill--error { background: #fff6f4; color: var(--danger, #b42318); }"
+    },
+    {
+      "name": "Notice",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "无边框无阴影的语义底色警告条——靠底色说话，用于数据质量与错误信息。",
+      "html": "<div class=\"ds-notice ds-notice--warn\"><ul><li>本月账单尚未完整导入，预算数字可能偏低。</li></ul></div>",
+      "css": ".ds-notice { margin: 0; padding: 0.9rem 1rem; border-radius: 16px; color: #6b5411; background: #fffdf4; font-size: 0.85rem; line-height: 1.55; } .ds-notice--warn { color: #6b5411; background: #fffdf4; } .ds-notice--error { color: var(--danger, #b42318); background: #fff6f4; } .ds-notice ul { margin: 0.5rem 0 0; padding-left: 1.15rem; }"
+    },
+    {
+      "name": "Advisor Result",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "AI 回答区：雾白底与确定性数字视觉区隔；blocked 态（橙红）表示 AI 拒答或需人工确认。",
+      "html": "<div class=\"ds-advisor-result\">根据 8 月账本数据，本月 Safe-to-Spend 为 ¥12,480。剩余两周建议每周可支配约 ¥3,120。</div>",
+      "css": ".ds-advisor-result { border-radius: 12px; padding: 0.9rem; background: var(--surface-muted, #f8fafc); color: var(--text, #172033); line-height: 1.6; white-space: pre-wrap; font-size: 0.85rem; } .ds-advisor-result--blocked { background: #fff7ed; color: #9a3412; }"
+    },
+    {
+      "name": "Review Box",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "AI 建议附带的复核区：左侧 3px 信号蓝竖线的引用式结构，承载事实/假设/替代方案。",
+      "html": "<div class=\"ds-review-box\"><p><strong>事实：</strong>本月已支出 ¥8,520。</p><p><strong>假设：</strong>剩余天数按每日 ¥150 必要支出估算。</p><p><strong>替代方案：</strong>若推迟购买，可保留 ¥2,000 应急缓冲。</p></div>",
+      "css": ".ds-review-box { border-left: 3px solid var(--accent, #2563eb); padding-left: 0.75rem; } .ds-review-box p { margin: 0.3rem 0 0; font-size: 0.82rem; line-height: 1.55; color: var(--text, #172033); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "精算师的书房",
+    "overview": "这是一个安静、严谨、可复核的财务工作空间：白纸般的表面、墨水色的文字、单一蓝色印记。它的气质不是消费级 App 的讨好，也不是营销页的热烈，而是一间灯光充足的书房——桌上摊着账本，每个数字都能指回来源，AI 的话与算出来的数字在纸面上泾渭分明。\n\n密度偏舒适偏高：财务总览要求一屏内扫视全局（净资产、结余、Safe-to-Spend、债务风险同屏），但绝不拥挤——信息通过两列卡片网格与清晰的内边距呼吸。表面处理极度克制：白底、1px 发丝边框、一层环境阴影，没有任何装饰性渐变或大面积色块。唯一的色彩叙事是语义性的：蓝是「系统在对你说话」，绿是「账目健康」，琥珀是「需要留意」，红是「数据有问题或超支」——颜色永远携带状态含义，不为美化而出现。\n\n界面语言为简体中文，文案语气诚实、精确、保守——宁可让数字显得比实际更不确定，绝不显得比实际更确定。",
+    "keyCharacteristics": [
+      "单一蓝色印记（#2563eb）承担全部交互色彩；语义色（绿/琥珀/红）只用于状态",
+      "1px 发丝边框 + 单一环境阴影定义所有容器，无多层阴影叙事",
+      "大写 eyebrow 标签（letter-spacing 0.13em）是每个面板的「档案标签」",
+      "金额数字是视觉主角：metric 级字重 800、负字距、任何地方都清晰可读",
+      "扎实可靠的手感：700-800 字重的控件文字、按下位移反馈、清晰的 focus 环"
+    ],
+    "rules": [
+      {
+        "name": "The Single Voice Rule",
+        "body": "信号蓝是系统中唯一的声音。装饰性多色、渐变按钮、品牌色块在这个系统里没有位置；蓝色出现即意味着「这里可以交互」或「这里是系统强调」。",
+        "section": "colors"
+      },
+      {
+        "name": "The Semantic Color Rule",
+        "body": "绿、琥珀、红只允许出现在状态上下文（数据质量、预算风险、错误、超支）。永远不为视觉趣味引入它们；状态色不承载品牌表达。",
+        "section": "colors"
+      },
+      {
+        "name": "The Number Protagonist Rule",
+        "body": "界面为金额服务：metric 数字永远是卡片中最大、最重的元素，hint 与 label 退居其后。禁止让标题比金额更抢眼。",
+        "section": "typography"
+      },
+      {
+        "name": "The Constant Light Rule",
+        "body": "阴影是环境，不是层级。卡片、面板、弹窗浮起的高度相同；需要区分层级时用边框与背景色调（surface vs surface-muted vs tint），不用阴影加码。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Two-Step Danger Rule",
+        "body": "破坏性操作的按钮默认为描边态（白底红字红边），hover/按压才填充为实心风险红。危险必须比主要操作多一道视觉门槛。",
+        "section": "colors"
+      },
+      {
+        "name": "The Aligned Digits Rule",
+        "body": "所有金额与表格数字启用 font-variant-numeric: tabular-nums——逐位等宽是账本的基本尊严，右对齐的金额列必须上下对齐可扫描。",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do 让蓝色只出现在交互与系统强调处——任何一屏蓝色面积 ≤10%",
+      "Do 用语义药丸明示数据质量（full/partial/stale），这是产品的诚实性承诺",
+      "Do 保持金额数字为任何卡片中最大最重的元素（字重 800、负字距）",
+      "Do 为所有交互控件提供 3px 20% 蓝色 focus 环——键盘可达性是生产标准",
+      "Do 在 AI 输出与确定性数字之间保持视觉区隔（雾白底 / review-box 引用线 / meta 声明行含月份锚定）",
+      "Do 给破坏性与不可逆操作加确认门槛（角色变更、asset_ref 覆盖保存）",
+      "Do 把失败如实说清：错误码翻中文、失败不残留切换中假状态、旧数据标注归属月份",
+      "Do 尊重 prefers-reduced-motion（全系统已有全局禁动规则）"
+    ],
+    "donts": [
+      "Don't 引入第二个品牌色或多色渐变按钮——单一印记是系统身份",
+      "Don't 用阴影制造层级——层级用边框、底色、嵌套表达，阴影恒定",
+      "Don't 在状态语义之外使用绿/琥珀/红做装饰",
+      "Don't 让装饰元素挤占一屏总览的空间——密度为扫视服务",
+      "Don't 硬编码金额格式——金额必须经 money.ts 按币种精度解析（int64 minor 单位以 string 传输）",
+      "Don't 让 AI 输出看起来像系统计算结果——两者的视觉可信等级必须可区分"
+    ]
+  }
+}

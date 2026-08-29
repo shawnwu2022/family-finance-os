@@ -17,6 +17,7 @@ type HouseholdMemberAuth interface {
 	CreateHouseholdMember(context.Context, int64, financeauth.CreateHouseholdMemberInput) (financeauth.HouseholdMember, error)
 	UpdateHouseholdMemberRole(context.Context, int64, int64, financeauth.Role, time.Time) (financeauth.HouseholdMember, error)
 	DisableHouseholdMember(context.Context, int64, int64, time.Time) (financeauth.HouseholdMember, error)
+	EnableHouseholdMember(context.Context, int64, int64, time.Time) (financeauth.HouseholdMember, error)
 }
 
 type householdMemberResponse struct {
@@ -122,6 +123,13 @@ func registerHouseholdMembers(mux *http.ServeMux, auth BrowserAuth) {
 				return
 			}
 			writeJSON(w, http.StatusOK, householdMemberDTO(member))
+		case http.MethodPost:
+			member, err := memberAuth.EnableHouseholdMember(r.Context(), householdID, userID, time.Now().UTC())
+			if err != nil {
+				writeHouseholdMemberError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, householdMemberDTO(member))
 		case http.MethodDelete:
 			if _, err := memberAuth.DisableHouseholdMember(r.Context(), householdID, userID, time.Now().UTC()); err != nil {
 				writeHouseholdMemberError(w, err)
@@ -129,7 +137,7 @@ func registerHouseholdMembers(mux *http.ServeMux, auth BrowserAuth) {
 			}
 			writeNoContent(w)
 		default:
-			w.Header().Set("Allow", "PATCH, DELETE")
+			w.Header().Set("Allow", "PATCH, POST, DELETE")
 			writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		}
 	})

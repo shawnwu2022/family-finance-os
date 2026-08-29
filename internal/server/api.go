@@ -171,10 +171,11 @@ type FinanceAPI interface {
 }
 
 type handlerConfig struct {
-	api  FinanceAPI
-	web  http.Handler
-	mcp  http.Handler
-	auth BrowserAuth
+	api              FinanceAPI
+	web              http.Handler
+	mcp              http.Handler
+	auth             BrowserAuth
+	trustedProxyCIDR string
 }
 
 type HandlerOption func(*handlerConfig)

@@ -75,6 +75,43 @@ it('unsafe finance request adds csrf after authentication and 401 clears auth st
   assert.equal(currentAuthState().role, null)
 })
 
+it('a stale 401 cannot clear a newer authenticated session', async () => {
+  let rejectOldRequest
+  let sessionNumber = 0
+  globalThis.fetch = async (url) => {
+    if (url === '/api/v1/auth/session') {
+      sessionNumber += 1
+      return new Response(JSON.stringify({
+        authenticated: true,
+        username: `owner-${sessionNumber}`,
+        household_id: sessionNumber,
+        role: 'owner',
+        csrf_token: `csrf-${sessionNumber}`,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    if (url === '/api/v1/dashboard?period=2026-08') {
+      return await new Promise((resolve) => {
+        rejectOldRequest = () => resolve(new Response(JSON.stringify({ error: { code: 'unauthenticated' } }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        }))
+      })
+    }
+    throw new Error(`unexpected request ${url}`)
+  }
+
+  await bootstrapSession()
+  const oldRequest = loadDashboard('2026-08')
+  clearAuthState()
+  await bootstrapSession()
+  rejectOldRequest()
+
+  await assert.rejects(() => oldRequest, /unauthenticated/)
+  assert.equal(currentAuthState().phase, 'authenticated')
+  assert.equal(currentAuthState().username, 'owner-2')
+  assert.equal(currentAuthState().householdId, 2)
+})
+
 it('login selects totp state and logout clears csrf state', async () => {
   const requests = []
   globalThis.fetch = async (url, init = {}) => {

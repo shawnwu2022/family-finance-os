@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { deletePortfolioAsset, listPortfolioAssets, upsertPortfolioAsset } from '../api'
+import { confirmAction } from '../confirm'
+import { errorText } from '../errors'
 import {
   buildPortfolioAssetRequest,
   formFromPortfolioAsset,
@@ -48,6 +50,39 @@ const requiresFX = computed(() => {
   return reporting.length === 3 && source.length === 3 && reporting !== source
 })
 
+// PUT upsert 语义:新增模式下输入已存在的 asset_ref 会静默覆盖现有快照,必须明示
+const refCollision = computed(() => {
+  if (editingRef.value || !form.assetRef.trim()) return null
+  const normalized = form.assetRef.trim()
+  return items.value.find((asset) => asset.asset_ref === normalized) ?? null
+})
+
+// 表单是否有用户输入:dirty 时取消/Esc 需确认,避免误触丢全部输入
+const formDirty = computed(() =>
+  Object.entries(form).some(([key, value]) => {
+    if (key === 'valuationAsOf') return false
+    return String(value).trim() !== String(newFormState(props.defaultCurrency)[key as keyof PortfolioFormState] ?? '').trim()
+  }),
+)
+
+async function requestClose() {
+  if (saving.value) return
+  if (formDirty.value && !(await confirmAction({
+    title: '放弃未保存的内容',
+    body: '表单已填写，关闭将丢失已输入的内容。',
+    confirmLabel: '放弃',
+    danger: true,
+  }))) return
+  closeForm()
+}
+
+function onFormKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.stopPropagation()
+    requestClose()
+  }
+}
+
 async function reload() {
   loading.value = true
   errorCode.value = ''
@@ -92,6 +127,16 @@ async function submit() {
     return
   }
 
+  if (refCollision.value) {
+    const confirmed = await confirmAction({
+      title: '覆盖已有快照',
+      body: `资产引用 ID「${refCollision.value.asset_ref}」已存在（${refCollision.value.name}）。保存将覆盖该快照。`,
+      confirmLabel: '覆盖保存',
+      danger: true,
+    })
+    if (!confirmed) return
+  }
+
   saving.value = true
   formError.value = ''
   try {
@@ -100,7 +145,7 @@ async function submit() {
     editingRef.value = ''
     await reload()
   } catch (error) {
-    formError.value = `保存失败：${error instanceof Error ? error.message : 'request_failed'}`
+    formError.value = `保存失败：${errorText(error instanceof Error ? error.message : 'request_failed')}`
   } finally {
     saving.value = false
   }
@@ -108,7 +153,12 @@ async function submit() {
 
 async function remove(asset: PortfolioAssetResponse) {
   if (props.readOnly) return
-  if (!window.confirm(`确认删除资产快照「${asset.name}」？此操作不会删除账本交易。`)) return
+  if (!(await confirmAction({
+    title: '删除资产快照',
+    body: `确认删除资产快照「${asset.name}」？此操作不会删除账本交易。`,
+    confirmLabel: '删除',
+    danger: true,
+  }))) return
 
   deletingRef.value = asset.asset_ref
   errorCode.value = ''
@@ -202,62 +252,78 @@ onMounted(() => {
     </div>
 
     <div v-if="errorCode" class="portfolio-error" role="alert">
-      资产快照加载失败：{{ errorCode }}
+      资产快照加载失败：{{ errorText(errorCode) }}
       <button type="button" class="button-link" @click="reload">重试</button>
     </div>
 
-    <form v-if="formOpen && !readOnly" class="portfolio-form" @submit.prevent="submit">
+    <form v-if="formOpen && !readOnly" class="portfolio-form" @submit.prevent="submit" @keydown.esc="onFormKeydown">
       <div class="portfolio-form__heading">
         <strong>{{ editingRef ? '编辑资产快照' : '新增资产快照' }}</strong>
-        <button type="button" class="button-secondary" :disabled="saving" @click="closeForm">取消</button>
+        <button type="button" class="button-secondary" :disabled="saving" @click="requestClose">取消</button>
       </div>
 
-      <div class="portfolio-form__grid">
-        <label>
-          <span>资产引用 ID</span>
-          <input v-model="form.assetRef" :disabled="Boolean(editingRef)" autocomplete="off" placeholder="例如 property:home" required />
-        </label>
-        <label>
-          <span>资产名称</span>
-          <input v-model="form.name" autocomplete="off" placeholder="例如 自住房" required />
-        </label>
-        <label>
-          <span>资产类别</span>
-          <select v-model="form.assetClass">
-            <option v-for="item in assetClasses" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </label>
-        <label>
-          <span>当前估值</span>
-          <input v-model="form.amount" inputmode="decimal" autocomplete="off" placeholder="0.00" required />
-        </label>
-        <label>
-          <span>报告币种</span>
-          <input v-model="form.currency" maxlength="3" autocomplete="off" placeholder="CNY" required />
-        </label>
-        <label>
-          <span>来源币种</span>
-          <input v-model="form.sourceCurrency" maxlength="3" autocomplete="off" placeholder="CNY" required />
-        </label>
-        <label>
-          <span>估值时间</span>
-          <input v-model="form.valuationAsOf" type="datetime-local" required />
-        </label>
-        <label v-if="requiresFX">
-          <span>FX 时间</span>
-          <input v-model="form.fxAsOf" type="datetime-local" required />
-        </label>
-        <label>
-          <span>关联账本账户（可选）</span>
-          <input v-model="form.sourceAccountRef" autocomplete="off" placeholder="例如 broker-1" />
-        </label>
-        <label>
-          <span>来源</span>
-          <select v-model="form.sourceKind">
-            <option v-for="item in sourceKinds" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </label>
-      </div>
+      <fieldset class="portfolio-form__group">
+        <legend>身份</legend>
+        <div class="portfolio-form__grid">
+          <label>
+            <span>资产引用 ID</span>
+            <input v-model="form.assetRef" :disabled="Boolean(editingRef)" autocomplete="off" placeholder="例如 property:home（资产引用 ID，唯一）" required />
+            <span v-if="refCollision" class="portfolio-collision">已存在同名引用的快照「{{ refCollision.name }}」，保存将覆盖它。</span>
+          </label>
+          <label>
+            <span>资产名称</span>
+            <input v-model="form.name" autocomplete="off" placeholder="例如 自住房" required />
+          </label>
+          <label>
+            <span>资产类别</span>
+            <select v-model="form.assetClass">
+              <option v-for="item in assetClasses" :key="item.value" :value="item.value">{{ item.label }}</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="portfolio-form__group">
+        <legend>估值</legend>
+        <div class="portfolio-form__grid">
+          <label>
+            <span>当前估值</span>
+            <input v-model="form.amount" inputmode="decimal" autocomplete="off" placeholder="0.00" required />
+          </label>
+          <label>
+            <span>报告币种</span>
+            <input v-model="form.currency" maxlength="3" autocomplete="off" placeholder="CNY" required />
+          </label>
+          <label>
+            <span>来源币种</span>
+            <input v-model="form.sourceCurrency" maxlength="3" autocomplete="off" placeholder="CNY" required />
+          </label>
+          <label>
+            <span>估值时间</span>
+            <input v-model="form.valuationAsOf" type="datetime-local" required />
+          </label>
+          <label v-if="requiresFX">
+            <span>FX 时间</span>
+            <input v-model="form.fxAsOf" type="datetime-local" required />
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="portfolio-form__group">
+        <legend>来源</legend>
+        <div class="portfolio-form__grid">
+          <label>
+            <span>关联账本账户（可选）</span>
+            <input v-model="form.sourceAccountRef" autocomplete="off" placeholder="例如 broker-1" />
+          </label>
+          <label>
+            <span>来源</span>
+            <select v-model="form.sourceKind">
+              <option v-for="item in sourceKinds" :key="item.value" :value="item.value">{{ item.label }}</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
 
       <p v-if="requiresFX" class="portfolio-hint">当前值必须已经换算为报告币种；这里仅记录该换算所使用的 FX 时间，不自动查询汇率。</p>
       <p v-if="formError" class="portfolio-form__error" role="alert">{{ formError }}</p>
@@ -341,14 +407,6 @@ onMounted(() => {
   font-size: 0.82rem;
 }
 
-.button-link {
-  margin-left: 0.35rem;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  padding: 0;
-}
-
 .portfolio-form {
   margin-bottom: 0.95rem;
   border: 1px solid var(--border);
@@ -362,6 +420,26 @@ onMounted(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
   margin-top: 0.8rem;
+}
+
+/* 字段分组:fieldset 重置为书房语言——无框,legend 做 eyebrow 式分组标签 */
+.portfolio-form__group {
+  margin: 0.8rem 0 0;
+  border: 0;
+  padding: 0;
+}
+
+.portfolio-form__group:first-of-type {
+  margin-top: 0.4rem;
+}
+
+.portfolio-form__group legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
 }
 
 .portfolio-form__grid label {
@@ -409,11 +487,17 @@ onMounted(() => {
   font-size: 0.7rem;
 }
 
+/* asset_ref 撞名提示:琥珀警示(语义色纪律——"需要留意"而非错误) */
+.portfolio-collision {
+  color: var(--warning);
+  font-weight: 600;
+}
+
 .portfolio-value {
   white-space: nowrap;
 }
 
-@media (max-width: 680px) {
+@media (max-width: 719.98px) {
   .portfolio-form__grid {
     grid-template-columns: 1fr;
   }
