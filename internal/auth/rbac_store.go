@@ -201,6 +201,50 @@ func (s *PostgresStore) DisableHouseholdMember(ctx context.Context, householdID,
 	return updated, nil
 }
 
+// EnableHouseholdMember 清除停用标记；不触碰会话与 TOTP 状态。
+// 对未停用成员幂等返回当前行，成员不存在时返回 ErrNotFound。
+func (s *PostgresStore) EnableHouseholdMember(ctx context.Context, householdID, userID int64, now time.Time) (HouseholdMember, error) {
+	if s == nil || s.pool == nil {
+		return HouseholdMember{}, errors.New("auth store database is required")
+	}
+	if householdID <= 0 || userID <= 0 {
+		return HouseholdMember{}, errors.New("household and user IDs must be positive")
+	}
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return HouseholdMember{}, fmt.Errorf("begin household member enable: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockHouseholdRBAC(ctx, tx, householdID); err != nil {
+		return HouseholdMember{}, err
+	}
+
+	current, err := loadHouseholdMemberForUpdate(ctx, tx, householdID, userID)
+	if err != nil {
+		return HouseholdMember{}, err
+	}
+	if !current.Disabled {
+		if err := tx.Commit(ctx); err != nil {
+			return HouseholdMember{}, fmt.Errorf("commit household member enable read: %w", err)
+		}
+		return current, nil
+	}
+
+	updated, err := scanHouseholdMember(tx.QueryRow(ctx, `
+		UPDATE auth_users
+		SET disabled_at = NULL, updated_at = $3
+		WHERE household_id = $1 AND id = $2 AND disabled_at IS NOT NULL
+		RETURNING id, username, role, disabled_at IS NOT NULL, totp_enrolled_at IS NOT NULL
+	`, householdID, userID, now))
+	if err != nil {
+		return HouseholdMember{}, fmt.Errorf("enable household member: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return HouseholdMember{}, fmt.Errorf("commit household member enable: %w", err)
+	}
+	return updated, nil
+}
+
 func lockHouseholdRBAC(ctx context.Context, tx pgx.Tx, householdID int64) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, -householdID); err != nil {
 		return fmt.Errorf("lock household RBAC: %w", err)

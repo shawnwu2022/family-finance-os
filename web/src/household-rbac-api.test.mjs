@@ -4,6 +4,7 @@ import { afterEach, it } from 'node:test'
 import {
   createHouseholdMember,
   disableHouseholdMember,
+  enableHouseholdMember,
   listHouseholdMembers,
   updateHouseholdMemberRole,
 } from './api.ts'
@@ -47,6 +48,12 @@ it('member management uses session csrf for mutations and never sends household 
     if (url === '/api/v1/household/members/12' && init.method === 'DELETE') {
       return new Response(null, { status: 204 })
     }
+    if (url === '/api/v1/household/members/12' && init.method === 'POST') {
+      return new Response(JSON.stringify({ user_id: 12, username: 'partner', role: 'viewer', disabled: false, totp_enrolled: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
     throw new Error(`unexpected request ${url}`)
   }
 
@@ -55,6 +62,7 @@ it('member management uses session csrf for mutations and never sends household 
   await createHouseholdMember({ username: 'partner', password: 'correct horse battery staple', role: 'editor' })
   await updateHouseholdMemberRole(12, 'viewer')
   await disableHouseholdMember(12)
+  const enabled = await enableHouseholdMember(12)
 
   for (const request of requests.slice(1)) {
     assert.ok(!String(request.url).includes('household_id'))
@@ -62,7 +70,8 @@ it('member management uses session csrf for mutations and never sends household 
   const create = requests.find((item) => item.init.method === 'POST' && item.url === '/api/v1/household/members')
   const update = requests.find((item) => item.init.method === 'PATCH')
   const remove = requests.find((item) => item.init.method === 'DELETE')
-  for (const request of [create, update, remove]) {
+  const restore = requests.find((item) => item.init.method === 'POST' && item.url === '/api/v1/household/members/12')
+  for (const request of [create, update, remove, restore]) {
     assert.equal(new Headers(request.init.headers).get('X-CSRF-Token'), 'csrf')
   }
   assert.deepEqual(JSON.parse(create.init.body), {
@@ -71,4 +80,7 @@ it('member management uses session csrf for mutations and never sends household 
     role: 'editor',
   })
   assert.deepEqual(JSON.parse(update.init.body), { role: 'viewer' })
+  // 恢复成员为无请求体 POST
+  assert.equal(restore.init.body, undefined)
+  assert.equal(enabled.disabled, false)
 })

@@ -60,3 +60,10 @@ func (s *Service) DisableHouseholdMember(ctx context.Context, householdID, userI
 	}
 	return s.store.DisableHouseholdMember(ctx, householdID, userID, now)
 }
+
+func (s *Service) EnableHouseholdMember(ctx context.Context, householdID, userID int64, now time.Time) (HouseholdMember, error) {
+	if s == nil || s.store == nil {
+		return HouseholdMember{}, errors.New("auth service is required")
+	}
+	return s.store.EnableHouseholdMember(ctx, householdID, userID, now)
+}

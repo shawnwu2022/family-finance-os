@@ -24,13 +24,19 @@ describe('household role UI', () => {
       'createHouseholdMember',
       'updateHouseholdMemberRole',
       'disableHouseholdMember',
+      'enableHouseholdMember',
       'listHouseholdMembers',
     ]) {
       assert.match(panel, new RegExp(`\\b${token}\\b`), token)
     }
     assert.match(panel, /首次登录必须完成 TOTP/)
+    // 恢复为 CJK token，\b 边界对 CJK 无效，改用字面断言
+    assert.match(panel, /恢复/)
+    assert.match(panel, /确认恢复成员/)
     assert.match(panel, /Owner · 管理员/)
     assert.match(panel, /Editor · 可编辑/)
     assert.match(panel, /Viewer · 只读/)
+    assert.match(panel, /bootstrapSession/)
+    assert.match(panel, /reload\(true\)/)
   })
 })
