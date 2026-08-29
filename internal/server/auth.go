@@ -51,7 +51,7 @@ type authSessionResponse struct {
 	RecoveryCodes []string `json:"recovery_codes,omitempty"`
 }
 
-func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
+func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth, trustedProxyCIDR string) {
 	if mux == nil || auth == nil {
 		return
 	}
@@ -90,7 +90,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 		}
 		request.Username = strings.TrimSpace(request.Username)
 		normalizedUsername := strings.ToLower(request.Username)
-		remoteHost := loginRemoteHostForAuth(r, auth)
+		remoteHost := loginRemoteHostForAuth(r, trustedProxyCIDR)
 		now := time.Now().UTC()
 		if !loginLimiter.Allow(remoteHost, normalizedUsername, now) {
 			writeAuthRateLimited(w)
@@ -126,7 +126,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 			writeAPIError(w, http.StatusUnauthorized, "invalid_second_factor", "invalid second factor")
 			return
 		}
-		remoteHost := loginRemoteHostForAuth(r, auth)
+		remoteHost := loginRemoteHostForAuth(r, trustedProxyCIDR)
 		now := time.Now().UTC()
 		if !secondFactorLimiter.Allow(remoteHost, request.Challenge, now) {
 			writeAuthRateLimited(w)
@@ -155,7 +155,7 @@ func registerBrowserAuth(mux *http.ServeMux, auth BrowserAuth) {
 			writeAPIError(w, http.StatusUnauthorized, "invalid_second_factor", "invalid second factor")
 			return
 		}
-		remoteHost := loginRemoteHostForAuth(r, auth)
+		remoteHost := loginRemoteHostForAuth(r, trustedProxyCIDR)
 		now := time.Now().UTC()
 		if !secondFactorLimiter.Allow(remoteHost, request.Challenge, now) {
 			writeAuthRateLimited(w)

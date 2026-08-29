@@ -1,4 +1,4 @@
-import { clearAuthState, getCSRFToken } from './auth.ts'
+import { clearAuthStateIfCurrent, currentAuthEpoch, getCSRFToken } from './auth.ts'
 import type {
   AdvisorResponse,
   CreateHouseholdMemberRequest,
@@ -80,12 +80,19 @@ export async function disableHouseholdMember(userId: number): Promise<void> {
   })
 }
 
+export async function enableHouseholdMember(userId: number): Promise<HouseholdMemberResponse> {
+  return requestJSON<HouseholdMemberResponse>(`/api/v1/household/members/${encodeURIComponent(String(userId))}`, {
+    method: 'POST',
+  })
+}
+
 async function requestJSON<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await requestResponse(url, init)
   return (await response.json()) as T
 }
 
 async function requestResponse(url: string, init: RequestInit = {}): Promise<Response> {
+  const authEpoch = currentAuthEpoch()
   const headers = new Headers(init.headers)
   if (init.body) headers.set('Content-Type', 'application/json')
   headers.set('Accept', 'application/json')
@@ -103,7 +110,7 @@ async function requestResponse(url: string, init: RequestInit = {}): Promise<Res
     cache: 'no-store',
   })
   if (response.status === httpUnauthorized) {
-    clearAuthState()
+    clearAuthStateIfCurrent(authEpoch)
     throw new Error('unauthenticated')
   }
   if (!response.ok) {

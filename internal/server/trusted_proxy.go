@@ -6,34 +6,24 @@ import (
 	"strings"
 )
 
-type trustedProxyBrowserAuth struct {
-	BrowserAuth
-	trustedProxyCIDR string
-}
-
 // WithTrustedProxyCIDR enables forwarded client-address resolution for browser
 // authentication only when the immediate TCP peer belongs to the configured
-// proxy network. Apply it after WithBrowserAuth. Invalid CIDRs fail closed by
-// leaving RemoteAddr as the throttle key; production config validates the CIDR.
+// proxy network. Invalid CIDRs fail closed by leaving RemoteAddr as the
+// throttle key; production config validates the CIDR.
 func WithTrustedProxyCIDR(cidr string) HandlerOption {
 	return func(cfg *handlerConfig) {
-		if cfg == nil || cfg.auth == nil {
+		if cfg == nil {
 			return
 		}
-		cidr = strings.TrimSpace(cidr)
-		if cidr == "" {
-			return
-		}
-		cfg.auth = trustedProxyBrowserAuth{BrowserAuth: cfg.auth, trustedProxyCIDR: cidr}
+		cfg.trustedProxyCIDR = strings.TrimSpace(cidr)
 	}
 }
 
-func loginRemoteHostForAuth(r *http.Request, auth BrowserAuth) string {
+func loginRemoteHostForAuth(r *http.Request, trustedProxyCIDR string) string {
 	if r == nil {
 		return "unknown"
 	}
 	peer := loginRemoteHost(r.RemoteAddr)
-	trustedProxyCIDR := trustedProxyCIDRForBrowserAuth(auth)
 	if trustedProxyCIDR == "" {
 		return peer
 	}
@@ -57,12 +47,4 @@ func loginRemoteHostForAuth(r *http.Request, auth BrowserAuth) string {
 		return peer
 	}
 	return clientAddr.Unmap().String()
-}
-
-func trustedProxyCIDRForBrowserAuth(auth BrowserAuth) string {
-	wrapped, ok := auth.(trustedProxyBrowserAuth)
-	if !ok {
-		return ""
-	}
-	return wrapped.trustedProxyCIDR
 }
