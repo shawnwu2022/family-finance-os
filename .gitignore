@@ -24,3 +24,5 @@ coverage.out
 web/node_modules/
 web/dist/
 .gstack/
+.impeccable/live/
+web/.impeccable/hook.cache.json

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/style.css"
+        ],
+        "createdAt": "2026-08-28T15:13:45.690Z",
+        "reason": "Incumbent documented design: .review-box 3px accent line is a quotation/review marker (blockquote semantics) for AI reviewer material, recorded as signature pattern in DESIGN.md; not a card decoration"
+      }
+    ]
+  }
+}

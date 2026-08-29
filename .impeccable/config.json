@@ -1,0 +1,29 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font-size",
+        "value": "0.79rem",
+        "createdAt": "2026-08-28T15:49:24.711Z",
+        "reason": "Incumbent auxiliary-text step used by metric-card hint and subtle copy since before this session; DESIGN.md Caption prose already declares 0.75-0.82rem as the caption band"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "0.8rem",
+        "createdAt": "2026-08-28T15:51:40.212Z",
+        "reason": "Incumbent auxiliary-text step (signed-in-user) predating this session; DESIGN.md Caption prose declares 0.75-0.82rem as the caption band"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "web/src/style.css"
+        ],
+        "createdAt": "2026-08-28T15:54:21.412Z",
+        "reason": "Same finding as src/style.css exemption: .review-box 3px accent line is a quotation/review marker (blockquote semantics) documented as signature pattern in DESIGN.md; path reported relative to web/ root this time"
+      }
+    ]
+  }
+}
